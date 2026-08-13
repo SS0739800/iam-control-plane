@@ -51,8 +51,8 @@ jobs:
           cache: pip
           cache-dependency-path: apps/api/requirements*.txt
 
-      # requirements-saml.txt is deliberately excluded: it needs native xmlsec
-      # headers. The docker job below is what validates that stack.
+      # requirements-saml.txt isn't installed here, it needs system libraries.
+      # The docker job below is what checks that part.
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
@@ -67,6 +67,14 @@ jobs:
 
       - name: Verify migrations apply to an empty database
         run: python -m alembic upgrade head
+
+      # The frontend's types are generated from this file. If it's out of date,
+      # those types describe an API that no longer exists.
+      - name: Check the committed OpenAPI schema is up to date
+        run: |
+          python -m scripts.export_openapi
+          git diff --exit-code openapi.json \
+            || { echo "::error::openapi.json is stale. Run: python -m scripts.export_openapi"; exit 1; }
 
       - name: Test
         run: pytest
@@ -91,6 +99,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Regenerate from the committed schema and fail if the result differs. This
+      # is what turns a backend change that breaks the frontend into a red build
+      # instead of a runtime surprise.
+      - name: Check generated API types are up to date
+        run: |
+          npm run generate:api
+          git diff --exit-code src/lib/api-schema.d.ts \
+            || { echo "::error::api-schema.d.ts is stale. Run: npm run generate:api"; exit 1; }
+
       - name: Type check
         run: npm run typecheck
 
@@ -109,7 +126,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # The most valuable check in P0: this is what proves the xmlsec/lxml
+      # The most useful check we have: this is what proves the xmlsec/lxml
       # source build still works. It is slow, and it is the reason a segfault in
       # P2 will never be a surprise.
       - name: Build API image

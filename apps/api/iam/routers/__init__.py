@@ -1,8 +1,8 @@
-"""HTTP surfaces.
+"""The HTTP endpoints.
 
-Mounted by :func:`iam.main.create_app`. Prefixes are assigned there, not here,
-so the route table is readable in one place — which matters because Caddy's
-single-origin config has to mirror it exactly.
+main.py is what attaches these to the app and sets their URL prefixes, so you can
+read the whole route list in one place. That matters because the Caddyfile has to
+match it.
 
     health   /api/health, /api/health/ready        P0
     saml     /saml/metadata, /saml/acs, /saml/sls  P2

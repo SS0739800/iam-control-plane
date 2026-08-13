@@ -1,8 +1,7 @@
-"""Structured JSON logging.
+"""Logging, one JSON object per line.
 
-Every log line is one JSON object on stdout. That is what the platform log
-collector wants in P7, and it means audit-adjacent events stay machine-readable
-from day one rather than being retrofitted.
+That's the format log collectors want, which matters in P7 when logs go somewhere
+other than a terminal. Easier to set up now than to convert later.
 """
 
 from __future__ import annotations

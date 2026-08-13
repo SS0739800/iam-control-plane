@@ -1,9 +1,9 @@
-"""Declarative base and constraint naming convention.
+"""The base class all tables inherit from, plus how constraints get named.
 
-The naming convention is not cosmetic: without it, Alembic autogenerate emits
-migrations with server-assigned constraint names that it then cannot drop on the
-way back down. Setting it before the first migration exists is the cheap moment;
-changing it afterwards means rewriting history.
+The naming rules matter more than they look. Without them, Alembic writes
+migrations using whatever names Postgres invented, and then can't drop those
+constraints when you roll back. Easy to set now, painful to change once
+migrations exist.
 """
 
 from __future__ import annotations

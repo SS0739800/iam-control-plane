@@ -6,26 +6,27 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
 
   server: {
-    // Listen on all interfaces so Caddy can reach the dev server from another
-    // container. Without this, Vite binds localhost inside its own namespace.
+    // Listen on every interface so Caddy can reach us from another container.
+    // Without this Vite only listens inside its own container.
     host: true,
     port: 5173,
     strictPort: true,
 
-    // The browser talks to Caddy on :8080, never to Vite on :5173 directly, so
-    // the HMR websocket has to be told where to connect back to. Without this,
-    // hot reload silently fails and you get a console full of ws errors.
+    // The browser talks to Caddy on port 8080, never to Vite on 5173. So the
+    // hot-reload websocket has to be told to connect back to 8080. Leave this out
+    // and hot reload just quietly stops working, with websocket errors in the
+    // console.
     hmr: { clientPort: 8080 },
 
-    // The repo lives on the Windows filesystem and is bind-mounted into a Linux
-    // container, and inotify events do not cross that boundary for chokidar —
-    // verified: editing this file produced no Vite restart, while uvicorn's
-    // watchfiles did pick up its own change. Without polling, every edit is
-    // silently ignored and the page just never updates.
+    // The project lives on the Windows filesystem and is mounted into a Linux
+    // container, and file-change notifications don't make it across that boundary.
+    // Checked this: editing this very file didn't restart Vite until polling was
+    // turned on. Without it, edits are silently ignored and the page never
+    // updates.
     //
-    // Cost is a background stat loop. node_modules is excluded by Vite's
-    // defaults, so it stays cheap. Remove this if the repo ever moves into the
-    // WSL 2 filesystem, where native events work.
+    // The cost is a background loop checking files. node_modules is skipped by
+    // default so it stays cheap. Drop this if the project ever moves inside WSL,
+    // where the normal notifications work.
     watch: {
       usePolling: true,
       interval: 400,

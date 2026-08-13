@@ -1,18 +1,19 @@
-# Normalise line endings to LF in the repository AND in working trees.
+# Use Unix line endings everywhere, both in the repo and when files are checked
+# out.
 #
-# This is not a style preference. Several of these files are read directly by
-# Linux containers via bind mount, and Git's default autocrlf on Windows would
-# check them out with CRLF:
+# This isn't about style. Some of these files get read directly by Linux
+# containers, and Git on Windows would otherwise convert them to Windows line
+# endings, which breaks them:
 #
-#   infra/db/init/*.sh   -> `bad interpreter: /bin/bash^M`, Postgres init fails
-#   Dockerfile           -> RUN lines break in subtle ways
-#   Caddyfile            -> parse errors
+#   infra/db/init/*.sh   -> "bad interpreter: /bin/bash^M", database setup fails
+#   Dockerfile           -> RUN lines break in odd ways
+#   Caddyfile            -> won't parse
 #
-# `eol=lf` overrides core.autocrlf, so this works regardless of local config.
+# eol=lf wins over whatever anyone has set locally, which is the point.
 * text=auto eol=lf
 
-# Shell scripts must be LF, always — restated explicitly because this is the
-# one that fails loudest.
+# Shell scripts especially. Called out separately because this is the one that
+# fails most confusingly.
 *.sh text eol=lf
 
 # Never touched by EOL conversion.

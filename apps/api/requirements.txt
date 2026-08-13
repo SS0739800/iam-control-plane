@@ -13,3 +13,8 @@ alembic==1.14.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 python-json-logger==3.2.1
+
+# IANA timezone database for zoneinfo. Neither Windows nor python:*-slim ships
+# one, so ZoneInfo("UTC") raises without this — which surfaced as Alembic
+# failing to write a migration file.
+tzdata==2026.3

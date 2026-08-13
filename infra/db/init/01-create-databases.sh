@@ -1,10 +1,11 @@
 #!/bin/bash
-# Runs once, on first initialisation of the Postgres data volume.
+# Runs once, the first time the Postgres container starts with an empty data
+# folder.
 #
-# The compose stack needs two logical databases on one server: ours, and
-# authentik's. authentik owns its schema entirely and must not share ours.
+# We need two databases on one server: ours and authentik's. authentik manages its
+# own tables and shouldn't be sharing ours.
 #
-# POSTGRES_DB (ours) is created by the official entrypoint before this runs.
+# Ours already exists by the time this runs, the Postgres image creates it.
 set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL

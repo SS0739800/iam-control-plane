@@ -1,11 +1,11 @@
-# Local development stack.
+# Everything you need to run this locally.
 #
-#   docker compose up                    core: caddy, api, web, db, mailpit
-#   docker compose --profile idp up      also authentik + redis (needed from P2)
+#   docker compose up                    the basics: caddy, api, web, db, mailpit
+#   docker compose --profile idp up      adds authentik + redis, needed from P2
 #
-# Everything is reached through Caddy on http://localhost:8080 — one origin for
-# the SPA and the API both. Hitting the API on another port would work but
-# defeats the point; see docs/adr/0003-single-origin.md.
+# Go through Caddy on http://localhost:8080. That's one address for both the
+# frontend and the API. You could hit the API on its own port and it would work,
+# but that skips the thing we're relying on. See docs/adr/0003-single-origin.md.
 
 name: iam
 
@@ -34,14 +34,14 @@ services:
     env_file:
       - .env
     environment:
-      # Overrides .env so the container reaches Postgres by service name rather
-      # than localhost, whatever the host-side value happens to be.
+      # Overrides .env so the container talks to Postgres by service name instead
+      # of localhost, whatever your .env happens to say.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iam}:${POSTGRES_PASSWORD:-iam}@db:5432/${POSTGRES_DB:-iam}
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iam}:${POSTGRES_PASSWORD:-iam}@db:5432/${POSTGRES_DB:-iam}
       DB_POOLER_MODE: direct
     volumes:
-      # Source mount for --reload. The venv lives at /opt/venv, so the host
-      # .venv appearing at /srv/.venv is inert.
+      # Mounts the source so --reload picks up edits. The container's packages live
+      # at /opt/venv, so your local .venv showing up here does nothing.
       - ./apps/api:/srv
     command: uvicorn iam.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
@@ -56,9 +56,8 @@ services:
       target: dev
     volumes:
       - ./apps/web:/srv
-      # Anonymous volume shadowing the bind mount: the host node_modules holds
-      # win32 esbuild and rollup binaries that cannot execute in a Linux
-      # container. This keeps the container's own Linux install.
+      # Hides your local node_modules from the container. Yours has Windows
+      # binaries in it that can't run on Linux, so the container needs its own.
       - /srv/node_modules
     command: npm run dev
     restart: unless-stopped
@@ -95,10 +94,10 @@ services:
       - '8025:8025'
     restart: unless-stopped
 
-  # ------------------------------------------------- identity provider (P2 on)
-  # Behind a profile so the default `docker compose up` stays fast. authentik is
-  # the primary IdP: unlike Keycloak it does SAML IdP *and* outbound SCIM, which
-  # is what makes P3 testable locally with no trial clock.
+  # ------------------------------------------- the identity provider (P2 on)
+  # Behind a profile so a plain `docker compose up` stays quick. authentik is the
+  # one we use because it does both SAML logins and pushing accounts out over
+  # SCIM, so P3 can be tested locally with no trial period to run out.
   redis:
     image: redis:7-alpine
     profiles: [idp]

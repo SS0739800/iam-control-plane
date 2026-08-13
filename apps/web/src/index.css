@@ -1,8 +1,7 @@
 @import 'tailwindcss';
 
-/* Cool slate neutrals with a brass accent — carried through from the plan so
-   the console has one visual identity from P0 rather than being restyled in P1
-   when shadcn/ui lands. */
+/* Cool greys with a brass accent, taken from the plan doc so the console looks
+   like itself from the start instead of getting restyled when shadcn arrives. */
 @theme {
   --color-brass-50: #f7efe0;
   --color-brass-400: #dfa94b;

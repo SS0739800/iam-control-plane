@@ -1,11 +1,11 @@
-# Single origin. This is the whole reason Caddy is here.
+# One address for everything. That's the only reason Caddy is here.
 #
-# The SPA and the API share one hostname, which keeps the session cookie
-# first-party (SameSite=Lax works, no third-party cookie blocking) and removes
-# CORS entirely. See docs/adr/0003-single-origin.md.
+# The frontend and the API share a hostname, which keeps the login cookie
+# first-party so browsers don't block it, and means there's no CORS to set up.
+# See docs/adr/0003-single-origin.md.
 #
-# In P7 the site address becomes your real hostname and Caddy provisions TLS
-# automatically; the route table below does not change.
+# In P7 the address below becomes the real hostname and Caddy sorts out HTTPS by
+# itself. The routes don't change.
 
 {
 	admin off
@@ -20,32 +20,44 @@
 		format console
 	}
 
-	# ---- API surfaces (all proxied to FastAPI) ----------------------------
-	# FastAPI is configured to serve its own docs and schema under /api, so a
-	# single prefix covers the admin API, /api/docs and /api/openapi.json.
+	# ---- Everything the API handles --------------------------------------
+	# FastAPI serves its own docs and schema under /api too, so this one rule
+	# covers the whole API including /api/docs.
 	handle /api/* {
 		reverse_proxy api:8000
 	}
 
-	# Inbound SAML: the IdP posts assertions here (P2).
+	# Logins coming in. The identity provider posts here (P2).
 	handle /saml/* {
 		reverse_proxy api:8000
 	}
 
-	# Inbound SCIM: the IdP provisions users here (P3).
+	# Accounts coming in. The identity provider creates users here (P3).
 	handle /scim/* {
 		reverse_proxy api:8000
 	}
 
-	# Outbound SAML: downstream SPs fetch metadata and get assertions here (P5).
+	# Logins going out, once we're the one signing people in (P5).
 	handle /idp/* {
 		reverse_proxy api:8000
 	}
 
-	# ---- Everything else is the SPA --------------------------------------
-	# In local dev this is the Vite dev server; Caddy passes the HMR websocket
-	# upgrade through untouched. In P7 it becomes a static file_server over the
-	# built bundle.
+	# ---- Everything else is the frontend ---------------------------------
+	# Locally that's the Vite dev server, and Caddy passes the hot-reload
+	# websocket through as-is.
+	#
+	# P7 NOTE: when this changes to serving the built files, it needs a fallback
+	# to index.html:
+	#
+	#   handle {
+	#       root * /srv/dist
+	#       try_files {path} /index.html
+	#       file_server
+	#   }
+	#
+	# Right now /users and /groups only work because Vite serves index.html for
+	# paths it doesn't recognise. A plain file_server would 404 on every deep link
+	# and only the home page would load.
 	handle {
 		reverse_proxy web:5173
 	}

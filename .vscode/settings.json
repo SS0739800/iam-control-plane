@@ -1,0 +1,67 @@
+{
+  // ---------------------------------------------------------------- Python
+  // The venv lives under apps/api, not the repo root, so VS Code will not find
+  // it by itself. This is the Windows path; on macOS or Linux change it to
+  // "${workspaceFolder}/apps/api/.venv/bin/python".
+  //
+  // Note this is only a *default*: if you have already picked an interpreter
+  // for this workspace through the command palette, that choice wins and this
+  // is ignored. Run "Python: Clear Workspace Interpreter Setting" to fall back
+  // to it.
+  "python.defaultInterpreterPath": "${workspaceFolder}/apps/api/.venv/Scripts/python.exe",
+
+  // The `iam` package is never pip-installed — pytest finds it via
+  // `pythonpath = ["."]` in pyproject.toml. Pylance needs telling separately,
+  // or every `from iam.x import y` shows as unresolved.
+  "python.analysis.extraPaths": ["${workspaceFolder}/apps/api"],
+  "python.analysis.typeCheckingMode": "standard",
+
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.cwd": "${workspaceFolder}/apps/api",
+  "python.testing.pytestArgs": ["tests"],
+
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // ------------------------------------------------------------ TypeScript
+  "[typescript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.formatOnSave": true
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.formatOnSave": true
+  },
+  "typescript.tsdk": "apps/web/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // ---------------------------------------------------------------- General
+  // Matches .gitattributes, which forces LF because the Postgres init script is
+  // bind-mounted into a Linux container and CRLF breaks its interpreter line.
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // Keeps search results and the file watcher off tens of thousands of
+  // dependency files. The watcher one matters on Windows — polling is already
+  // enabled for Vite, and watching node_modules on top of that is wasteful.
+  "search.exclude": {
+    "**/.venv": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/__pycache__": true,
+    "**/*.tsbuildinfo": true
+  },
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/__pycache__/**": true
+  }
+}

@@ -1,19 +1,44 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 
 import App from './App'
 import './index.css'
+import AuditPage from './pages/Audit'
+import { ApplicationDetailPage, ApplicationsPage } from './pages/Applications'
+import Dashboard from './pages/Dashboard'
+import { GroupDetailPage, GroupsPage } from './pages/Groups'
+import { UserDetailPage, UsersPage } from './pages/Users'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5_000,
+      staleTime: 30_000,
       retry: 1,
       refetchOnWindowFocus: false,
     },
   },
 })
+
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <App />,
+    children: [
+      { index: true, element: <Dashboard /> },
+      { path: 'users', element: <UsersPage /> },
+      { path: 'users/:userId', element: <UserDetailPage /> },
+      { path: 'groups', element: <GroupsPage /> },
+      { path: 'groups/:groupId', element: <GroupDetailPage /> },
+      { path: 'applications', element: <ApplicationsPage /> },
+      { path: 'applications/:appId', element: <ApplicationDetailPage /> },
+      { path: 'audit', element: <AuditPage /> },
+      // Anything else falls back to the dashboard rather than a blank screen.
+      { path: '*', element: <Dashboard /> },
+    ],
+  },
+])
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {
@@ -23,7 +48,7 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <RouterProvider router={router} />
     </QueryClientProvider>
   </StrictMode>,
 )

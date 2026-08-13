@@ -1,8 +1,8 @@
-"""Health probe behaviour.
+"""Tests for the two health checks.
 
-These tests exist to pin the liveness/readiness split. It is an easy thing to
-"simplify" later into one endpoint that checks the database, at which point a
-transient Postgres blip starts killing containers.
+These exist to keep the two apart. It's tempting to merge them into one endpoint
+that checks the database, and then a two-second Postgres hiccup starts killing
+containers.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from iam import __version__
 
 
 def test_liveness_is_ok_without_a_database(client: TestClient) -> None:
-    """Liveness must not depend on Postgres."""
+    """The is-it-running check must not depend on Postgres being up."""
     response = client.get("/api/health")
 
     assert response.status_code == 200
@@ -25,7 +25,7 @@ def test_liveness_is_ok_without_a_database(client: TestClient) -> None:
 
 
 def test_liveness_reports_the_build_it_is_running(client: TestClient) -> None:
-    """git_sha is how you tell what is actually deployed."""
+    """git_sha is how you tell which build is actually live."""
     body = client.get("/api/health").json()
 
     assert "git_sha" in body

@@ -1,0 +1,12 @@
+{
+  // Prompted once on opening the workspace. None of these are required to build
+  // or test — everything runs from the terminal — but they make the editor agree
+  // with what CI enforces.
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "ms-azuretools.vscode-docker",
+    "bradlc.vscode-tailwindcss"
+  ]
+}

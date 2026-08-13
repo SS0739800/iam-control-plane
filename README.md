@@ -79,6 +79,11 @@ outside it.
 
 ### First-time setup
 
+Only if `apps/api/.venv` does not already exist. **Run it from inside `apps/api`** —
+a venv records absolute paths at creation and cannot be moved afterwards, so one
+created elsewhere and copied in will have a broken `activate` script and a
+`VIRTUAL_ENV` pointing at nowhere.
+
 ```bash
 cd apps/api
 py -3.12 -m venv .venv
@@ -87,6 +92,23 @@ py -3.12 -m venv .venv
 ```
 
 On macOS or Linux the interpreter is at `.venv/bin/python` instead.
+
+If the venv is ever broken, delete and recreate rather than repairing it:
+
+```bash
+cd apps/api && rm -rf .venv && py -3.12 -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt
+```
+
+Activating is optional. These both work:
+
+```bash
+source .venv/Scripts/activate   # prompt gains a (.venv) prefix; then: pytest
+./.venv/Scripts/python.exe -m pytest    # no activation needed
+```
+
+Bare `python` in Git Bash without activating resolves to the global interpreter,
+not this venv — a `ModuleNotFoundError` there means the shell, not a bad install.
 
 Do **not** install `requirements-saml.txt` locally on Windows — it needs native
 xmlsec headers and belongs to the Docker image.

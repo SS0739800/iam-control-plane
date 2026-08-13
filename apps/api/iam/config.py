@@ -1,8 +1,8 @@
-"""Application settings, loaded from the environment.
+"""Settings, read from environment variables.
 
-Every value has a working local default so a fresh clone runs without a .env,
-but nothing secret has a usable default — SESSION_SECRET is deliberately an
-obvious placeholder so it fails review rather than shipping quietly.
+Everything has a default that works locally, so a fresh clone runs without a .env
+file. Nothing secret has a usable default though. SESSION_SECRET is an obvious
+placeholder so it stands out in review instead of slipping through.
 """
 
 from __future__ import annotations
@@ -15,18 +15,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PoolerMode = Literal["direct", "session", "transaction"]
 AppEnv = Literal["local", "ci", "production"]
 
-# Intentionally a hardcoded non-secret. `uses_placeholder_secret` compares
-# against it so production refuses to start while it is still in place — the
-# value existing in source is the mechanism, not an oversight.
+# Not a real secret, and it's in the source on purpose. uses_placeholder_secret
+# compares against it so production refuses to boot while it's still here.
 PLACEHOLDER_SECRET = "dev-only-not-a-real-secret-change-me"  # noqa: S105
 
 
 class Settings(BaseSettings):
-    """Runtime configuration. Instantiate via :func:`get_settings`."""
+    """The app's settings. Get them with get_settings()."""
 
     model_config = SettingsConfigDict(
-        # Looked up relative to the process CWD: apps/api when running natively,
-        # /srv in the container. The repo-root .env covers the compose case.
+        # Found relative to wherever the process started: apps/api when run
+        # directly, /srv in the container. The second path covers docker compose,
+        # which reads the .env at the repo root.
         env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
@@ -37,24 +37,29 @@ class Settings(BaseSettings):
     app_env: AppEnv = "local"
     log_level: str = "INFO"
 
-    # Stamped by CI at image build time; surfaced on /api/health so you can
-    # always tell what is actually deployed.
+    # Set by CI when it builds the image, and shown on /api/health so you can
+    # always tell what's actually running.
     git_sha: str = "dev"
 
-    # The single origin everything is served from. In P2 this becomes the base
-    # for the SAML entity ID and ACS URL, so it has to be right.
+    # The one address everything is served from. P2 builds the SAML URLs out of
+    # this, so it has to be right.
     base_url: str = "http://localhost:8080"
 
     # ------------------------------------------------------------- sessions
     session_secret: str = PLACEHOLDER_SECRET
     session_cookie_name: str = "iam_session"
 
+    # Stand-in for logging in, until P2 adds SAML. Who we assume is calling when
+    # there's no X-Dev-Actor header. Never used in production, see
+    # iam/security/actor.py.
+    dev_actor_user_name: str | None = "admin@demo.local"
+
     # ------------------------------------------------------------- database
     database_url: str = "postgresql+asyncpg://iam:iam@localhost:5432/iam"
 
-    # Alembic needs a different connection path than the app on Supabase:
-    # DDL and transaction-mode pooling do not mix. Falls back to database_url
-    # locally, where both are the same server.
+    # On Supabase, migrations have to connect a different way than the app does,
+    # because schema changes and transaction-mode pooling don't mix. Locally both
+    # point at the same server, so this falls back to database_url.
     alembic_database_url: str | None = None
 
     db_pooler_mode: PoolerMode = "direct"

@@ -1,7 +1,7 @@
-"""FastAPI application factory.
+"""Builds the app.
 
-``create_app`` takes optional settings so tests can build an isolated instance.
-The module-level ``app`` is what uvicorn imports in production.
+create_app takes optional settings so a test can build its own copy. The `app` at
+the bottom of the file is what uvicorn loads when it starts the server.
 """
 
 from __future__ import annotations
@@ -16,17 +16,17 @@ from iam import __version__
 from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.logging_setup import configure_logging
-from iam.routers import health
+from iam.routers import applications, audit, dashboard, groups, health, users
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Build the application.
+    """Build the app.
 
     Args:
-        settings: Overrides the environment-derived settings. Tests pass their
-            own; production leaves this ``None``.
+        settings: Use these instead of reading the environment. Tests pass their
+            own; leave it None everywhere else.
     """
     resolved = settings if settings is not None else get_settings()
     configure_logging(resolved.log_level)
@@ -39,8 +39,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(instance: FastAPI) -> AsyncIterator[None]:
-        # SQLAlchemy connects lazily, so this does not fail when Postgres is
-        # down — readiness reports that instead of the process refusing to boot.
+        # This doesn't actually connect yet, so the app still starts when Postgres
+        # is down. The readiness check reports that instead.
         engine = build_engine(resolved)
         instance.state.engine = engine
         instance.state.sessionmaker = build_sessionmaker(engine)
@@ -63,10 +63,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="IAM Control Plane",
         summary="SAML 2.0 and SCIM 2.0 identity control plane",
         version=__version__,
-        # Kept under /api so Caddy's single-origin config needs one rule for the
-        # whole API surface, docs and schema included. The oauth2 redirect is
-        # explicit because FastAPI otherwise defaults it to /docs/oauth2-redirect,
-        # which falls outside the proxied prefix and lands on the SPA.
+        # All under /api so Caddy needs one rule to cover the whole API, docs
+        # included. The oauth2 redirect is spelled out because FastAPI otherwise
+        # puts it at /docs/oauth2-redirect, outside that prefix, where it would
+        # hit the frontend instead.
         docs_url="/api/docs",
         swagger_ui_oauth2_redirect_url="/api/docs/oauth2-redirect",
         redoc_url=None,
@@ -76,10 +76,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.settings = resolved
 
-    # No CORSMiddleware, deliberately. The SPA is served from this same origin,
-    # so a cross-origin request is a misconfiguration and should fail rather
-    # than be quietly permitted. See docs/adr/0003-single-origin.md.
+    # No CORS middleware here, on purpose. The frontend is served from this same
+    # address, so a cross-origin request means something is misconfigured and it
+    # should fail loudly. See docs/adr/0003-single-origin.md.
     app.include_router(health.router, prefix="/api")
+    app.include_router(dashboard.router, prefix="/api")
+    app.include_router(users.router, prefix="/api")
+    app.include_router(groups.router, prefix="/api")
+    app.include_router(applications.router, prefix="/api")
+    app.include_router(audit.router, prefix="/api")
+
+    # There's no real login until P2. Say so on startup rather than letting an
+    # environment run the stand-in quietly. See iam/security/actor.py.
+    if not resolved.is_production:
+        logger.warning(
+            "auth.development_shim_active",
+            extra={
+                "detail": (
+                    "Requests are identified by an X-Dev-Actor header, falling "
+                    "back to DEV_ACTOR_USER_NAME. This is impersonation, not "
+                    "authentication. Replaced by SAML session lookup in P2."
+                ),
+                "default_actor": resolved.dev_actor_user_name,
+            },
+        )
 
     return app
 

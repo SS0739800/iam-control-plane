@@ -32,8 +32,11 @@ certs/
 pgdata/
 
 # --- Editors and OS ---
+# Editor state is personal, but these two are project configuration: they point
+# the editor at the venv under apps/api and keep formatting consistent with CI.
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea/
 Thumbs.db
 Desktop.ini
