@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API — lint, types, tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: iam
+          POSTGRES_PASSWORD: iam
+          POSTGRES_DB: iam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Presence of this flips the integration-marked tests from skipped to run.
+      IAM_TEST_DATABASE_URL: postgresql+asyncpg://iam:iam@localhost:5432/iam_test
+      ALEMBIC_DATABASE_URL: postgresql+asyncpg://iam:iam@localhost:5432/iam_test
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/api/requirements*.txt
+
+      # requirements-saml.txt is deliberately excluded: it needs native xmlsec
+      # headers. The docker job below is what validates that stack.
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Type check
+        run: mypy iam tests
+
+      - name: Verify migrations apply to an empty database
+        run: python -m alembic upgrade head
+
+      - name: Test
+        run: pytest
+
+  web:
+    name: Web — types, tests, build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  images:
+    name: Images — build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The most valuable check in P0: this is what proves the xmlsec/lxml
+      # source build still works. It is slow, and it is the reason a segfault in
+      # P2 will never be a surprise.
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          target: runtime
+          build-args: GIT_SHA=${{ github.sha }}
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build web bundle image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          target: build
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

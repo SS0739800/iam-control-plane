@@ -1,0 +1,29 @@
+# Normalise line endings to LF in the repository AND in working trees.
+#
+# This is not a style preference. Several of these files are read directly by
+# Linux containers via bind mount, and Git's default autocrlf on Windows would
+# check them out with CRLF:
+#
+#   infra/db/init/*.sh   -> `bad interpreter: /bin/bash^M`, Postgres init fails
+#   Dockerfile           -> RUN lines break in subtle ways
+#   Caddyfile            -> parse errors
+#
+# `eol=lf` overrides core.autocrlf, so this works regardless of local config.
+* text=auto eol=lf
+
+# Shell scripts must be LF, always — restated explicitly because this is the
+# one that fails loudest.
+*.sh text eol=lf
+
+# Never touched by EOL conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# Generated; keep it out of diffs and reviews.
+apps/web/package-lock.json linguist-generated=true -diff

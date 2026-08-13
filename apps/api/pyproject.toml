@@ -1,0 +1,54 @@
+# Tool configuration only.
+#
+# Dependencies live in requirements.txt / requirements-dev.txt / requirements-saml.txt
+# so there is exactly one source of truth for what gets installed. This file
+# deliberately declares no [project] table and is not an installable package —
+# `pythonpath` below is what makes `iam` importable under pytest.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "UP",       # pyupgrade
+    "B",        # bugbear
+    "C4",       # comprehensions
+    "SIM",      # simplify
+    "ASYNC",    # async correctness
+    "S",        # bandit — this is a security project; keep it on
+    "RUF",
+]
+ignore = [
+    "S101",  # assert is how pytest works
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]     # hardcoded test credentials are fine
+"alembic/*" = ["E501", "I001"]   # generated templates
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["^alembic/versions/", "^\\.venv/"]
+
+[[tool.mypy.overrides]]
+module = ["pythonjsonlogger.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# Makes `import iam` work without installing the package.
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requires a reachable Postgres (set IAM_TEST_DATABASE_URL)",
+]

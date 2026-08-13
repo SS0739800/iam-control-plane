@@ -1,0 +1,11 @@
+# Installed inside the image by `npm ci` — a host node_modules may contain
+# platform-specific binaries (esbuild, rollup) that break in the container.
+node_modules/
+
+dist/
+.vite/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example

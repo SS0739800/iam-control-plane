@@ -1,0 +1,19 @@
+# The host venv is platform-specific — copying a Windows venv into a Linux
+# image produces broken shebangs and a confusing import failure.
+.venv/
+venv/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets and local signing material never enter an image layer.
+.env
+.env.*
+!.env.example
+certs/
+*.pem
+*.key

@@ -1,0 +1,150 @@
+# Local development stack.
+#
+#   docker compose up                    core: caddy, api, web, db, mailpit
+#   docker compose --profile idp up      also authentik + redis (needed from P2)
+#
+# Everything is reached through Caddy on http://localhost:8080 — one origin for
+# the SPA and the API both. Hitting the API on another port would work but
+# defeats the point; see docs/adr/0003-single-origin.md.
+
+name: iam
+
+services:
+  # ---------------------------------------------------------------- edge proxy
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------- back end
+  api:
+    build:
+      context: ./apps/api
+      target: runtime
+      args:
+        GIT_SHA: ${GIT_SHA:-dev}
+    env_file:
+      - .env
+    environment:
+      # Overrides .env so the container reaches Postgres by service name rather
+      # than localhost, whatever the host-side value happens to be.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iam}:${POSTGRES_PASSWORD:-iam}@db:5432/${POSTGRES_DB:-iam}
+      ALEMBIC_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iam}:${POSTGRES_PASSWORD:-iam}@db:5432/${POSTGRES_DB:-iam}
+      DB_POOLER_MODE: direct
+    volumes:
+      # Source mount for --reload. The venv lives at /opt/venv, so the host
+      # .venv appearing at /srv/.venv is inert.
+      - ./apps/api:/srv
+    command: uvicorn iam.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------- front end
+  web:
+    build:
+      context: ./apps/web
+      target: dev
+    volumes:
+      - ./apps/web:/srv
+      # Anonymous volume shadowing the bind mount: the host node_modules holds
+      # win32 esbuild and rollup binaries that cannot execute in a Linux
+      # container. This keeps the container's own Linux install.
+      - /srv/node_modules
+    command: npm run dev
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------- database
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-iam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iam}
+      POSTGRES_DB: ${POSTGRES_DB:-iam}
+      # Read by the init script, which creates authentik's separate database.
+      AUTHENTIK_POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs only on first initialisation of an empty data volume.
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Exposed so you can psql from the host, or run the API natively.
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-iam} -d ${POSTGRES_DB:-iam}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # -------------------------------------------------------------------- email
+  # Catches every outbound message. P4 sends access-request approvals here.
+  # UI on http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '8025:8025'
+    restart: unless-stopped
+
+  # ------------------------------------------------- identity provider (P2 on)
+  # Behind a profile so the default `docker compose up` stays fast. authentik is
+  # the primary IdP: unlike Keycloak it does SAML IdP *and* outbound SCIM, which
+  # is what makes P3 testable locally with no trial clock.
+  redis:
+    image: redis:7-alpine
+    profiles: [idp]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    profiles: [idp]
+    command: server
+    environment: &authentik_env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: db
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-authentik}
+      AUTHENTIK_EMAIL__HOST: mailpit
+      AUTHENTIK_EMAIL__PORT: 1025
+    ports:
+      # Initial setup: http://localhost:9000/if/flow/initial-setup/
+      - '9000:9000'
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    profiles: [idp]
+    command: worker
+    environment: *authentik_env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

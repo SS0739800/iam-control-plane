@@ -1,0 +1,52 @@
+# Single origin. This is the whole reason Caddy is here.
+#
+# The SPA and the API share one hostname, which keeps the session cookie
+# first-party (SameSite=Lax works, no third-party cookie blocking) and removes
+# CORS entirely. See docs/adr/0003-single-origin.md.
+#
+# In P7 the site address becomes your real hostname and Caddy provisions TLS
+# automatically; the route table below does not change.
+
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# ---- API surfaces (all proxied to FastAPI) ----------------------------
+	# FastAPI is configured to serve its own docs and schema under /api, so a
+	# single prefix covers the admin API, /api/docs and /api/openapi.json.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Inbound SAML: the IdP posts assertions here (P2).
+	handle /saml/* {
+		reverse_proxy api:8000
+	}
+
+	# Inbound SCIM: the IdP provisions users here (P3).
+	handle /scim/* {
+		reverse_proxy api:8000
+	}
+
+	# Outbound SAML: downstream SPs fetch metadata and get assertions here (P5).
+	handle /idp/* {
+		reverse_proxy api:8000
+	}
+
+	# ---- Everything else is the SPA --------------------------------------
+	# In local dev this is the Vite dev server; Caddy passes the HMR websocket
+	# upgrade through untouched. In P7 it becomes a static file_server over the
+	# built bundle.
+	handle {
+		reverse_proxy web:5173
+	}
+}

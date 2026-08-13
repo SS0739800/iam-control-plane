@@ -1,0 +1,15 @@
+# Runtime dependencies for the IAM control plane API.
+#
+# Installs cleanly on Windows, macOS and Linux — no system libraries required.
+# The SAML stack needs native xmlsec and lives in requirements-saml.txt.
+#
+# Versions are pinned. Bump deliberately, never by accident.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-json-logger==3.2.1
