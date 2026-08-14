@@ -19,11 +19,19 @@ Upstream identity providers, in the order they get wired up: **authentik**
 
 ## Status
 
-**Phase 2 — inbound SSO. In progress.** `/saml/metadata`, `/saml/login` and
-`/saml/acs` are all in. A login now goes the whole way: out to the provider,
-back to the assertion consumer, through all ten checks, into a person and a
-session cookie. Still to come in P2: reading that cookie instead of the
-`X-Dev-Actor` header, signing out, and the login inspector screen.
+**Phase 2 — inbound SSO. In progress.** A login now goes the whole way and comes
+back: out to the provider, in through `/saml/acs`, past all ten checks, into a
+person, a session, and a cookie the API authenticates every later request with.
+`POST /saml/logout` ends it. `GET /api/me` says who you are.
+
+Still to come in P2: registering authentik and seeding it as a provider, the
+login inspector screen, and Single Logout at `/saml/sls` — which the metadata
+already advertises, and which needs a signing key that arrives in P5.
+
+The `X-Dev-Actor` header still answers for requests that arrive with no session
+cookie, outside production only. That is impersonation, not authentication, and
+it goes when authentik is registered. A real session always wins over it. See
+[`iam/security/actor.py`](apps/api/iam/security/actor.py).
 
 CI is configured but has not run yet — it executes on the first push to a remote.
 
@@ -65,7 +73,8 @@ which is the whole point of P0.
 | http://localhost:9000                | authentik (only with `--profile idp`) |
 
 The identity provider is behind a compose profile so the default `up` stays fast.
-It is not needed until P2:
+Start it when you want to sign in for real — the SAML endpoints are built, but
+there is nothing to log into until authentik is running and registered:
 
 ```bash
 docker compose --profile idp up

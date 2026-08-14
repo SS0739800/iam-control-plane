@@ -201,6 +201,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The person this request is coming from
+         * @description Report the current person.
+         *
+         *     No permission check on this one on purpose: everybody is allowed to know who
+         *     they are. Being signed in at all is the only requirement, and that's what
+         *     resolving the actor already established.
+         */
+        get: operations["me_api_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -335,6 +359,42 @@ export interface paths {
         get: operations["login_saml_login_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign out
+         * @description End this session and clear the cookie.
+         *
+         *     A POST, not a GET. A sign-out you can trigger with a link means any page on
+         *     the internet can sign our users out with an image tag pointed at it. Annoying
+         *     rather than dangerous, but it costs nothing to get right, and the Lax cookie
+         *     means a cross-site POST doesn't carry the session anyway.
+         *
+         *     Signing out here does not sign them out at the provider — click login again
+         *     and they'll come straight back in without being asked for a password, because
+         *     the provider still considers them signed in. Telling the provider is Single
+         *     Logout, it needs a key of ours to sign the request with, and that key arrives
+         *     in P5 when we start issuing logins ourselves.
+         *
+         *     Always succeeds. No cookie, an unknown one, one that expired an hour ago:
+         *     they all end with the person signed out and the cookie gone, which is what
+         *     they asked for. Reporting an error for "you were already signed out" would be
+         *     technically accurate and useless.
+         */
+        post: operations["logout_saml_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -778,6 +838,33 @@ export interface components {
             status: "ready" | "degraded";
         };
         /**
+         * SignedInUser
+         * @description Who the console is talking to, and what they can do.
+         *
+         *     The permissions are sent as a list so the front end can hide buttons nobody
+         *     can use. It is only ever a nicety: every one of them is checked again on the
+         *     request, because a hidden button is not a permission check.
+         */
+        SignedInUser: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Permissions */
+            permissions: string[];
+            role: components["schemas"]["PlatformRole"];
+            /** User Name */
+            user_name: string;
+            /**
+             * Via Saml Session
+             * @description True when this came from a real login. False means the development stand-in identified the request, which never happens in production.
+             */
+            via_saml_session: boolean;
+        };
+        /**
          * UserDetail
          * @description Everything about one person, including what they can get into.
          */
@@ -1211,6 +1298,26 @@ export interface operations {
             };
         };
     };
+    me_api_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedInUser"];
+                };
+            };
+        };
+    };
     list_users_api_users_get: {
         parameters: {
             query?: {
@@ -1434,6 +1541,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    logout_saml_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

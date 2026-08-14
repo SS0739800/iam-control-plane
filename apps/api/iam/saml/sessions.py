@@ -37,6 +37,14 @@ forever."""
 SESSION_IDLE_TIMEOUT = dt.timedelta(hours=1)
 """How long a session survives with nothing happening on it."""
 
+SESSION_TOUCH_INTERVAL = dt.timedelta(minutes=1)
+"""How stale the last-seen time has to be before we bother writing a new one.
+
+Updating it on literally every request would mean a write for every page load,
+every poll, every image. The idle timeout is an hour, so being up to a minute
+behind costs nothing and turns a per-request write into an occasional one.
+"""
+
 
 class RevokedReason:
     """Why a session ended. Recorded so the audit log can say which."""
@@ -101,6 +109,19 @@ async def create_session(
     return session, token
 
 
+async def find_by_token(db: AsyncSession, token: str) -> SamlSession | None:
+    """Find whatever session a cookie value points at, alive or not.
+
+    Signing out wants this one rather than lookup_session: somebody whose session
+    went idle an hour ago still clicked the button, and their row should still be
+    marked as ended rather than left open forever.
+    """
+    found: SamlSession | None = await db.scalar(
+        select(SamlSession).where(SamlSession.token_hash == hash_token(token))
+    )
+    return found
+
+
 async def lookup_session(db: AsyncSession, token: str, *, now: dt.datetime) -> SamlSession | None:
     """Find the live session for a cookie value, if there is one.
 
@@ -108,7 +129,7 @@ async def lookup_session(db: AsyncSession, token: str, *, now: dt.datetime) -> S
     sitting idle too long. Those are all "not signed in" from the caller's point of
     view; the difference only matters to the audit log.
     """
-    found = await db.scalar(select(SamlSession).where(SamlSession.token_hash == hash_token(token)))
+    found = await find_by_token(db, token)
     if found is None:
         return None
 

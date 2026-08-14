@@ -956,6 +956,49 @@
         "title": "Readiness",
         "type": "object"
       },
+      "SignedInUser": {
+        "description": "Who the console is talking to, and what they can do.\n\nThe permissions are sent as a list so the front end can hide buttons nobody\ncan use. It is only ever a nicety: every one of them is checked again on the\nrequest, because a hidden button is not a permission check.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/PlatformRole"
+          },
+          "user_name": {
+            "title": "User Name",
+            "type": "string"
+          },
+          "via_saml_session": {
+            "description": "True when this came from a real login. False means the development stand-in identified the request, which never happens in production.",
+            "title": "Via Saml Session",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "user_name",
+          "display_name",
+          "role",
+          "permissions",
+          "via_saml_session"
+        ],
+        "title": "SignedInUser",
+        "type": "object"
+      },
       "UserDetail": {
         "description": "Everything about one person, including what they can get into.",
         "properties": {
@@ -1909,6 +1952,28 @@
         ]
       }
     },
+    "/api/me": {
+      "get": {
+        "description": "Report the current person.\n\nNo permission check on this one on purpose: everybody is allowed to know who\nthey are. Being signed in at all is the only requirement, and that's what\nresolving the actor already established.",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInUser"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The person this request is coming from",
+        "tags": [
+          "session"
+        ]
+      }
+    },
     "/api/users": {
       "get": {
         "description": "The user list, filtered and split into pages.\n\nThe filtering and paging happen in Postgres, not the browser. There are 1,284\nusers in the demo data; sending all of them so the frontend can filter would\nbe slow, and it would also hand out every record to anyone who can load one\npage.",
@@ -2299,6 +2364,21 @@
           }
         },
         "summary": "Start signing in",
+        "tags": [
+          "saml"
+        ]
+      }
+    },
+    "/saml/logout": {
+      "post": {
+        "description": "End this session and clear the cookie.\n\nA POST, not a GET. A sign-out you can trigger with a link means any page on\nthe internet can sign our users out with an image tag pointed at it. Annoying\nrather than dangerous, but it costs nothing to get right, and the Lax cookie\nmeans a cross-site POST doesn't carry the session anyway.\n\nSigning out here does not sign them out at the provider \u2014 click login again\nand they'll come straight back in without being asked for a password, because\nthe provider still considers them signed in. Telling the provider is Single\nLogout, it needs a key of ours to sign the request with, and that key arrives\nin P5 when we start issuing logins ourselves.\n\nAlways succeeds. No cookie, an unknown one, one that expired an hour ago:\nthey all end with the person signed out and the cookie gone, which is what\nthey asked for. Reporting an error for \"you were already signed out\" would be\ntechnically accurate and useless.",
+        "operationId": "logout_saml_logout_post",
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sign out",
         "tags": [
           "saml"
         ]

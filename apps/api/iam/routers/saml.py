@@ -3,10 +3,16 @@
 /saml/metadata  the document you hand a provider when registering this app
 /saml/login     sends someone off to the provider to sign in
 /saml/acs       where the provider posts the answer
+/saml/logout    ends the session and clears the cookie
 
 These live outside /api on purpose. A provider posts to them directly from the
 person's browser, so they're part of the site rather than part of the JSON API,
 and Caddy proxies them separately. See docs/adr/0003-single-origin.md.
+
+Still to come: /saml/sls, which our metadata already advertises. That's Single
+Logout — the provider telling us somebody signed out elsewhere, and us telling it
+the same. Answering it properly means signing a response, and the key for that
+arrives in P5.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from iam.config import Settings
 from iam.deps import SessionDep, SettingsDep, app_settings
 from iam.models.enums import ActorType, AuditOutcome
 from iam.models.saml import IdentityProvider, SamlAssertionSeen, SamlRequestState
+from iam.models.user import User
 from iam.saml.checks import (
     AssertionFacts,
     Expectations,
@@ -35,7 +42,14 @@ from iam.saml.checks import (
     run_all_checks,
 )
 from iam.saml.provisioning import UnusableAssertion, provision_user, read_claims
-from iam.saml.sessions import create_session, set_session_cookie
+from iam.saml.sessions import (
+    RevokedReason,
+    clear_session_cookie,
+    create_session,
+    find_by_token,
+    revoke_session,
+    set_session_cookie,
+)
 from iam.saml.sp import (
     REQUEST_TTL,
     ServiceProvider,
@@ -550,4 +564,74 @@ async def assertion_consumer_service(
 
     response = RedirectResponse(url=destination, status_code=status.HTTP_303_SEE_OTHER)
     set_session_cookie(response, token, settings=settings)
+    return response
+
+
+@router.post(
+    "/logout",
+    summary="Sign out",
+    status_code=status.HTTP_303_SEE_OTHER,
+    response_class=RedirectResponse,
+)
+async def logout(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> RedirectResponse:
+    """End this session and clear the cookie.
+
+    A POST, not a GET. A sign-out you can trigger with a link means any page on
+    the internet can sign our users out with an image tag pointed at it. Annoying
+    rather than dangerous, but it costs nothing to get right, and the Lax cookie
+    means a cross-site POST doesn't carry the session anyway.
+
+    Signing out here does not sign them out at the provider — click login again
+    and they'll come straight back in without being asked for a password, because
+    the provider still considers them signed in. Telling the provider is Single
+    Logout, it needs a key of ours to sign the request with, and that key arrives
+    in P5 when we start issuing logins ourselves.
+
+    Always succeeds. No cookie, an unknown one, one that expired an hour ago:
+    they all end with the person signed out and the cookie gone, which is what
+    they asked for. Reporting an error for "you were already signed out" would be
+    technically accurate and useless.
+    """
+    now = dt.datetime.now(dt.UTC)
+    token = request.cookies.get(settings.session_cookie_name)
+
+    # find_by_token rather than lookup_session: somebody whose session went idle
+    # an hour ago still clicked the button, and their row should be marked ended
+    # rather than left open until it expires on its own.
+    existing = await find_by_token(session, token) if token else None
+
+    if existing is not None and existing.revoked_at is None:
+        await revoke_session(session, existing, reason=RevokedReason.SIGNED_OUT, now=now)
+
+        user = await session.get(User, existing.user_id)
+        await append_event(
+            session,
+            AuditDraft(
+                action="saml.signed_out",
+                actor_type=ActorType.USER,
+                actor_id=existing.user_id,
+                actor_label=(
+                    f"{user.display_name} <{user.user_name}>" if user else str(existing.user_id)
+                ),
+                outcome=AuditOutcome.SUCCESS,
+                target_type="saml_session",
+                target_id=str(existing.id),
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+                detail={"idp": existing.idp_slug, "reason": RevokedReason.SIGNED_OUT},
+            ),
+        )
+        await session.commit()
+
+        logger.info(
+            "saml.signed_out",
+            extra={"session_id": str(existing.id), "user_id": str(existing.user_id)},
+        )
+
+    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    clear_session_cookie(response, settings=settings)
     return response

@@ -1,7 +1,7 @@
 """Who's calling and what they're allowed to do.
 
 - permissions.py — the list of permissions and which role gets which
-- actor.py — working out who's calling (a stand-in until P2 adds real login)
+- actor.py — working out who's calling, from the session cookie
 - guards.py — the require(...) check you put on a route
 """
 

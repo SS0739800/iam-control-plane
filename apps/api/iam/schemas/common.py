@@ -11,7 +11,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from iam.models.enums import AppProtocol
+from iam.models.enums import AppProtocol, PlatformRole
 
 
 class UserRef(BaseModel):
@@ -54,6 +54,27 @@ class AppRef(BaseModel):
             "The group that gives them this access, or null if it was given to "
             "them directly. Answers 'why does this person have Salesforce?'"
         ),
+    )
+
+
+class SignedInUser(BaseModel):
+    """Who the console is talking to, and what they can do.
+
+    The permissions are sent as a list so the front end can hide buttons nobody
+    can use. It is only ever a nicety: every one of them is checked again on the
+    request, because a hidden button is not a permission check.
+    """
+
+    id: uuid.UUID
+    user_name: str
+    display_name: str
+    role: PlatformRole
+    permissions: list[str]
+    via_saml_session: bool = Field(
+        description=(
+            "True when this came from a real login. False means the development "
+            "stand-in identified the request, which never happens in production."
+        )
     )
 
 

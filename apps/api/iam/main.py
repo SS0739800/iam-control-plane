@@ -16,7 +16,7 @@ from iam import __version__
 from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.logging_setup import configure_logging
-from iam.routers import applications, audit, dashboard, groups, health, saml, users
+from iam.routers import applications, audit, dashboard, groups, health, me, saml, users
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # address, so a cross-origin request means something is misconfigured and it
     # should fail loudly. See docs/adr/0003-single-origin.md.
     app.include_router(health.router, prefix="/api")
+    app.include_router(me.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
     app.include_router(groups.router, prefix="/api")
@@ -91,16 +92,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # own rule.
     app.include_router(saml.router)
 
-    # There's no real login until P2. Say so on startup rather than letting an
-    # environment run the stand-in quietly. See iam/security/actor.py.
-    if not resolved.is_production:
+    # SAML login works now, but the development stand-in is still behind it for
+    # requests that arrive without a session cookie. Say so on startup rather than
+    # letting an environment run it quietly. See iam/security/actor.py.
+    if not resolved.is_production and resolved.dev_actor_user_name:
         logger.warning(
             "auth.development_shim_active",
             extra={
                 "detail": (
-                    "Requests are identified by an X-Dev-Actor header, falling "
-                    "back to DEV_ACTOR_USER_NAME. This is impersonation, not "
-                    "authentication. Replaced by SAML session lookup in P2."
+                    "Requests with no session cookie are identified by an "
+                    "X-Dev-Actor header, falling back to DEV_ACTOR_USER_NAME. "
+                    "This is impersonation, not authentication. It never runs in "
+                    "production, and it goes once an identity provider is "
+                    "registered. Unset DEV_ACTOR_USER_NAME to switch it off."
                 ),
                 "default_actor": resolved.dev_actor_user_name,
             },

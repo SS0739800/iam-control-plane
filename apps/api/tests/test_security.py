@@ -1,9 +1,10 @@
-"""Tests for who can do what, and for the fact that login doesn't exist yet.
+"""Tests for who can do what, and for how we work out who's calling.
 
-The production test is the one that matters. Until P2 there's no real login, just
-the X-Dev-Actor header, and a test is the only thing making sure that header can't
-work in production. Without it, one careless refactor turns it into a way past the
-front door.
+The production test is the one that matters. Login is real now, but the
+development stand-in is still sitting behind it for requests that arrive without
+a session cookie, and this test is the only thing making sure that header can't
+work in production. Without it, one careless refactor turns it into a way past
+the front door.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from iam.config import Settings
 from iam.main import create_app
 from iam.models.enums import PlatformRole
 from iam.security import Actor, Permission, permissions_for, require
+from iam.security.actor import NOT_SIGNED_IN
 
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://nobody:nobody@127.0.0.1:1/absent"
 
@@ -111,14 +113,18 @@ def test_guard_with_no_permissions_is_a_programming_error() -> None:
         require()
 
 
-# ------------------------------------------------- the P2 authentication gap
+# ------------------------------------------------ the development stand-in
 
 
-def test_production_refuses_to_authenticate_anyone() -> None:
+def test_production_ignores_the_development_header() -> None:
     """The dev header must do nothing at all in production.
 
-    Not "switched off by a setting". There's no code path in production that even
-    looks at it. If this test ever fails, that header has become a way in.
+    Not "switched off by a setting". Production returns before the branch that
+    reads it, and DEV_ACTOR_USER_NAME being set changes nothing. If this test ever
+    fails, that header has become a way in.
+
+    A 401 here also proves the header was ignored rather than tried: the database
+    is unreachable, so a code path that looked the user up would fail differently.
     """
     settings = Settings(
         app_env="production",
@@ -131,7 +137,7 @@ def test_production_refuses_to_authenticate_anyone() -> None:
         response = client.get("/api/dashboard", headers={"X-Dev-Actor": "admin@demo.local"})
 
     assert response.status_code == 401
-    assert "P2" in response.json()["detail"]
+    assert response.json()["detail"] == NOT_SIGNED_IN
 
 
 def test_production_refuses_to_start_with_the_placeholder_secret() -> None:

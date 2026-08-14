@@ -1,6 +1,6 @@
 """Shared setup for the tests.
 
-There are two client fixtures on purpose:
+There are three client fixtures on purpose:
 
 `client` points at a database that isn't there. Anything that should work without
 Postgres uses this one, so you can run most of the suite with nothing else
@@ -9,39 +9,42 @@ started.
 `db_client` points at a real Postgres from IAM_TEST_DATABASE_URL, and skips if
 that isn't set. CI sets it from a container.
 
-Both use TestClient as a `with` block, because that's what runs the app's startup
-code. httpx's ASGITransport skips startup, and then app.state.sessionmaker isn't
-there.
+`saml_client` is a db_client whose SAML endpoints read logins through a stub
+instead of xmlsec, which doesn't install on Windows. See tests/saml_harness.py
+for what that stub does and does not replace.
+
+The first two use TestClient as a `with` block, because that's what runs the
+app's startup code. httpx's ASGITransport skips startup, and then
+app.state.sessionmaker isn't there.
+
+The settings helpers live in tests/support.py rather than here, so saml_harness
+can use them without importing this module and creating a cycle.
 """
 
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from iam.config import Settings
 from iam.db import build_engine, build_sessionmaker
 from iam.main import create_app
+from iam.routers.saml import _response_reader
+from tests.saml_harness import Scenario, StubReader, clean_up, new_scenario
+from tests.support import (
+    TEST_DATABASE_ENV_VAR,
+    UNREACHABLE_DATABASE_URL,
+    build_settings,
+    database_url,
+)
 
-# Port 1 on localhost. Nothing is listening there, and it fails straight away
-# instead of hanging for a timeout like a made-up hostname would.
-UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://nobody:nobody@127.0.0.1:1/absent"
-
-TEST_DATABASE_ENV_VAR = "IAM_TEST_DATABASE_URL"
-
-
-def build_settings(database_url: str = UNREACHABLE_DATABASE_URL) -> Settings:
-    """Settings for a test app. Values passed here beat whatever's in the shell."""
-    return Settings(
-        app_env="ci",
-        database_url=database_url,
-        session_secret="test-secret-deliberately-not-the-placeholder",
-        log_level="WARNING",
-    )
+__all__ = [
+    "TEST_DATABASE_ENV_VAR",
+    "UNREACHABLE_DATABASE_URL",
+    "build_settings",
+]
 
 
 @pytest.fixture
@@ -54,11 +57,35 @@ def client() -> Iterator[TestClient]:
 @pytest.fixture
 def db_client() -> Iterator[TestClient]:
     """A client with a real Postgres behind it. Skips if there isn't one."""
-    database_url = os.environ.get(TEST_DATABASE_ENV_VAR)
-    if not database_url:
-        pytest.skip(f"{TEST_DATABASE_ENV_VAR} is not set")
+    with TestClient(create_app(build_settings(database_url()))) as test_client:
+        yield test_client
 
-    with TestClient(create_app(build_settings(database_url))) as test_client:
+
+@pytest.fixture
+def scenario() -> Iterator[Scenario]:
+    """Unique names for one SAML test, and the cleanup afterwards."""
+    made = new_scenario()
+    yield made
+    clean_up(made)
+
+
+@pytest.fixture
+def saml_reader() -> StubReader:
+    """Stands in for the one module that needs xmlsec. See tests/saml_harness.py."""
+    return StubReader()
+
+
+@pytest.fixture
+def saml_client(saml_reader: StubReader) -> Iterator[TestClient]:
+    """A client whose SAML endpoints read logins through the stub.
+
+    Overriding the private dependency directly is deliberate: it is the seam the
+    endpoint was given so everything downstream of the signature check can be
+    tested without xmlsec.
+    """
+    app = create_app(build_settings(database_url()))
+    app.dependency_overrides[_response_reader] = lambda: saml_reader
+    with TestClient(app) as test_client:
         yield test_client
 
 
@@ -70,11 +97,7 @@ async def db_session() -> AsyncIterator[AsyncSession]:
     DELETE, so a test that wrote entries has no other way to tidy up. Each test
     gets its own connection too, so one failed statement can't break the next test.
     """
-    database_url = os.environ.get(TEST_DATABASE_ENV_VAR)
-    if not database_url:
-        pytest.skip(f"{TEST_DATABASE_ENV_VAR} is not set")
-
-    engine = build_engine(build_settings(database_url))
+    engine = build_engine(build_settings(database_url()))
     try:
         async with build_sessionmaker(engine)() as session:
             yield session

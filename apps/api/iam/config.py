@@ -49,9 +49,10 @@ class Settings(BaseSettings):
     session_secret: str = PLACEHOLDER_SECRET
     session_cookie_name: str = "iam_session"
 
-    # Stand-in for logging in, until P2 adds SAML. Who we assume is calling when
-    # there's no X-Dev-Actor header. Never used in production, see
-    # iam/security/actor.py.
+    # Development stand-in, used only when a request arrives with no session
+    # cookie. Who we assume is calling when there's no X-Dev-Actor header either.
+    # Set it to None to switch the stand-in off entirely; it never runs in
+    # production regardless. See iam/security/actor.py.
     dev_actor_user_name: str | None = "admin@demo.local"
 
     # ------------------------------------------------------------- database
