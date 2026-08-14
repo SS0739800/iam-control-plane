@@ -7,11 +7,18 @@ two importing each other.
 
 from __future__ import annotations
 
+import asyncio
 import os
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.config import Settings
+from iam.db import build_engine, build_sessionmaker
+
+T = TypeVar("T")
 
 # Port 1 on localhost. Nothing is listening there, and it fails straight away
 # instead of hanging for a timeout like a made-up hostname would.
@@ -36,3 +43,25 @@ def database_url() -> str:
     if not url:
         pytest.skip(f"{TEST_DATABASE_ENV_VAR} is not set")
     return url
+
+
+def run_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
+    """Run one piece of database work on its own engine, and commit it.
+
+    For setting up and checking on a test that drives the app over HTTP. Its own
+    engine, because the app under test has one of its own running in the
+    TestClient's event loop, and sharing a connection across the two would be the
+    interesting kind of flaky.
+    """
+
+    async def main() -> T:
+        engine = build_engine(build_settings(database_url()))
+        try:
+            async with build_sessionmaker(engine)() as session:
+                result = await work(session)
+                await session.commit()
+                return result
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(main())

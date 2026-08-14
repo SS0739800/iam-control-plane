@@ -26,6 +26,15 @@ class Permission(StrEnum):
     APPS_READ = "apps:read"
     APPS_WRITE = "apps:write"
 
+    IDP_READ = "idp:read"
+    IDP_WRITE = "idp:write"
+    """Register or change an identity provider. Admin only, and it stays that way.
+
+    This is the most consequential write in the system. Everything about trusting
+    a login reduces to "was it signed with the key on this row", so whoever can
+    edit that row can decide who gets to be anybody. Helpdesk can look, so they
+    can answer "is SSO configured", and that is all."""
+
     AUDIT_READ = "audit:read"
     AUDIT_VERIFY = "audit:verify"
     """Run the tamper check on the audit log. Kept separate from just reading it,
@@ -47,6 +56,7 @@ ROLE_PERMISSIONS: Mapping[PlatformRole, frozenset[Permission]] = {
             Permission.USERS_WRITE,
             Permission.GROUPS_READ,
             Permission.APPS_READ,
+            Permission.IDP_READ,
             Permission.AUDIT_READ,
         }
     ),
@@ -57,6 +67,7 @@ ROLE_PERMISSIONS: Mapping[PlatformRole, frozenset[Permission]] = {
             Permission.USERS_READ,
             Permission.GROUPS_READ,
             Permission.APPS_READ,
+            Permission.IDP_READ,
             Permission.AUDIT_READ,
             Permission.AUDIT_VERIFY,
         }

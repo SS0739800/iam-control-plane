@@ -16,24 +16,20 @@ verify it", never "decide whether this login is acceptable".
 
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
 import uuid
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TypeVar
 
 import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from iam.db import build_engine, build_sessionmaker
 from iam.models.saml import IdentityProvider, SamlAssertionSeen, SamlRequestState, SamlSession
 from iam.models.user import User
 from iam.saml.checks import SAML_SUCCESS, AssertionFacts
 from iam.saml.sp import REQUEST_TTL
-from tests.support import build_settings, database_url
+from tests.support import run_db
 
 BASE_URL = "http://localhost:8080"
 OUR_ENTITY_ID = f"{BASE_URL}/saml/metadata"
@@ -44,8 +40,6 @@ STUB_CERT = "-----BEGIN CERTIFICATE-----\nstub\n-----END CERTIFICATE-----"
 # The endpoint never looks at this: the stub reader takes it and hands back
 # whatever facts the test set up. It only has to be a non-empty form field.
 POSTED_RESPONSE = "not-really-base64-the-reader-is-stubbed"
-
-T = TypeVar("T")
 
 
 class StubReader:
@@ -102,27 +96,6 @@ class Scenario:
     @property
     def user_name(self) -> str:
         return f"ada.{self.suffix}@demo.local"
-
-
-def run_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
-    """Run one piece of database work on its own engine, and commit it.
-
-    Its own engine because the app under test has one of its own, running in the
-    TestClient's event loop. Sharing a connection across the two would be the
-    interesting kind of flaky.
-    """
-
-    async def main() -> T:
-        engine = build_engine(build_settings(database_url()))
-        try:
-            async with build_sessionmaker(engine)() as session:
-                result = await work(session)
-                await session.commit()
-                return result
-        finally:
-            await engine.dispose()
-
-    return asyncio.run(main())
 
 
 def new_scenario() -> Scenario:

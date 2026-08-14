@@ -201,6 +201,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/identity-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the providers we accept logins from
+         * @description Every registered provider, enabled or not.
+         *
+         *     Not paginated. There are three of these at most, and there is never going to
+         *     be a fourth page of identity providers.
+         */
+        get: operations["list_identity_providers_api_identity_providers_get"];
+        put?: never;
+        /**
+         * Register a provider from its metadata, or update one
+         * @description Read a provider's metadata and store what it says.
+         *
+         *     Registering the same slug again replaces the details, which is what makes this
+         *     the way to handle a certificate rotation: paste the new metadata, and the row
+         *     updates. It's a POST that isn't a create-only, on purpose — a separate "update"
+         *     endpoint would take the same document and do the same work, and having two
+         *     would just mean guessing which one to use.
+         *
+         *     Rotations are worth watching, so the audit entry records the old and new
+         *     certificate fingerprints whenever the key changes. A key changing when nobody
+         *     rotated one is exactly the event you want to find in a log.
+         *
+         *     Raises:
+         *         HTTPException: 400 if the metadata can't be read or is missing something.
+         *             409 if another slug has already claimed the same entity id.
+         */
+        post: operations["register_identity_provider_api_identity_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/identity-providers/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One provider, with its certificate */
+        get: operations["get_identity_provider_api_identity_providers__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -713,6 +771,139 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * IdentityProviderDetail
+         * @description One provider, including the certificate in full.
+         */
+        IdentityProviderDetail: {
+            /**
+             * Certificate Fingerprint
+             * @description The first and last few characters of the signing certificate. Enough to see at a glance that the key has changed, which is otherwise a diff of two blocks of base64.
+             */
+            certificate_fingerprint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Entity Id */
+            entity_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Login Url
+             * @description Where to send somebody to sign in with this provider.
+             */
+            login_url: string;
+            /** Name */
+            name: string;
+            /**
+             * Signing Cert
+             * @description The certificate every login from this provider is checked against. This is the whole basis of trust for it.
+             */
+            signing_cert: string;
+            /** Slo Url */
+            slo_url: string | null;
+            /** Slug */
+            slug: string;
+            /** Sso Url */
+            sso_url: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Want Signed Assertions */
+            want_signed_assertions: boolean;
+        };
+        /**
+         * IdentityProviderRegistration
+         * @description Register a provider, or update one that already exists.
+         *
+         *     The metadata document carries the entity id, the addresses and the
+         *     certificate, so none of those are fields here. Letting somebody type them
+         *     separately is how you end up trusting a key the provider never published.
+         *     See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         */
+        IdentityProviderRegistration: {
+            /**
+             * Enabled
+             * @description Turn a provider off to stop new logins without losing its settings.
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Metadata Xml
+             * @description The provider's SAML metadata document, pasted in whole.
+             */
+            metadata_xml: string;
+            /**
+             * Name
+             * @description What to call it in the console.
+             */
+            name: string;
+            /**
+             * Slug
+             * @description Short name used in the login URL, e.g. /saml/login?idp=authentik. Lowercase, digits and dashes, because it goes in a query string.
+             */
+            slug: string;
+            /**
+             * Want Signed Assertions
+             * @description Insist the assertion itself is signed, not just the response wrapped around it. Only turn this off for a provider that genuinely cannot do it, because signing only the wrapper leaves the contents swappable.
+             * @default true
+             */
+            want_signed_assertions: boolean;
+        };
+        /**
+         * IdentityProviderSummary
+         * @description A registered provider, without the wall of base64.
+         */
+        IdentityProviderSummary: {
+            /**
+             * Certificate Fingerprint
+             * @description The first and last few characters of the signing certificate. Enough to see at a glance that the key has changed, which is otherwise a diff of two blocks of base64.
+             */
+            certificate_fingerprint: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Entity Id */
+            entity_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Login Url
+             * @description Where to send somebody to sign in with this provider.
+             */
+            login_url: string;
+            /** Name */
+            name: string;
+            /** Slo Url */
+            slo_url: string | null;
+            /** Slug */
+            slug: string;
+            /** Sso Url */
+            sso_url: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Want Signed Assertions */
+            want_signed_assertions: boolean;
         };
         /**
          * IdentitySource
@@ -1294,6 +1485,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Readiness"];
+                };
+            };
+        };
+    };
+    list_identity_providers_api_identity_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderSummary"][];
+                };
+            };
+        };
+    };
+    register_identity_provider_api_identity_providers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityProviderRegistration"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_identity_provider_api_identity_providers__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityProviderDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

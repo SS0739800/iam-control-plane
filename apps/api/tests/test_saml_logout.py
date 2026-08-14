@@ -26,10 +26,10 @@ from tests.saml_harness import (
     fetch_session,
     good_facts,
     post_login,
-    run_db,
     seed_request,
     sign_in,
 )
+from tests.support import run_db
 
 pytestmark = pytest.mark.integration
 

@@ -734,6 +734,219 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IdentityProviderDetail": {
+        "description": "One provider, including the certificate in full.",
+        "properties": {
+          "certificate_fingerprint": {
+            "description": "The first and last few characters of the signing certificate. Enough to see at a glance that the key has changed, which is otherwise a diff of two blocks of base64.",
+            "title": "Certificate Fingerprint",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "login_url": {
+            "description": "Where to send somebody to sign in with this provider.",
+            "title": "Login Url",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "signing_cert": {
+            "description": "The certificate every login from this provider is checked against. This is the whole basis of trust for it.",
+            "title": "Signing Cert",
+            "type": "string"
+          },
+          "slo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slo Url"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sso_url": {
+            "title": "Sso Url",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "want_signed_assertions": {
+            "title": "Want Signed Assertions",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "enabled",
+          "entity_id",
+          "sso_url",
+          "slo_url",
+          "want_signed_assertions",
+          "created_at",
+          "updated_at",
+          "login_url",
+          "certificate_fingerprint",
+          "signing_cert"
+        ],
+        "title": "IdentityProviderDetail",
+        "type": "object"
+      },
+      "IdentityProviderRegistration": {
+        "description": "Register a provider, or update one that already exists.\n\nThe metadata document carries the entity id, the addresses and the\ncertificate, so none of those are fields here. Letting somebody type them\nseparately is how you end up trusting a key the provider never published.\nSee docs/adr/0006-paste-metadata-do-not-fetch-it.md.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "description": "Turn a provider off to stop new logins without losing its settings.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "metadata_xml": {
+            "description": "The provider's SAML metadata document, pasted in whole.",
+            "minLength": 1,
+            "title": "Metadata Xml",
+            "type": "string"
+          },
+          "name": {
+            "description": "What to call it in the console.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Short name used in the login URL, e.g. /saml/login?idp=authentik. Lowercase, digits and dashes, because it goes in a query string.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Slug",
+            "type": "string"
+          },
+          "want_signed_assertions": {
+            "default": true,
+            "description": "Insist the assertion itself is signed, not just the response wrapped around it. Only turn this off for a provider that genuinely cannot do it, because signing only the wrapper leaves the contents swappable.",
+            "title": "Want Signed Assertions",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "metadata_xml"
+        ],
+        "title": "IdentityProviderRegistration",
+        "type": "object"
+      },
+      "IdentityProviderSummary": {
+        "description": "A registered provider, without the wall of base64.",
+        "properties": {
+          "certificate_fingerprint": {
+            "description": "The first and last few characters of the signing certificate. Enough to see at a glance that the key has changed, which is otherwise a diff of two blocks of base64.",
+            "title": "Certificate Fingerprint",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "login_url": {
+            "description": "Where to send somebody to sign in with this provider.",
+            "title": "Login Url",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slo Url"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sso_url": {
+            "title": "Sso Url",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "want_signed_assertions": {
+            "title": "Want Signed Assertions",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "enabled",
+          "entity_id",
+          "sso_url",
+          "slo_url",
+          "want_signed_assertions",
+          "created_at",
+          "updated_at",
+          "login_url",
+          "certificate_fingerprint"
+        ],
+        "title": "IdentityProviderSummary",
+        "type": "object"
+      },
       "IdentitySource": {
         "description": "Where a record came from.\n\nWorth tracking, because you shouldn't hand-edit something SCIM created. The\nnext sync would just put it back.",
         "enum": [
@@ -1949,6 +2162,114 @@
         "summary": "Readiness probe",
         "tags": [
           "ops"
+        ]
+      }
+    },
+    "/api/identity-providers": {
+      "get": {
+        "description": "Every registered provider, enabled or not.\n\nNot paginated. There are three of these at most, and there is never going to\nbe a fourth page of identity providers.",
+        "operationId": "list_identity_providers_api_identity_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IdentityProviderSummary"
+                  },
+                  "title": "Response List Identity Providers Api Identity Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List the providers we accept logins from",
+        "tags": [
+          "identity providers"
+        ]
+      },
+      "post": {
+        "description": "Read a provider's metadata and store what it says.\n\nRegistering the same slug again replaces the details, which is what makes this\nthe way to handle a certificate rotation: paste the new metadata, and the row\nupdates. It's a POST that isn't a create-only, on purpose \u2014 a separate \"update\"\nendpoint would take the same document and do the same work, and having two\nwould just mean guessing which one to use.\n\nRotations are worth watching, so the audit entry records the old and new\ncertificate fingerprints whenever the key changes. A key changing when nobody\nrotated one is exactly the event you want to find in a log.\n\nRaises:\n    HTTPException: 400 if the metadata can't be read or is missing something.\n        409 if another slug has already claimed the same entity id.",
+        "operationId": "register_identity_provider_api_identity_providers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityProviderRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProviderDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register a provider from its metadata, or update one",
+        "tags": [
+          "identity providers"
+        ]
+      }
+    },
+    "/api/identity-providers/{slug}": {
+      "get": {
+        "operationId": "get_identity_provider_api_identity_providers__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProviderDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One provider, with its certificate",
+        "tags": [
+          "identity providers"
         ]
       }
     },

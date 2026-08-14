@@ -24,7 +24,12 @@ from iam.security.actor import NOT_SIGNED_IN
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://nobody:nobody@127.0.0.1:1/absent"
 
 WRITE_PERMISSIONS = frozenset(
-    {Permission.USERS_WRITE, Permission.GROUPS_WRITE, Permission.APPS_WRITE}
+    {
+        Permission.USERS_WRITE,
+        Permission.GROUPS_WRITE,
+        Permission.APPS_WRITE,
+        Permission.IDP_WRITE,
+    }
 )
 
 
@@ -69,6 +74,18 @@ def test_helpdesk_can_fix_users_but_not_reshape_access() -> None:
     assert Permission.USERS_WRITE in helpdesk
     assert Permission.GROUPS_WRITE not in helpdesk
     assert Permission.APPS_WRITE not in helpdesk
+
+
+def test_only_an_admin_may_register_an_identity_provider() -> None:
+    """The most consequential write there is. Whoever can change which certificate
+    a login is checked against can decide who gets to be anybody, so helpdesk and
+    auditor can look and nothing more."""
+    for role in (PlatformRole.HELPDESK, PlatformRole.AUDITOR):
+        assert Permission.IDP_READ in permissions_for(role)
+        assert Permission.IDP_WRITE not in permissions_for(role)
+
+    assert Permission.IDP_WRITE in permissions_for(PlatformRole.ADMIN)
+    assert Permission.IDP_READ not in permissions_for(PlatformRole.EMPLOYEE)
 
 
 def test_only_auditor_and_admin_may_verify_the_chain() -> None:

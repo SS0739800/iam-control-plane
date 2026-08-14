@@ -16,7 +16,17 @@ from iam import __version__
 from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.logging_setup import configure_logging
-from iam.routers import applications, audit, dashboard, groups, health, me, saml, users
+from iam.routers import (
+    applications,
+    audit,
+    dashboard,
+    groups,
+    health,
+    identity_providers,
+    me,
+    saml,
+    users,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router, prefix="/api")
     app.include_router(groups.router, prefix="/api")
     app.include_router(applications.router, prefix="/api")
+    app.include_router(identity_providers.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
 
     # No /api prefix. Providers post to these from the person's browser, so they're
