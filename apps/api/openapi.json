@@ -2193,6 +2193,75 @@
           "users"
         ]
       }
+    },
+    "/saml/login": {
+      "get": {
+        "description": "Send someone to their provider to sign in.\n\nThree things happen before the redirect: we check the provider is one we know,\nwe check where they've asked to be sent afterwards, and we write down the\nrequest so the answer can be matched to it later.\n\nThat last part is why this can't be stateless. The answer arrives as a\ncross-site form POST and browsers don't send our cookies on those, so the\nrequest has to be remembered server-side, keyed by a token that travels with it.",
+        "operationId": "login_saml_login_get",
+        "parameters": [
+          {
+            "description": "Which provider to use, by short name",
+            "in": "query",
+            "name": "idp",
+            "required": false,
+            "schema": {
+              "default": "authentik",
+              "description": "Which provider to use, by short name",
+              "title": "Idp",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Where to land afterwards",
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "description": "Where to land afterwards",
+              "title": "Return To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start signing in",
+        "tags": [
+          "saml"
+        ]
+      }
+    },
+    "/saml/metadata": {
+      "get": {
+        "description": "Hand this to whoever runs the identity provider.\n\nDeliberately not behind a login. It contains nothing secret \u2014 just our name and\nthe address to send answers to \u2014 and needing to be signed in to fetch the thing\nyou need in order to sign in would be an awkward loop.",
+        "operationId": "metadata_saml_metadata_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/samlmetadata+xml": {}
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Our details, for registering this app with a provider",
+        "tags": [
+          "saml"
+        ]
+      }
     }
   }
 }

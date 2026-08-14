@@ -10,3 +10,7 @@ pytest-asyncio==0.25.0
 httpx==0.28.1
 ruff==0.8.6
 mypy==1.14.1
+
+# Types for lxml. Stubs only, no compiled code, so this installs on Windows even
+# though lxml itself can't. Without it mypy can't check iam/saml/reader.py.
+lxml-stubs==0.5.1

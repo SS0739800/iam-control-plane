@@ -23,6 +23,12 @@ from iam.models.enums import (
     PrincipalType,
 )
 from iam.models.group import Group, GroupMember
+from iam.models.saml import (
+    IdentityProvider,
+    SamlAssertionSeen,
+    SamlRequestState,
+    SamlSession,
+)
 from iam.models.user import User
 
 __all__ = [
@@ -38,8 +44,12 @@ __all__ = [
     "Base",
     "Group",
     "GroupMember",
+    "IdentityProvider",
     "IdentitySource",
     "PlatformRole",
     "PrincipalType",
+    "SamlAssertionSeen",
+    "SamlRequestState",
+    "SamlSession",
     "User",
 ]

@@ -42,6 +42,14 @@ exclude = ["^alembic/versions/", "^\\.venv/"]
 module = ["pythonjsonlogger.*"]
 ignore_missing_imports = true
 
+# These only exist inside the container: xmlsec has no Windows build, so a
+# developer's venv can't have them. Without this, mypy on Windows fails on
+# iam/saml/reader.py for reasons that have nothing to do with the code.
+# See docs/adr/0004-build-xmlsec-from-source.md.
+[[tool.mypy.overrides]]
+module = ["onelogin.*", "xmlsec.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 # Makes `import iam` work without installing the package.
 pythonpath = ["."]

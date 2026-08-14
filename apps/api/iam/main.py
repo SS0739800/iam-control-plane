@@ -16,7 +16,7 @@ from iam import __version__
 from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.logging_setup import configure_logging
-from iam.routers import applications, audit, dashboard, groups, health, users
+from iam.routers import applications, audit, dashboard, groups, health, saml, users
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(groups.router, prefix="/api")
     app.include_router(applications.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
+
+    # No /api prefix. Providers post to these from the person's browser, so they're
+    # part of the site rather than the JSON API, and Caddy proxies /saml/* on its
+    # own rule.
+    app.include_router(saml.router)
 
     # There's no real login until P2. Say so on startup rather than letting an
     # environment run the stand-in quietly. See iam/security/actor.py.
