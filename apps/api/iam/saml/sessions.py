@@ -192,6 +192,28 @@ async def revoke_all_for_user(
     return int(result.rowcount or 0)
 
 
+async def revoke_by_name_id(
+    db: AsyncSession, *, idp_slug: str, name_id: str, reason: str, now: dt.datetime
+) -> int:
+    """End every session this provider knows this person by.
+
+    What a logout request with no SessionIndex is asking for: not one session, all
+    of them. The spec reads that way, and it's the right reading for the case that
+    actually produces one — an administrator removing somebody, rather than a person
+    clicking sign out on one device.
+    """
+    result = await db.execute(
+        update(SamlSession)
+        .where(
+            SamlSession.idp_slug == idp_slug,
+            SamlSession.name_id == name_id,
+            SamlSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=now, revoked_reason=reason)
+    )
+    return int(result.rowcount or 0)
+
+
 async def revoke_by_session_index(
     db: AsyncSession, *, idp_slug: str, session_index: str, now: dt.datetime
 ) -> int:

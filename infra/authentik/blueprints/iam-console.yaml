@@ -63,8 +63,17 @@ entries:
           authentik_flows.flow,
           [slug, 'default-provider-authorization-implicit-consent'],
         ]
-      invalidation_flow:
-        !Find [authentik_flows.flow, [slug, 'default-provider-invalidation-flow']]
+      # default-invalidation-flow, not default-provider-invalidation-flow.
+      #
+      # authentik ships both, the names suggest the second one is the right choice
+      # for a provider, and it is empty — it has no stages at all, so it signs
+      # nobody out. Single logout appears to work with it: the request is accepted,
+      # the flow runs, the person is sent back. They are still logged in at
+      # authentik, which you only find out by clicking login again and not being
+      # asked for a password.
+      #
+      # default-invalidation-flow is the one carrying the UserLogoutStage.
+      invalidation_flow: !Find [authentik_flows.flow, [slug, 'default-invalidation-flow']]
 
       # What ends up in the assertion, and so what iam/saml/provisioning.py reads
       # to work out who logged in. These four are authentik's own defaults and

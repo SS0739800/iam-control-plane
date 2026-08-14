@@ -1,4 +1,4 @@
-"""Reads a login response and checks its signature.
+"""Reads the messages a provider sends us, and checks their signatures.
 
 This is the only file that touches XML or cryptography, which is why it's the only
 one that needs xmlsec, and so the only one that can't run on Windows. Everything
@@ -22,22 +22,33 @@ import base64
 import binascii
 import datetime as dt
 import logging
+import zlib
 from typing import Any
 
 from lxml import etree
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 
-from iam.saml.checks import AssertionFacts, MalformedResponse
+from iam.saml.checks import (
+    AssertionFacts,
+    LogoutRequestFacts,
+    LogoutResponseFacts,
+    MalformedResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "ASSERTION_SIGNATURE_XPATH",
     "MAX_RESPONSE_BYTES",
+    "RESPONSE_SIGNATURE_XPATH",
     "SAFE_PARSER",
     "MalformedResponse",
     "decode_response",
     "decoded_xml_for_display",
+    "inflate_and_decode",
     "parse",
+    "read_logout_request",
+    "read_logout_response",
     "read_response",
 ]
 
@@ -291,6 +302,104 @@ def read_response(raw_response: str, idp_signing_cert: str) -> AssertionFacts:
         attributes=attributes,
         signature_verified=signature_verified,
         assertion_was_signed=assertion_was_signed,
+    )
+
+
+LOGOUT_REQUEST_SIGNATURE_XPATH = "/samlp:LogoutRequest/ds:Signature"
+LOGOUT_RESPONSE_SIGNATURE_XPATH = "/samlp:LogoutResponse/ds:Signature"
+
+
+def inflate_and_decode(raw: str) -> bytes:
+    """Undo what the redirect binding does to a message on the way here.
+
+    Logout arrives in a query string rather than a form field, so it is deflated as
+    well as base64'd. Raw deflate with no zlib header, matching what we send.
+
+    Providers are not consistent: a few send a plain zlib stream, and a few send
+    uncompressed XML. All three are tried rather than rejecting a provider over
+    something this cosmetic.
+    """
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise MalformedResponse(f"message larger than {MAX_RESPONSE_BYTES} bytes")
+
+    try:
+        compressed = base64.b64decode(raw, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise MalformedResponse("message is not valid base64") from exc
+
+    # Negative window bits means raw deflate, which is what the binding asks for.
+    # The positive one accepts a plain zlib stream, which a few providers send.
+    for window_bits in (-zlib.MAX_WBITS, zlib.MAX_WBITS):
+        try:
+            return zlib.decompress(compressed, window_bits)
+        except zlib.error:
+            continue
+
+    # Not compressed at all. Only accepted because it is still XML we can read.
+    if compressed.lstrip()[:1] == b"<":
+        return compressed
+
+    raise MalformedResponse("message could not be decompressed")
+
+
+def read_logout_request(
+    raw: str, idp_signing_cert: str, *, deflated: bool = True
+) -> LogoutRequestFacts:
+    """Read a provider's request that we sign somebody out.
+
+    Raises:
+        MalformedResponse: There was no readable request.
+    """
+    xml = inflate_and_decode(raw) if deflated else decode_response(raw)
+    root = parse(xml)
+
+    request_id = root.get("ID")
+    if not request_id:
+        raise MalformedResponse("logout request has no ID")
+
+    name_id_el = _first(root, "./saml:NameID")
+    was_signed = _signature_over(root)
+
+    return LogoutRequestFacts(
+        request_id=request_id,
+        issuer=_text(_first(root, "./saml:Issuer")) or "",
+        name_id=_text(name_id_el),
+        session_index=_text(_first(root, "./samlp:SessionIndex")),
+        destination=root.get("Destination"),
+        was_signed=was_signed,
+        signature_verified=(
+            _verify(xml, idp_signing_cert, LOGOUT_REQUEST_SIGNATURE_XPATH) if was_signed else False
+        ),
+    )
+
+
+def read_logout_response(
+    raw: str, idp_signing_cert: str, *, deflated: bool = True
+) -> LogoutResponseFacts:
+    """Read a provider's confirmation that it signed somebody out.
+
+    Raises:
+        MalformedResponse: There was no readable response.
+    """
+    xml = inflate_and_decode(raw) if deflated else decode_response(raw)
+    root = parse(xml)
+
+    response_id = root.get("ID")
+    if not response_id:
+        raise MalformedResponse("logout response has no ID")
+
+    status_el = _first(root, "./samlp:Status/samlp:StatusCode")
+    was_signed = _signature_over(root)
+
+    return LogoutResponseFacts(
+        response_id=response_id,
+        issuer=_text(_first(root, "./saml:Issuer")) or "",
+        status_code=status_el.get("Value", "") if status_el is not None else "",
+        in_response_to=root.get("InResponseTo"),
+        was_signed=was_signed,
+        signature_verified=(
+            _verify(xml, idp_signing_cert, LOGOUT_RESPONSE_SIGNATURE_XPATH) if was_signed else False
+        ),
     )
 
 

@@ -54,7 +54,7 @@ class Idp:
     def __init__(self) -> None:
         self.http = httpx.Client(base_url=AUTHENTIK, follow_redirects=True, timeout=30)
 
-    def _flow_at(self, url: str) -> tuple[str, str]:
+    def flow_at(self, url: str) -> tuple[str, str]:
         """Follow a browser-facing URL to the flow page it lands on."""
         landed = self.http.get(url)
         assert landed.status_code == 200, f"HTTP {landed.status_code}: {landed.text[:300]}"
@@ -62,13 +62,13 @@ class Idp:
         slug = parsed.path.rstrip("/").rsplit("/", 1)[-1]
         return slug, parsed.query
 
-    def _challenge(self, slug: str, query: str) -> dict[str, Any]:
+    def challenge(self, slug: str, query: str) -> dict[str, Any]:
         response = self.http.get(f"/api/v3/flows/executor/{slug}/", params={"query": query})
         assert response.status_code == 200, f"HTTP {response.status_code}: {response.text[:300]}"
         body: dict[str, Any] = response.json()
         return body
 
-    def _answer(self, slug: str, query: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def answer(self, slug: str, query: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = self.http.post(
             f"/api/v3/flows/executor/{slug}/",
             params={"query": query},
@@ -82,13 +82,33 @@ class Idp:
         body: dict[str, Any] = response.json()
         return body
 
+    def signed_in_as(self) -> str | None:
+        """Who authentik thinks this browser is, or None for nobody.
+
+        The check that says whether single logout actually did anything. Reaching
+        the end of the logout flow is not the same as the session being gone.
+        """
+        response = self.http.get("/api/v3/core/users/me/")
+        if response.status_code != 200:
+            return None
+        user = response.json().get("user") or {}
+        name: str | None = user.get("username")
+        return name if name and name != "AnonymousUser" else None
+
+    def finish_logout(self, slo_url: str) -> None:
+        """Walk the provider's logout flow to the end, so the session really ends."""
+        slug, query = self.flow_at(slo_url)
+        print(f"  flow: {slug}")
+        challenge = self.challenge(slug, query)
+        print(f"  stage: {challenge.get('component')}")
+
     def sign_in_and_collect_assertion(self, sso_url: str) -> dict[str, str]:
         """Log in, and return the form fields authentik wants posted to our ACS."""
-        slug, query = self._flow_at(sso_url)
+        slug, query = self.flow_at(sso_url)
         print(f"  flow: {slug}")
         assert "next" in parse_qs(query), f"the SAML request was dropped: {query[:200]}"
 
-        challenge = self._challenge(slug, query)
+        challenge = self.challenge(slug, query)
 
         for _ in range(MAX_STAGES):
             component = challenge.get("component")
@@ -103,28 +123,26 @@ class Idp:
             if component == "xak-flow-redirect":
                 # Off to another flow — the authorization one, which is where the
                 # assertion gets built.
-                slug, query = self._flow_at(str(challenge["to"]))
+                slug, query = self.flow_at(str(challenge["to"]))
                 print(f"  flow: {slug}")
-                challenge = self._challenge(slug, query)
+                challenge = self.challenge(slug, query)
                 continue
 
             if component == "ak-stage-identification":
-                challenge = self._answer(
+                challenge = self.answer(
                     slug, query, {"component": component, "uid_field": USERNAME}
                 )
                 continue
 
             if component == "ak-stage-password":
-                challenge = self._answer(
-                    slug, query, {"component": component, "password": PASSWORD}
-                )
+                challenge = self.answer(slug, query, {"component": component, "password": PASSWORD})
                 continue
 
             if component == "ak-stage-access-denied":
                 raise AssertionError(f"authentik refused the login: {challenge}")
 
             # Consent, "you're already signed in", and friends: submit empty.
-            challenge = self._answer(slug, query, {"component": component})
+            challenge = self.answer(slug, query, {"component": component})
 
         raise AssertionError("authentik's flow never produced an assertion")
 
@@ -172,10 +190,30 @@ def main() -> int:
     assert who.json()["via_saml_session"] is True
 
     step("5. sign out, and check the cookie stops working")
-    console.post("/saml/logout")
+    assert idp.signed_in_as() == USERNAME, "expected to be signed in at authentik by now"
+    signed_out = console.post("/saml/logout")
+    print(f"HTTP {signed_out.status_code}")
     after = console.get("/api/me", headers={"X-Dev-Actor": "nobody@demo.local"})
     print(f"/api/me after signing out: HTTP {after.status_code}")
     assert after.status_code == 401
+
+    step("6. follow single logout through to the provider")
+    onward = signed_out.headers["location"]
+    assert "SAMLRequest" in onward, f"no logout request was sent: {onward}"
+    print(f"  sent to {urlparse(onward).path}")
+    idp.finish_logout(onward)
+    print(f"  signed in at authentik afterwards: {idp.signed_in_as() or 'nobody'}")
+    assert idp.signed_in_as() is None, "the provider still has them signed in"
+
+    step("7. logging in again has to ask for the password")
+    # The whole point of single logout. Without it this goes straight through and
+    # the person is back in without typing anything, which is a surprising thing to
+    # watch happen immediately after pressing sign out.
+    restarted = console.get("/saml/login", params={"idp": "authentik"})
+    slug, query = idp.flow_at(restarted.headers["location"])
+    first_stage = idp.challenge(slug, query).get("component")
+    print(f"  first stage: {first_stage}")
+    assert first_stage in ("ak-stage-identification", "ak-stage-password"), first_stage
 
     print("\nThe whole loop works, signature check included.")
     return 0

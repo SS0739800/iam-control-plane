@@ -92,6 +92,43 @@ class AssertionFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class LogoutRequestFacts:
+    """A provider telling us somebody signed out over there.
+
+    Same split as AssertionFacts: the reader fills this in, and deciding what to do
+    about it needs no XML.
+    """
+
+    request_id: str
+    issuer: str
+
+    name_id: str | None = None
+    session_index: str | None = None
+    destination: str | None = None
+
+    signature_verified: bool = False
+    was_signed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class LogoutResponseFacts:
+    """A provider confirming it signed somebody out because we asked."""
+
+    response_id: str
+    issuer: str
+    status_code: str
+
+    in_response_to: str | None = None
+
+    signature_verified: bool = False
+    was_signed: bool = False
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status_code == SAML_SUCCESS
+
+
+@dataclass(frozen=True, slots=True)
 class Expectations:
     """What we're comparing the login against."""
 

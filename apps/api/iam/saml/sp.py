@@ -19,6 +19,7 @@ import secrets
 import zlib
 from dataclasses import dataclass
 from urllib.parse import urlencode
+from xml.sax.saxutils import escape
 
 RELAY_STATE_BYTES = 32
 """Length of the random token we send with a login request.
@@ -134,6 +135,85 @@ def build_authn_request(
     )
 
 
+def build_logout_request(
+    *,
+    sp: ServiceProvider,
+    idp_slo_url: str,
+    request_id: str,
+    name_id: str,
+    issued_at: dt.datetime,
+    name_id_format: str | None = None,
+    session_index: str | None = None,
+) -> str:
+    """Build the XML asking a provider to sign someone out.
+
+    Two things identify who to sign out. The NameID says which person, and the
+    SessionIndex says which of their sessions — somebody signed in on a laptop and
+    a phone has two, and leaving the index out asks the provider to end both.
+    We send it, so signing out here signs out the one session that matches.
+
+    The values are XML-escaped, unlike the ones in build_authn_request. That isn't
+    inconsistency: those come from our own configuration, and these came from the
+    provider and went through our database on the way here. An ampersand in a
+    NameID would produce a document the provider can't parse, and a quote or an
+    angle bracket would let it be steered.
+    """
+    stamp = issued_at.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    name_format = f' Format="{name_id_format}"' if name_id_format else ""
+    index = (
+        f"<samlp:SessionIndex>{escape(session_index)}</samlp:SessionIndex>" if session_index else ""
+    )
+
+    return (
+        '<samlp:LogoutRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"'
+        ' xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"'
+        f' ID="{request_id}"'
+        ' Version="2.0"'
+        f' IssueInstant="{stamp}"'
+        f' Destination="{escape(idp_slo_url)}">'
+        f"<saml:Issuer>{escape(sp.entity_id)}</saml:Issuer>"
+        f"<saml:NameID{name_format}>{escape(name_id)}</saml:NameID>"
+        f"{index}"
+        "</samlp:LogoutRequest>"
+    )
+
+
+def build_logout_response(
+    *,
+    sp: ServiceProvider,
+    idp_slo_url: str,
+    response_id: str,
+    in_response_to: str,
+    issued_at: dt.datetime,
+    success: bool = True,
+) -> str:
+    """Build the answer to a provider's request that we sign somebody out.
+
+    The provider is waiting to hear that we did it. Say so even when there was no
+    session to end: from its point of view the person is signed out of this
+    application either way, which is what it asked for.
+    """
+    stamp = issued_at.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    status = (
+        "urn:oasis:names:tc:SAML:2.0:status:Success"
+        if success
+        else "urn:oasis:names:tc:SAML:2.0:status:Requester"
+    )
+
+    return (
+        '<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"'
+        ' xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"'
+        f' ID="{response_id}"'
+        ' Version="2.0"'
+        f' IssueInstant="{stamp}"'
+        f' Destination="{escape(idp_slo_url)}"'
+        f' InResponseTo="{escape(in_response_to)}">'
+        f"<saml:Issuer>{escape(sp.entity_id)}</saml:Issuer>"
+        f'<samlp:Status><samlp:StatusCode Value="{status}"/></samlp:Status>'
+        "</samlp:LogoutResponse>"
+    )
+
+
 def deflate_and_encode(xml: str) -> str:
     """Compress and base64 the request, the way the redirect binding wants it.
 
@@ -161,6 +241,35 @@ def login_redirect_url(*, idp_sso_url: str, authn_request_xml: str, relay_state:
     )
     separator = "&" if "?" in idp_sso_url else "?"
     return f"{idp_sso_url}{separator}{query}"
+
+
+def redirect_binding_url(
+    endpoint: str,
+    *,
+    saml_request: str | None = None,
+    saml_response: str | None = None,
+    relay_state: str | None = None,
+) -> str:
+    """Put a SAML message in a URL, the way the redirect binding wants it.
+
+    Same shape as login_redirect_url, but for logout, where the message can be
+    either a request or a response depending on who started it.
+
+    Nothing here is signed. That is fine for a provider that doesn't insist on it,
+    which authentik doesn't by default, and it's the same position we're already in
+    with login requests. A provider that does insist needs a key of ours, which
+    arrives in P5. See the note on the /saml/sls handler.
+    """
+    parameters: dict[str, str] = {}
+    if saml_request is not None:
+        parameters["SAMLRequest"] = deflate_and_encode(saml_request)
+    if saml_response is not None:
+        parameters["SAMLResponse"] = deflate_and_encode(saml_response)
+    if relay_state:
+        parameters["RelayState"] = relay_state
+
+    separator = "&" if "?" in endpoint else "?"
+    return f"{endpoint}{separator}{urlencode(parameters)}"
 
 
 def is_safe_return_path(path: str) -> bool:

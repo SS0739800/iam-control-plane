@@ -505,6 +505,39 @@
         "title": "CursorPage[AuditEventOut]",
         "type": "object"
       },
+      "CursorPage_LoginAttempt_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LoginAttempt"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `cursor` to fetch the following page. Null at the end.",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "limit"
+        ],
+        "title": "CursorPage[LoginAttempt]",
+        "type": "object"
+      },
       "DashboardCounts": {
         "description": "The numbers on the front page.",
         "properties": {
@@ -989,6 +1022,276 @@
           "git_sha"
         ],
         "title": "Liveness",
+        "type": "object"
+      },
+      "LoginAttempt": {
+        "description": "One login, accepted or refused.\n\nA single pass/fail tells you nothing when a login mysteriously stops working\nagainst a new provider. Ten named results tell you it was the clock.",
+        "properties": {
+          "assertion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assertion Id"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/LoginCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the login did to the directory: created somebody, refreshed their details, or nothing.",
+            "title": "Directory"
+          },
+          "failed_checks": {
+            "description": "Names of the checks that did not pass.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Checks",
+            "type": "array"
+          },
+          "has_response": {
+            "description": "Whether the assertion itself was kept. Only failures keep it \u2014 a login that passed every check has nothing to look at.",
+            "title": "Has Response",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The audit entry this came from.",
+            "title": "Id",
+            "type": "integer"
+          },
+          "idp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which provider, by short name.",
+            "title": "Idp"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AuditOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it was refused.",
+            "title": "Reason"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session this login became, if it was accepted.",
+            "title": "Session Id"
+          },
+          "who": {
+            "description": "The person on a successful login, the provider on a failed one.",
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "occurred_at",
+          "outcome",
+          "who",
+          "checks",
+          "failed_checks",
+          "has_response"
+        ],
+        "title": "LoginAttempt",
+        "type": "object"
+      },
+      "LoginAttemptDetail": {
+        "description": "One login, with the document that arrived.",
+        "properties": {
+          "assertion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assertion Id"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/LoginCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "decoded_response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The assertion as it arrived, decoded but not reformatted. An inspector should show what was actually sent, not a tidied-up version of it.",
+            "title": "Decoded Response"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the login did to the directory: created somebody, refreshed their details, or nothing.",
+            "title": "Directory"
+          },
+          "failed_checks": {
+            "description": "Names of the checks that did not pass.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Checks",
+            "type": "array"
+          },
+          "has_response": {
+            "description": "Whether the assertion itself was kept. Only failures keep it \u2014 a login that passed every check has nothing to look at.",
+            "title": "Has Response",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The audit entry this came from.",
+            "title": "Id",
+            "type": "integer"
+          },
+          "idp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which provider, by short name.",
+            "title": "Idp"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AuditOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it was refused.",
+            "title": "Reason"
+          },
+          "response_truncated": {
+            "description": "Whether the stored copy was cut short.",
+            "title": "Response Truncated",
+            "type": "boolean"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session this login became, if it was accepted.",
+            "title": "Session Id"
+          },
+          "who": {
+            "description": "The person on a successful login, the provider on a failed one.",
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "occurred_at",
+          "outcome",
+          "who",
+          "checks",
+          "failed_checks",
+          "has_response",
+          "decoded_response",
+          "response_truncated"
+        ],
+        "title": "LoginAttemptDetail",
+        "type": "object"
+      },
+      "LoginCheck": {
+        "description": "One of the ten checks, and how it went.",
+        "properties": {
+          "detail": {
+            "description": "Why it passed or failed, in words. The useful part when it failed.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "passed",
+          "detail"
+        ],
+        "title": "LoginCheck",
         "type": "object"
       },
       "Page_ApplicationSummary_": {
@@ -2295,6 +2598,149 @@
         ]
       }
     },
+    "/api/saml/logins": {
+      "get": {
+        "description": "Logins in the order they happened, most recent first.\n\nCursors rather than page numbers, for the same reason the audit log uses them:\nnew attempts arrive at the top, and page numbers would shift under you.",
+        "operationId": "list_login_attempts_api_saml_logins_get",
+        "parameters": [
+          {
+            "description": "Opaque cursor from a previous page",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque cursor from a previous page",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Narrow to just the failures, usually",
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AuditOutcome"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Narrow to just the failures, usually",
+              "title": "Outcome"
+            }
+          },
+          {
+            "description": "Only this provider, by short name",
+            "in": "query",
+            "name": "idp",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this provider, by short name",
+              "title": "Idp"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CursorPage_LoginAttempt_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Every sign-in attempt, newest first",
+        "tags": [
+          "login inspector"
+        ]
+      }
+    },
+    "/api/saml/logins/{event_id}": {
+      "get": {
+        "description": "One login, including the document itself when we kept it.\n\nOnly failures keep the document. A login that passed all ten checks has nothing\nto look at, and storing an assertion per login forever is a lot of somebody's\npersonal data for no reason.\n\nThe XML comes back as it arrived rather than reformatted. An inspector exists to\nshow what was actually sent \u2014 reformatting is the one thing it shouldn't do.",
+        "operationId": "get_login_attempt_api_saml_logins__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginAttemptDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One attempt, with the assertion that arrived",
+        "tags": [
+          "login inspector"
+        ]
+      }
+    },
     "/api/users": {
       "get": {
         "description": "The user list, filtered and split into pages.\n\nThe filtering and paging happen in Postgres, not the browser. There are 1,284\nusers in the demo data; sending all of them so the frontend can filter would\nbe slow, and it would also hand out every record to anyone who can load one\npage.",
@@ -2692,7 +3138,7 @@
     },
     "/saml/logout": {
       "post": {
-        "description": "End this session and clear the cookie.\n\nA POST, not a GET. A sign-out you can trigger with a link means any page on\nthe internet can sign our users out with an image tag pointed at it. Annoying\nrather than dangerous, but it costs nothing to get right, and the Lax cookie\nmeans a cross-site POST doesn't carry the session anyway.\n\nSigning out here does not sign them out at the provider \u2014 click login again\nand they'll come straight back in without being asked for a password, because\nthe provider still considers them signed in. Telling the provider is Single\nLogout, it needs a key of ours to sign the request with, and that key arrives\nin P5 when we start issuing logins ourselves.\n\nAlways succeeds. No cookie, an unknown one, one that expired an hour ago:\nthey all end with the person signed out and the cookie gone, which is what\nthey asked for. Reporting an error for \"you were already signed out\" would be\ntechnically accurate and useless.",
+        "description": "End this session, clear the cookie, and tell the provider.\n\nA POST, not a GET. A sign-out you can trigger with a link means any page on\nthe internet can sign our users out with an image tag pointed at it. Annoying\nrather than dangerous, but it costs nothing to get right, and the Lax cookie\nmeans a cross-site POST doesn't carry the session anyway.\n\nIf the provider has a logout address, this ends with a redirect to it carrying\na LogoutRequest, and the provider signs them out too. Without that step,\nclicking login again puts them straight back in without a password prompt,\nbecause the provider still thinks they're signed in \u2014 which is a surprising\nthing to watch happen right after pressing \"sign out\".\n\nOur own session is ended before the redirect, not after. If the provider is\ndown or never answers, the person is still signed out here, which is the part\nwe're responsible for.\n\nAlways succeeds. No cookie, an unknown one, one that expired an hour ago:\nthey all end with the person signed out and the cookie gone, which is what\nthey asked for. Reporting an error for \"you were already signed out\" would be\ntechnically accurate and useless.",
         "operationId": "logout_saml_logout_post",
         "responses": {
           "303": {
@@ -2718,6 +3164,34 @@
           }
         },
         "summary": "Our details, for registering this app with a provider",
+        "tags": [
+          "saml"
+        ]
+      }
+    },
+    "/saml/sls": {
+      "get": {
+        "description": "Handle a logout, whichever side started it.\n\nTwo different things arrive here and they are told apart by which parameter is\npresent, not by the method:\n\nA `SAMLResponse` is the provider confirming it signed somebody out because we\nasked. Our session was already ended before we sent that request, so there's\nnothing left to do but check it and send the person home.\n\nA `SAMLRequest` is the provider telling us somebody signed out somewhere else,\nor was signed out by an administrator. That one matters: it's the message that\nmakes \"remove their access\" actually remove their access, everywhere, rather\nthan only in the places they happen to visit next.\n\nAccepts GET and POST because providers differ on which they use, and the message\nis the same either way.\n\nWe don't sign our answer. A provider that insists on signed logout messages\nwon't accept it, and that needs a key of ours, which arrives in P5. authentik\ndoesn't insist, so this works today; Okta and Entra may not, and that's a known\nlimit rather than a surprise.\n\nUnsigned requests are refused. We can't tell who sent one, and accepting it\nwould let anybody sign out anybody whose NameID they can guess. That's only a\nnuisance rather than a way in, but refusing costs nothing.",
+        "operationId": "single_logout_redirect_binding",
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Single logout, in both directions",
+        "tags": [
+          "saml"
+        ]
+      },
+      "post": {
+        "description": "Handle a logout, whichever side started it.\n\nTwo different things arrive here and they are told apart by which parameter is\npresent, not by the method:\n\nA `SAMLResponse` is the provider confirming it signed somebody out because we\nasked. Our session was already ended before we sent that request, so there's\nnothing left to do but check it and send the person home.\n\nA `SAMLRequest` is the provider telling us somebody signed out somewhere else,\nor was signed out by an administrator. That one matters: it's the message that\nmakes \"remove their access\" actually remove their access, everywhere, rather\nthan only in the places they happen to visit next.\n\nAccepts GET and POST because providers differ on which they use, and the message\nis the same either way.\n\nWe don't sign our answer. A provider that insists on signed logout messages\nwon't accept it, and that needs a key of ours, which arrives in P5. authentik\ndoesn't insist, so this works today; Okta and Entra may not, and that's a known\nlimit rather than a surprise.\n\nUnsigned requests are refused. We can't tell who sent one, and accepting it\nwould let anybody sign out anybody whose NameID they can guess. That's only a\nnuisance rather than a way in, but refusing costs nothing.",
+        "operationId": "single_logout_post_binding",
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Single logout, in both directions",
         "tags": [
           "saml"
         ]

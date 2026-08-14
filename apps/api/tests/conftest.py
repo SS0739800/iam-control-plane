@@ -31,8 +31,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.db import build_engine, build_sessionmaker
 from iam.main import create_app
-from iam.routers.saml import _response_reader
-from tests.saml_harness import Scenario, StubReader, clean_up, new_scenario
+from iam.routers.saml import (
+    _logout_request_reader,
+    _logout_response_reader,
+    _response_reader,
+)
+from tests.saml_harness import (
+    ConsoleUsers,
+    Scenario,
+    StubLogoutReader,
+    StubReader,
+    clean_up,
+    create_console_users,
+    new_console_users,
+    new_scenario,
+    remove_console_users,
+)
 from tests.support import (
     TEST_DATABASE_ENV_VAR,
     UNREACHABLE_DATABASE_URL,
@@ -76,15 +90,46 @@ def saml_reader() -> StubReader:
 
 
 @pytest.fixture
-def saml_client(saml_reader: StubReader) -> Iterator[TestClient]:
-    """A client whose SAML endpoints read logins through the stub.
+def console() -> Iterator[ConsoleUsers]:
+    """One console user per role, so a test can call an endpoint as any of them.
 
-    Overriding the private dependency directly is deliberate: it is the seam the
-    endpoint was given so everything downstream of the signature check can be
+    Nothing is seeded into the test database, so a test that wants to act as an
+    admin has to create one first.
+    """
+    made = new_console_users()
+    create_console_users(made)
+    yield made
+    remove_console_users(made)
+
+
+@pytest.fixture
+def saml_logout_reader() -> StubLogoutReader:
+    """Stands in for reading a provider's logout request."""
+    return StubLogoutReader()
+
+
+@pytest.fixture
+def saml_logout_response_reader() -> StubLogoutReader:
+    """Stands in for reading a provider's logout confirmation."""
+    return StubLogoutReader()
+
+
+@pytest.fixture
+def saml_client(
+    saml_reader: StubReader,
+    saml_logout_reader: StubLogoutReader,
+    saml_logout_response_reader: StubLogoutReader,
+) -> Iterator[TestClient]:
+    """A client whose SAML endpoints read messages through the stubs.
+
+    Overriding the private dependencies directly is deliberate: they are the seams
+    the endpoints were given so everything downstream of the signature check can be
     tested without xmlsec.
     """
     app = create_app(build_settings(database_url()))
     app.dependency_overrides[_response_reader] = lambda: saml_reader
+    app.dependency_overrides[_logout_request_reader] = lambda: saml_logout_reader
+    app.dependency_overrides[_logout_response_reader] = lambda: saml_logout_response_reader
     with TestClient(app) as test_client:
         yield test_client
 

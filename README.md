@@ -19,24 +19,49 @@ Upstream identity providers, in the order they get wired up: **authentik**
 
 ## Status
 
-**Phase 2 — inbound SSO. Working end to end.** A real login against a real
-authentik goes the whole way and comes back: out through `/saml/login`, a password
-typed at the provider, in through `/saml/acs`, a genuine signature checked with
-xmlsec, all ten checks passed, a person created, a session issued, and a cookie
-the API authenticates every later request with. `POST /saml/logout` ends it.
-`GET /api/me` says who you are. [Set it up below](#signing-in-for-real).
+**Phase 2 — inbound SSO. Complete.** A real login against a real authentik goes
+the whole way and comes back: out through `/saml/login`, a password typed at the
+provider, in through `/saml/acs`, a genuine signature checked with xmlsec, all ten
+checks passed, a person created, a session issued, and a cookie the API
+authenticates every later request with. Signing out ends the session here *and*
+at the provider, so clicking login again asks for a password instead of walking
+straight back in. [Set it up below](#signing-in-for-real).
 
-`python -m scripts.smoke_login` drives that whole loop with no browser and is the
+The **Sign-ins** screen is the part worth looking at. Every attempt shows all ten
+checks with the values they compared, and a refused login keeps the document that
+arrived. That is the payoff for writing the checks ourselves instead of calling
+one library function — see
+[ADR 0005](docs/adr/0005-validate-assertions-ourselves.md).
+
+`python -m scripts.smoke_login` drives the whole loop with no browser and is the
 only thing that can check it, because there is no identity provider in CI.
 
-Still to come in P2: the login inspector screen, and Single Logout at
-`/saml/sls` — which the metadata already advertises, and which needs a signing key
-that arrives in P5.
+| Endpoint            | What                                                    |
+| ------------------- | ------------------------------------------------------- |
+| `/saml/metadata`    | Our details, for registering with a provider            |
+| `/saml/login`       | Start a login                                           |
+| `/saml/acs`         | Where the provider posts the answer                     |
+| `/saml/logout`      | End the session here and at the provider                |
+| `/saml/sls`         | Single logout, in both directions                        |
+| `/api/me`           | Who the session says you are                            |
+| `/api/saml/logins`  | The inspector's data                                    |
+
+Two things are deliberately not done, and both wait on the signing key that
+arrives in P5 with the outbound half: we don't sign the messages we send, and an
+unsigned logout request from a provider is refused rather than trusted. authentik
+accepts unsigned messages, so this works today; Okta and Entra may not.
 
 The `X-Dev-Actor` header still answers for requests that arrive with no session
 cookie, outside production only. That is impersonation, not authentication. A real
 session always wins over it, and unsetting `DEV_ACTOR_USER_NAME` switches it off.
 See [`iam/security/actor.py`](apps/api/iam/security/actor.py).
+
+One thing to know before the demo: nobody becomes an admin by logging in. A
+SAML-created person starts as an employee with no console permissions, on purpose,
+so there is no path from "the provider let them in" to "they can change things
+here". Granting the first real role is an admin action, which for now means the
+development stand-in or a hand-written `UPDATE`. P4 replaces that with access
+grants.
 
 CI is configured but has not run yet — it executes on the first push to a remote.
 
@@ -44,8 +69,8 @@ CI is configured but has not run yet — it executes on the first push to a remo
 | ----- | ------------------------------------------------- | --------------- |
 | P0    | Foundation: compose, CI, health probes            | ✅ done         |
 | P1    | Core domain + admin console, hash-chained audit   | ✅ done         |
-| P2    | SAML SP — inbound SSO                             | 🚧 in progress  |
-| P3    | SCIM 2.0 server — inbound provisioning            | planned         |
+| P2    | SAML SP — inbound SSO                             | ✅ done         |
+| P3    | SCIM 2.0 server — inbound provisioning            | next            |
 | P4    | Lifecycle + entitlements *(MVP line)*             | planned         |
 | P5    | SAML IdP — outbound SSO                           | planned         |
 | P6    | SCIM client — outbound provisioning               | planned         |

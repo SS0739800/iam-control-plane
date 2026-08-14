@@ -16,18 +16,26 @@ verify it", never "decide whether this login is acceptable".
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from iam.models.enums import IdentitySource, PlatformRole
 from iam.models.saml import IdentityProvider, SamlAssertionSeen, SamlRequestState, SamlSession
 from iam.models.user import User
-from iam.saml.checks import SAML_SUCCESS, AssertionFacts
+from iam.saml.checks import (
+    SAML_SUCCESS,
+    AssertionFacts,
+    LogoutRequestFacts,
+    LogoutResponseFacts,
+)
 from iam.saml.sp import REQUEST_TTL
 from tests.support import run_db
 
@@ -37,9 +45,15 @@ OUR_ACS_URL = f"{BASE_URL}/saml/acs"
 
 STUB_CERT = "-----BEGIN CERTIFICATE-----\nstub\n-----END CERTIFICATE-----"
 
-# The endpoint never looks at this: the stub reader takes it and hands back
-# whatever facts the test set up. It only has to be a non-empty form field.
-POSTED_RESPONSE = "not-really-base64-the-reader-is-stubbed"
+# The endpoint hands this straight to the stub reader, which ignores it and returns
+# whatever facts the test set up. It is still real base64 of real-looking XML,
+# because a failed login keeps the document for the inspector and a fake that
+# doesn't decode would make that untestable.
+POSTED_RESPONSE = base64.b64encode(
+    b'<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol">'
+    b"<!-- the reader is stubbed; the facts come from the test -->"
+    b"</samlp:Response>"
+).decode("ascii")
 
 
 class StubReader:
@@ -55,6 +69,26 @@ class StubReader:
         self.certs_seen: list[str] = []
 
     def __call__(self, raw_response: str, signing_cert: str) -> AssertionFacts:
+        self.certs_seen.append(signing_cert)
+        if self.error is not None:
+            raise self.error
+        assert self.facts is not None, "the test did not set up any facts"
+        return self.facts
+
+
+class StubLogoutReader:
+    """Stands in for reader.py's logout parsing, same seam as StubReader.
+
+    Reads nothing. The test says what the message contained and whether its
+    signature checked out; everything the endpoint decides from that is real.
+    """
+
+    def __init__(self) -> None:
+        self.facts: LogoutRequestFacts | LogoutResponseFacts | None = None
+        self.error: Exception | None = None
+        self.certs_seen: list[str] = []
+
+    def __call__(self, raw: str, signing_cert: str) -> Any:
         self.certs_seen.append(signing_cert)
         if self.error is not None:
             raise self.error
@@ -98,6 +132,92 @@ class Scenario:
         return f"ada.{self.suffix}@demo.local"
 
 
+@dataclass(frozen=True, slots=True)
+class ConsoleUsers:
+    """One console user per role, for testing who is allowed to do what.
+
+    Created per test with unique names, because the test database is shared and
+    isn't reset between tests. Nothing is seeded into it, so a test that wants to
+    call an endpoint as an admin has to make one first.
+    """
+
+    suffix: str
+
+    @property
+    def admin(self) -> str:
+        return f"admin.{self.suffix}@demo.local"
+
+    @property
+    def helpdesk(self) -> str:
+        return f"helpdesk.{self.suffix}@demo.local"
+
+    @property
+    def auditor(self) -> str:
+        return f"auditor.{self.suffix}@demo.local"
+
+    @property
+    def employee(self) -> str:
+        return f"employee.{self.suffix}@demo.local"
+
+    @property
+    def slug(self) -> str:
+        """A provider slug for tests that register one."""
+        return f"authentik-{self.suffix}"
+
+    @property
+    def as_admin(self) -> dict[str, str]:
+        """Headers that make a request come from the admin."""
+        return {"X-Dev-Actor": self.admin}
+
+    def as_user(self, user_name: str) -> dict[str, str]:
+        return {"X-Dev-Actor": user_name}
+
+    @property
+    def by_role(self) -> tuple[tuple[str, PlatformRole], ...]:
+        return (
+            (self.admin, PlatformRole.ADMIN),
+            (self.helpdesk, PlatformRole.HELPDESK),
+            (self.auditor, PlatformRole.AUDITOR),
+            (self.employee, PlatformRole.EMPLOYEE),
+        )
+
+    @property
+    def user_names(self) -> tuple[str, ...]:
+        return tuple(name for name, _ in self.by_role)
+
+
+def new_console_users() -> ConsoleUsers:
+    return ConsoleUsers(suffix=uuid.uuid4().hex[:12])
+
+
+def create_console_users(console: ConsoleUsers) -> None:
+    async def work(session: AsyncSession) -> None:
+        for user_name, role in console.by_role:
+            session.add(
+                User(
+                    user_name=user_name,
+                    email=user_name,
+                    display_name=f"{role.value.title()} {console.suffix}",
+                    active=True,
+                    platform_role=role,
+                    source=IdentitySource.SEED,
+                )
+            )
+
+    run_db(work)
+
+
+def remove_console_users(console: ConsoleUsers) -> None:
+    async def work(session: AsyncSession) -> None:
+        await session.execute(
+            delete(SamlRequestState).where(SamlRequestState.idp_slug == console.slug)
+        )
+        await session.execute(delete(IdentityProvider).where(IdentityProvider.slug == console.slug))
+        await session.execute(delete(User).where(User.user_name.in_(console.user_names)))
+
+    run_db(work)
+
+
 def new_scenario() -> Scenario:
     return Scenario(suffix=uuid.uuid4().hex[:12])
 
@@ -125,7 +245,13 @@ def clean_up(scenario: Scenario) -> None:
     run_db(work)
 
 
-def seed_provider(scenario: Scenario, *, enabled: bool = True) -> None:
+def seed_provider(scenario: Scenario, *, enabled: bool = True, slo_url: str | None = None) -> None:
+    """Register a provider the way POST /api/identity-providers would.
+
+    slo_url is off by default. Plenty of providers have no logout address, it is
+    the simpler case, and the tests that care about single logout ask for one.
+    """
+
     async def work(session: AsyncSession) -> None:
         session.add(
             IdentityProvider(
@@ -134,7 +260,7 @@ def seed_provider(scenario: Scenario, *, enabled: bool = True) -> None:
                 enabled=enabled,
                 entity_id=scenario.idp_entity_id,
                 sso_url=f"{scenario.idp_entity_id}/sso",
-                slo_url=None,
+                slo_url=slo_url,
                 signing_cert=STUB_CERT,
                 want_signed_assertions=True,
             )
@@ -199,6 +325,33 @@ def good_facts(scenario: Scenario, **overrides: object) -> AssertionFacts:
     }
     defaults.update(overrides)
     return AssertionFacts(**defaults)  # type: ignore[arg-type]
+
+
+def logout_request_facts(scenario: Scenario, **overrides: object) -> LogoutRequestFacts:
+    """A provider telling us to sign somebody out, and it checks out."""
+    defaults: dict[str, object] = {
+        "request_id": f"id-logout-{scenario.suffix}",
+        "issuer": scenario.idp_entity_id,
+        "name_id": f"persistent-{scenario.suffix}",
+        "session_index": f"session-index-{scenario.suffix}",
+        "was_signed": True,
+        "signature_verified": True,
+    }
+    defaults.update(overrides)
+    return LogoutRequestFacts(**defaults)  # type: ignore[arg-type]
+
+
+def logout_response_facts(scenario: Scenario, **overrides: object) -> LogoutResponseFacts:
+    """A provider confirming it signed somebody out because we asked."""
+    defaults: dict[str, object] = {
+        "response_id": f"id-logout-response-{scenario.suffix}",
+        "issuer": scenario.idp_entity_id,
+        "status_code": SAML_SUCCESS,
+        "was_signed": True,
+        "signature_verified": True,
+    }
+    defaults.update(overrides)
+    return LogoutResponseFacts(**defaults)  # type: ignore[arg-type]
 
 
 def post_login(

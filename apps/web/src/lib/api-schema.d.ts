@@ -283,6 +283,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/saml/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every sign-in attempt, newest first
+         * @description Logins in the order they happened, most recent first.
+         *
+         *     Cursors rather than page numbers, for the same reason the audit log uses them:
+         *     new attempts arrive at the top, and page numbers would shift under you.
+         */
+        get: operations["list_login_attempts_api_saml_logins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/saml/logins/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One attempt, with the assertion that arrived
+         * @description One login, including the document itself when we kept it.
+         *
+         *     Only failures keep the document. A login that passed all ten checks has nothing
+         *     to look at, and storing an assertion per login forever is a lot of somebody's
+         *     personal data for no reason.
+         *
+         *     The XML comes back as it arrived rather than reformatted. An inspector exists to
+         *     show what was actually sent — reformatting is the one thing it shouldn't do.
+         */
+        get: operations["get_login_attempt_api_saml_logins__event_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -434,18 +484,22 @@ export interface paths {
         put?: never;
         /**
          * Sign out
-         * @description End this session and clear the cookie.
+         * @description End this session, clear the cookie, and tell the provider.
          *
          *     A POST, not a GET. A sign-out you can trigger with a link means any page on
          *     the internet can sign our users out with an image tag pointed at it. Annoying
          *     rather than dangerous, but it costs nothing to get right, and the Lax cookie
          *     means a cross-site POST doesn't carry the session anyway.
          *
-         *     Signing out here does not sign them out at the provider — click login again
-         *     and they'll come straight back in without being asked for a password, because
-         *     the provider still considers them signed in. Telling the provider is Single
-         *     Logout, it needs a key of ours to sign the request with, and that key arrives
-         *     in P5 when we start issuing logins ourselves.
+         *     If the provider has a logout address, this ends with a redirect to it carrying
+         *     a LogoutRequest, and the provider signs them out too. Without that step,
+         *     clicking login again puts them straight back in without a password prompt,
+         *     because the provider still thinks they're signed in — which is a surprising
+         *     thing to watch happen right after pressing "sign out".
+         *
+         *     Our own session is ended before the redirect, not after. If the provider is
+         *     down or never answers, the person is still signed out here, which is the part
+         *     we're responsible for.
          *
          *     Always succeeds. No cookie, an unknown one, one that expired an hour ago:
          *     they all end with the person signed out and the cookie gone, which is what
@@ -477,6 +531,78 @@ export interface paths {
         get: operations["metadata_saml_metadata_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/sls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Single logout, in both directions
+         * @description Handle a logout, whichever side started it.
+         *
+         *     Two different things arrive here and they are told apart by which parameter is
+         *     present, not by the method:
+         *
+         *     A `SAMLResponse` is the provider confirming it signed somebody out because we
+         *     asked. Our session was already ended before we sent that request, so there's
+         *     nothing left to do but check it and send the person home.
+         *
+         *     A `SAMLRequest` is the provider telling us somebody signed out somewhere else,
+         *     or was signed out by an administrator. That one matters: it's the message that
+         *     makes "remove their access" actually remove their access, everywhere, rather
+         *     than only in the places they happen to visit next.
+         *
+         *     Accepts GET and POST because providers differ on which they use, and the message
+         *     is the same either way.
+         *
+         *     We don't sign our answer. A provider that insists on signed logout messages
+         *     won't accept it, and that needs a key of ours, which arrives in P5. authentik
+         *     doesn't insist, so this works today; Okta and Entra may not, and that's a known
+         *     limit rather than a surprise.
+         *
+         *     Unsigned requests are refused. We can't tell who sent one, and accepting it
+         *     would let anybody sign out anybody whose NameID they can guess. That's only a
+         *     nuisance rather than a way in, but refusing costs nothing.
+         */
+        get: operations["single_logout_redirect_binding"];
+        put?: never;
+        /**
+         * Single logout, in both directions
+         * @description Handle a logout, whichever side started it.
+         *
+         *     Two different things arrive here and they are told apart by which parameter is
+         *     present, not by the method:
+         *
+         *     A `SAMLResponse` is the provider confirming it signed somebody out because we
+         *     asked. Our session was already ended before we sent that request, so there's
+         *     nothing left to do but check it and send the person home.
+         *
+         *     A `SAMLRequest` is the provider telling us somebody signed out somewhere else,
+         *     or was signed out by an administrator. That one matters: it's the message that
+         *     makes "remove their access" actually remove their access, everywhere, rather
+         *     than only in the places they happen to visit next.
+         *
+         *     Accepts GET and POST because providers differ on which they use, and the message
+         *     is the same either way.
+         *
+         *     We don't sign our answer. A provider that insists on signed logout messages
+         *     won't accept it, and that needs a key of ours, which arrives in P5. authentik
+         *     doesn't insist, so this works today; Okta and Entra may not, and that's a known
+         *     limit rather than a surprise.
+         *
+         *     Unsigned requests are refused. We can't tell who sent one, and accepting it
+         *     would let anybody sign out anybody whose NameID they can guess. That's only a
+         *     nuisance rather than a way in, but refusing costs nothing.
+         */
+        post: operations["single_logout_post_binding"];
         delete?: never;
         options?: never;
         head?: never;
@@ -670,6 +796,18 @@ export interface components {
         CursorPage_AuditEventOut_: {
             /** Items */
             items: components["schemas"]["AuditEventOut"][];
+            /** Limit */
+            limit: number;
+            /**
+             * Next Cursor
+             * @description Pass as `cursor` to fetch the following page. Null at the end.
+             */
+            next_cursor?: string | null;
+        };
+        /** CursorPage[LoginAttempt] */
+        CursorPage_LoginAttempt_: {
+            /** Items */
+            items: components["schemas"]["LoginAttempt"][];
             /** Limit */
             limit: number;
             /**
@@ -940,6 +1078,146 @@ export interface components {
              * @description App version
              */
             version: string;
+        };
+        /**
+         * LoginAttempt
+         * @description One login, accepted or refused.
+         *
+         *     A single pass/fail tells you nothing when a login mysteriously stops working
+         *     against a new provider. Ten named results tell you it was the clock.
+         */
+        LoginAttempt: {
+            /** Assertion Id */
+            assertion_id?: string | null;
+            /** Checks */
+            checks: components["schemas"]["LoginCheck"][];
+            /**
+             * Directory
+             * @description What the login did to the directory: created somebody, refreshed their details, or nothing.
+             */
+            directory?: string | null;
+            /**
+             * Failed Checks
+             * @description Names of the checks that did not pass.
+             */
+            failed_checks: string[];
+            /**
+             * Has Response
+             * @description Whether the assertion itself was kept. Only failures keep it — a login that passed every check has nothing to look at.
+             */
+            has_response: boolean;
+            /**
+             * Id
+             * @description The audit entry this came from.
+             */
+            id: number;
+            /**
+             * Idp
+             * @description Which provider, by short name.
+             */
+            idp?: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            outcome: components["schemas"]["AuditOutcome"];
+            /**
+             * Reason
+             * @description Why it was refused.
+             */
+            reason?: string | null;
+            /**
+             * Session Id
+             * @description The session this login became, if it was accepted.
+             */
+            session_id?: string | null;
+            /**
+             * Who
+             * @description The person on a successful login, the provider on a failed one.
+             */
+            who: string;
+        };
+        /**
+         * LoginAttemptDetail
+         * @description One login, with the document that arrived.
+         */
+        LoginAttemptDetail: {
+            /** Assertion Id */
+            assertion_id?: string | null;
+            /** Checks */
+            checks: components["schemas"]["LoginCheck"][];
+            /**
+             * Decoded Response
+             * @description The assertion as it arrived, decoded but not reformatted. An inspector should show what was actually sent, not a tidied-up version of it.
+             */
+            decoded_response: string | null;
+            /**
+             * Directory
+             * @description What the login did to the directory: created somebody, refreshed their details, or nothing.
+             */
+            directory?: string | null;
+            /**
+             * Failed Checks
+             * @description Names of the checks that did not pass.
+             */
+            failed_checks: string[];
+            /**
+             * Has Response
+             * @description Whether the assertion itself was kept. Only failures keep it — a login that passed every check has nothing to look at.
+             */
+            has_response: boolean;
+            /**
+             * Id
+             * @description The audit entry this came from.
+             */
+            id: number;
+            /**
+             * Idp
+             * @description Which provider, by short name.
+             */
+            idp?: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            outcome: components["schemas"]["AuditOutcome"];
+            /**
+             * Reason
+             * @description Why it was refused.
+             */
+            reason?: string | null;
+            /**
+             * Response Truncated
+             * @description Whether the stored copy was cut short.
+             */
+            response_truncated: boolean;
+            /**
+             * Session Id
+             * @description The session this login became, if it was accepted.
+             */
+            session_id?: string | null;
+            /**
+             * Who
+             * @description The person on a successful login, the provider on a failed one.
+             */
+            who: string;
+        };
+        /**
+         * LoginCheck
+         * @description One of the ten checks, and how it went.
+         */
+        LoginCheck: {
+            /**
+             * Detail
+             * @description Why it passed or failed, in words. The useful part when it failed.
+             */
+            detail: string;
+            /** Name */
+            name: string;
+            /** Passed */
+            passed: boolean;
         };
         /** Page[ApplicationSummary] */
         Page_ApplicationSummary_: {
@@ -1593,6 +1871,74 @@ export interface operations {
             };
         };
     };
+    list_login_attempts_api_saml_logins_get: {
+        parameters: {
+            query?: {
+                /** @description Opaque cursor from a previous page */
+                cursor?: string | null;
+                /** @description Narrow to just the failures, usually */
+                outcome?: components["schemas"]["AuditOutcome"] | null;
+                /** @description Only this provider, by short name */
+                idp?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_LoginAttempt_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_login_attempt_api_saml_logins__event_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginAttemptDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_users_api_users_get: {
         parameters: {
             query?: {
@@ -1854,6 +2200,42 @@ export interface operations {
                 content: {
                     "application/samlmetadata+xml": unknown;
                 };
+            };
+        };
+    };
+    single_logout_redirect_binding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    single_logout_post_binding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

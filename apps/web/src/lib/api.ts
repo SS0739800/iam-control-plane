@@ -56,6 +56,11 @@ export type ChainVerification = Schema<'ChainVerification'>
 export type AppRef = Schema<'AppRef'>
 export type GroupRef = Schema<'GroupRef'>
 export type UserRef = Schema<'UserRef'>
+export type SignedInUser = Schema<'SignedInUser'>
+export type IdentityProviderSummary = Schema<'IdentityProviderSummary'>
+export type LoginAttempt = Schema<'LoginAttempt'>
+export type LoginAttemptDetail = Schema<'LoginAttemptDetail'>
+export type LoginCheck = Schema<'LoginCheck'>
 
 export type PlatformRole = UserSummary['platform_role']
 
@@ -191,4 +196,37 @@ export async function fetchAuditEvents(params: AuditListParams = {}) {
 
 export async function verifyAuditChain(): Promise<ChainVerification> {
   return unwrap(await client.GET('/api/audit/verify'))
+}
+
+// ------------------------------------------------------------------- sessions
+
+export async function fetchMe(): Promise<SignedInUser> {
+  return unwrap(await client.GET('/api/me'))
+}
+
+// ------------------------------------------------------ identity providers
+
+export async function fetchIdentityProviders(): Promise<IdentityProviderSummary[]> {
+  return unwrap(await client.GET('/api/identity-providers'))
+}
+
+// -------------------------------------------------------- login inspector
+
+export interface LoginListParams {
+  cursor?: string
+  outcome?: LoginAttempt['outcome']
+  idp?: string
+  limit?: number
+}
+
+export async function fetchLoginAttempts(params: LoginListParams = {}) {
+  return unwrap(await client.GET('/api/saml/logins', { params: { query: params } }))
+}
+
+export async function fetchLoginAttempt(eventId: number): Promise<LoginAttemptDetail> {
+  return unwrap(
+    await client.GET('/api/saml/logins/{event_id}', {
+      params: { path: { event_id: eventId } },
+    }),
+  )
 }

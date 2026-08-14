@@ -9,6 +9,7 @@ import AuditPage from './pages/Audit'
 import { ApplicationDetailPage, ApplicationsPage } from './pages/Applications'
 import Dashboard from './pages/Dashboard'
 import { GroupDetailPage, GroupsPage } from './pages/Groups'
+import LoginsPage from './pages/Logins'
 import { UserDetailPage, UsersPage } from './pages/Users'
 
 const queryClient = new QueryClient({
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
       { path: 'groups/:groupId', element: <GroupDetailPage /> },
       { path: 'applications', element: <ApplicationsPage /> },
       { path: 'applications/:appId', element: <ApplicationDetailPage /> },
+      { path: 'logins', element: <LoginsPage /> },
       { path: 'audit', element: <AuditPage /> },
       // Anything else falls back to the dashboard rather than a blank screen.
       { path: '*', element: <Dashboard /> },
