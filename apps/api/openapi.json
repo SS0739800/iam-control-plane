@@ -405,6 +405,30 @@
         "title": "AuditOutcome",
         "type": "string"
       },
+      "Body_assertion_consumer_service_saml_acs_post": {
+        "properties": {
+          "relay_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relay State"
+          },
+          "saml_response": {
+            "title": "Saml Response",
+            "type": "string"
+          }
+        },
+        "required": [
+          "saml_response"
+        ],
+        "title": "Body_assertion_consumer_service_saml_acs_post",
+        "type": "object"
+      },
       "ChainVerification": {
         "description": "What the tamper check found.",
         "properties": {
@@ -2191,6 +2215,41 @@
         "summary": "Add a user to a group",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/saml/acs": {
+      "post": {
+        "description": "Accept a login from the provider, or refuse it and say which check failed.\n\nThis is the endpoint that has to be right. Everything the provider sends\narrives through the person's own browser, so all of it is under the control of\nwhoever is trying to get in. Nothing here is trusted until it has been through\nevery check in checks.py, and nothing is trusted a second time because the\nrequest it answers is consumed whether the login is accepted or not.\n\nThe order is: find the request this is answering, work out which provider that\nwas, read and verify the document, run every check, and only then look up a\nperson. Reading identity out of a document before checking it is the mistake\nthat makes all the other checks pointless.\n\nOnly replies to logins we started. A provider can also start one by itself,\nfrom a tile in its own dashboard, and that has no request to match against \u2014\nwhich means giving up the check that stops someone posting a login at us out\nof the blue. checks.py handles that case, so turning it on later is a small\nchange, but it stays off until there's a reason to want it.\n\nRaises:\n    HTTPException: 400 for a login that can't be matched, read, or identified.\n        401 for one that fails a check. 403 for a deactivated account.",
+        "operationId": "assertion_consumer_service_saml_acs_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_assertion_consumer_service_saml_acs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Where the provider posts the answer",
+        "tags": [
+          "saml"
         ]
       }
     },

@@ -27,9 +27,19 @@ from typing import Any
 from lxml import etree
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 
-from iam.saml.checks import AssertionFacts
+from iam.saml.checks import AssertionFacts, MalformedResponse
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "MAX_RESPONSE_BYTES",
+    "SAFE_PARSER",
+    "MalformedResponse",
+    "decode_response",
+    "decoded_xml_for_display",
+    "parse",
+    "read_response",
+]
 
 NS = {
     "samlp": "urn:oasis:names:tc:SAML:2.0:protocol",
@@ -53,14 +63,6 @@ SAFE_PARSER = etree.XMLParser(
 MAX_RESPONSE_BYTES = 512 * 1024
 """Refuse anything absurdly large before parsing it. A real login response is a
 few kilobytes; anything approaching this is either broken or deliberate."""
-
-
-class MalformedResponse(Exception):
-    """The response could not be read at all.
-
-    Different from a login that reads fine but fails a check. This one means there
-    was nothing to check, so it's a 400 rather than a rejected login.
-    """
 
 
 def decode_response(raw: str) -> bytes:

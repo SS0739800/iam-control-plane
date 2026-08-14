@@ -272,6 +272,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/saml/acs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Where the provider posts the answer
+         * @description Accept a login from the provider, or refuse it and say which check failed.
+         *
+         *     This is the endpoint that has to be right. Everything the provider sends
+         *     arrives through the person's own browser, so all of it is under the control of
+         *     whoever is trying to get in. Nothing here is trusted until it has been through
+         *     every check in checks.py, and nothing is trusted a second time because the
+         *     request it answers is consumed whether the login is accepted or not.
+         *
+         *     The order is: find the request this is answering, work out which provider that
+         *     was, read and verify the document, run every check, and only then look up a
+         *     person. Reading identity out of a document before checking it is the mistake
+         *     that makes all the other checks pointless.
+         *
+         *     Only replies to logins we started. A provider can also start one by itself,
+         *     from a tile in its own dashboard, and that has no request to match against —
+         *     which means giving up the check that stops someone posting a login at us out
+         *     of the blue. checks.py handles that case, so turning it on later is a small
+         *     change, but it stays off until there's a reason to want it.
+         *
+         *     Raises:
+         *         HTTPException: 400 for a login that can't be matched, read, or identified.
+         *             401 for one that fails a check. 403 for a deactivated account.
+         */
+        post: operations["assertion_consumer_service_saml_acs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start signing in
+         * @description Send someone to their provider to sign in.
+         *
+         *     Three things happen before the redirect: we check the provider is one we know,
+         *     we check where they've asked to be sent afterwards, and we write down the
+         *     request so the answer can be matched to it later.
+         *
+         *     That last part is why this can't be stateless. The answer arrives as a
+         *     cross-site form POST and browsers don't send our cookies on those, so the
+         *     request has to be remembered server-side, keyed by a token that travels with it.
+         */
+        get: operations["login_saml_login_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Our details, for registering this app with a provider
+         * @description Hand this to whoever runs the identity provider.
+         *
+         *     Deliberately not behind a login. It contains nothing secret — just our name and
+         *     the address to send answers to — and needing to be signed in to fetch the thing
+         *     you need in order to sign in would be an awkward loop.
+         */
+        get: operations["metadata_saml_metadata_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -428,6 +521,13 @@ export interface components {
          * @enum {string}
          */
         AuditOutcome: "success" | "failure" | "denied";
+        /** Body_assertion_consumer_service_saml_acs_post */
+        Body_assertion_consumer_service_saml_acs_post: {
+            /** Relay State */
+            relay_state?: string | null;
+            /** Saml Response */
+            saml_response: string;
+        };
         /**
          * ChainVerification
          * @description What the tamper check found.
@@ -1270,6 +1370,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assertion_consumer_service_saml_acs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["Body_assertion_consumer_service_saml_acs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_saml_login_get: {
+        parameters: {
+            query?: {
+                /** @description Which provider to use, by short name */
+                idp?: string;
+                /** @description Where to land afterwards */
+                return_to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metadata_saml_metadata_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/samlmetadata+xml": unknown;
                 };
             };
         };

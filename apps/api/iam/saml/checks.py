@@ -23,6 +23,18 @@ from typing import Any
 
 SAML_SUCCESS = "urn:oasis:names:tc:SAML:2.0:status:Success"
 
+
+class MalformedResponse(Exception):
+    """The response could not be read at all.
+
+    Different from a login that reads fine but fails a check. This one means there
+    was nothing to check, so it's a 400 rather than a rejected login.
+
+    Raised by reader.py, but defined here so the endpoint can catch it without
+    importing the one module that needs xmlsec. See ADR 0004.
+    """
+
+
 DEFAULT_CLOCK_SKEW = dt.timedelta(minutes=3)
 """How far out a provider's clock is allowed to be.
 

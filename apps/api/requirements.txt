@@ -14,6 +14,11 @@ pydantic==2.10.4
 pydantic-settings==2.7.0
 python-json-logger==3.2.1
 
+# Form parsing. The identity provider hands us a login by posting an HTML form to
+# /saml/acs, and FastAPI refuses to start with a Form() parameter unless this is
+# installed. Pure Python, so it goes in the cross-platform file.
+python-multipart==0.0.20
+
 # IANA timezone database for zoneinfo. Neither Windows nor python:*-slim ships
 # one, so ZoneInfo("UTC") raises without this — which surfaced as Alembic
 # failing to write a migration file.

@@ -19,23 +19,25 @@ Upstream identity providers, in the order they get wired up: **authentik**
 
 ## Status
 
-**Phase 0 — foundation. Complete.** Both images build (including the `xmlsec`
-source compile), all five services come up healthy, and the SPA and API are
-served from one origin with `/api/health/ready` reporting a live Postgres.
+**Phase 2 — inbound SSO. In progress.** `/saml/metadata`, `/saml/login` and
+`/saml/acs` are all in. A login now goes the whole way: out to the provider,
+back to the assertion consumer, through all ten checks, into a person and a
+session cookie. Still to come in P2: reading that cookie instead of the
+`X-Dev-Actor` header, signing out, and the login inspector screen.
 
 CI is configured but has not run yet — it executes on the first push to a remote.
 
-| Phase | Scope                                             | State       |
-| ----- | ------------------------------------------------- | ----------- |
-| P0    | Foundation: compose, CI, health probes            | ✅ done     |
-| P1    | Core domain + admin console, hash-chained audit   | next        |
-| P2    | SAML SP — inbound SSO                             | planned     |
-| P3    | SCIM 2.0 server — inbound provisioning            | planned     |
-| P4    | Lifecycle + entitlements *(MVP line)*             | planned     |
-| P5    | SAML IdP — outbound SSO                           | planned     |
-| P6    | SCIM client — outbound provisioning               | planned     |
-| P7    | Production deploy                                 | planned     |
-| P8    | Entra ID integration sprint                       | planned     |
+| Phase | Scope                                             | State           |
+| ----- | ------------------------------------------------- | --------------- |
+| P0    | Foundation: compose, CI, health probes            | ✅ done         |
+| P1    | Core domain + admin console, hash-chained audit   | ✅ done         |
+| P2    | SAML SP — inbound SSO                             | 🚧 in progress  |
+| P3    | SCIM 2.0 server — inbound provisioning            | planned         |
+| P4    | Lifecycle + entitlements *(MVP line)*             | planned         |
+| P5    | SAML IdP — outbound SSO                           | planned         |
+| P6    | SCIM client — outbound provisioning               | planned         |
+| P7    | Production deploy                                 | planned         |
+| P8    | Entra ID integration sprint                       | planned         |
 
 ---
 
@@ -233,6 +235,13 @@ Full records in [`docs/adr/`](docs/adr/). The short version:
 - **[xmlsec is built from source](docs/adr/0004-build-xmlsec-from-source.md).**
   Mixing a prebuilt `lxml` wheel with a source-built `xmlsec` segfaults at
   runtime rather than failing at install. Do not remove `--no-binary`.
+- **`/saml/acs` gets its reader through a dependency.** `iam/saml/reader.py` is
+  the only module that needs xmlsec, so importing it at the top of the router
+  would make the whole app unimportable on Windows and in the `api` CI job.
+  Injecting it also means the tests can hand the endpoint prepared facts and
+  cover every decision after the signature check — the ten checks, creating the
+  person, the session, the cookie, the redirect — without xmlsec anywhere. The
+  signature check itself stays real and is exercised by the image build.
 - **Liveness and readiness are separate.** `/api/health` never touches Postgres,
   so a database blip cannot get a healthy container killed;
   `/api/health/ready` returns 503 so a load balancer drains instead.
