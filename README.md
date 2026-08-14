@@ -19,19 +19,24 @@ Upstream identity providers, in the order they get wired up: **authentik**
 
 ## Status
 
-**Phase 2 — inbound SSO. In progress.** A login now goes the whole way and comes
-back: out to the provider, in through `/saml/acs`, past all ten checks, into a
-person, a session, and a cookie the API authenticates every later request with.
-`POST /saml/logout` ends it. `GET /api/me` says who you are.
+**Phase 2 — inbound SSO. Working end to end.** A real login against a real
+authentik goes the whole way and comes back: out through `/saml/login`, a password
+typed at the provider, in through `/saml/acs`, a genuine signature checked with
+xmlsec, all ten checks passed, a person created, a session issued, and a cookie
+the API authenticates every later request with. `POST /saml/logout` ends it.
+`GET /api/me` says who you are. [Set it up below](#signing-in-for-real).
 
-Still to come in P2: registering authentik and seeding it as a provider, the
-login inspector screen, and Single Logout at `/saml/sls` — which the metadata
-already advertises, and which needs a signing key that arrives in P5.
+`python -m scripts.smoke_login` drives that whole loop with no browser and is the
+only thing that can check it, because there is no identity provider in CI.
+
+Still to come in P2: the login inspector screen, and Single Logout at
+`/saml/sls` — which the metadata already advertises, and which needs a signing key
+that arrives in P5.
 
 The `X-Dev-Actor` header still answers for requests that arrive with no session
-cookie, outside production only. That is impersonation, not authentication, and
-it goes when authentik is registered. A real session always wins over it. See
-[`iam/security/actor.py`](apps/api/iam/security/actor.py).
+cookie, outside production only. That is impersonation, not authentication. A real
+session always wins over it, and unsetting `DEV_ACTOR_USER_NAME` switches it off.
+See [`iam/security/actor.py`](apps/api/iam/security/actor.py).
 
 CI is configured but has not run yet — it executes on the first push to a remote.
 
@@ -72,13 +77,68 @@ which is the whole point of P0.
 | http://localhost:8025                | Mailpit — catches all outbound email  |
 | http://localhost:9000                | authentik (only with `--profile idp`) |
 
-The identity provider is behind a compose profile so the default `up` stays fast.
-Start it when you want to sign in for real — the SAML endpoints are built, but
-there is nothing to log into until authentik is running and registered:
+---
+
+## Signing in for real
+
+The identity provider is behind a compose profile so a plain `up` stays fast.
+Start it when you want to actually sign in:
 
 ```bash
-docker compose --profile idp up
+docker compose --profile idp up -d      # first pull is about a gigabyte
 ```
+
+authentik configures itself. It creates its admin account from
+`AUTHENTIK_BOOTSTRAP_PASSWORD`, and
+[`infra/authentik/blueprints/iam-console.yaml`](infra/authentik/blueprints/iam-console.yaml)
+declares the SAML application — the ACS address, the audience, the four attributes
+it sends, and that the assertion itself gets signed. No clicking through a setup
+wizard, and no demo that only works on the machine where somebody did the
+clicking. Give it a minute; the first boot runs migrations.
+
+Then register it here. Two steps, because **we never fetch a metadata URL** — see
+[ADR 0006](docs/adr/0006-paste-metadata-do-not-fetch-it.md) for why that stays
+true:
+
+```bash
+curl -sSL http://localhost:9000/application/saml/iam-console/metadata/ -o idp.xml
+
+python - <<'PY'
+import json, pathlib, urllib.request
+body = json.dumps({
+    "slug": "authentik",
+    "name": "authentik (local)",
+    "metadata_xml": pathlib.Path("idp.xml").read_text(encoding="utf-8"),
+}).encode()
+request = urllib.request.Request(
+    "http://localhost:8080/api/identity-providers",
+    data=body,
+    headers={"Content-Type": "application/json"},
+)
+print(json.loads(urllib.request.urlopen(request).read())["login_url"])
+PY
+```
+
+That prints the login link. Open it, sign in as `akadmin` with the bootstrap
+password, and you land back on this side with a session.
+
+To check the whole loop without a browser:
+
+```bash
+cd apps/api && python -m scripts.smoke_login
+```
+
+That is the only thing that can check it. There is no identity provider in CI, so
+no test there sees a real assertion — and that gap is not theoretical. The xpath
+bug in [`iam/saml/reader.py`](apps/api/iam/saml/reader.py) passed every unit test
+and failed the first time a genuine authentik assertion arrived.
+
+| URL                                    | What                                |
+| -------------------------------------- | ----------------------------------- |
+| http://localhost:8080/saml/login?idp=authentik | Start a login               |
+| http://localhost:8080/saml/metadata    | Our metadata, for the provider      |
+| http://localhost:8080/api/me           | Who the session says you are        |
+| http://localhost:9000                  | authentik                           |
 
 ---
 
@@ -210,20 +270,42 @@ apps/
       deps.py           shared FastAPI dependencies
       logging_setup.py  structured JSON logging
       main.py           application factory
-      models/           SQLAlchemy declarative models (P1)
-      routers/          HTTP surfaces, mounted under /api
+      models/           SQLAlchemy declarative models
+      routers/          HTTP surfaces; /api/* plus the browser-facing /saml/*
+      saml/             the SAML machinery — see the note below
+      security/         permissions, and working out who's calling
     alembic/            migrations
+    scripts/            seed data, schema export, the end-to-end login check
     tests/
+      fixtures/         a real authentik assertion and the cert that signed it
     requirements*.txt
     Dockerfile          two-stage; builds xmlsec from source
   web/                  Vite + React 19 + TypeScript SPA
     src/
-      lib/api.ts        typed client (generated from OpenAPI in P1)
+      lib/api.ts        typed client, generated from openapi.json
 docs/adr/               architecture decision records
 infra/db/init/          first-boot Postgres bootstrap
+infra/authentik/        the SAML application, declared as a blueprint
 Caddyfile               single-origin route table
 docker-compose.yml
 ```
+
+Inside `iam/saml/`, one file is different from the others:
+
+```
+sp.py            our side: who we are, and the request that starts a login
+reader.py        reads the XML and verifies the signature   <- needs xmlsec
+checks.py        the ten rules a login has to pass once it's been read
+metadata.py      reads a provider's metadata, to register them
+provisioning.py  turning a passed login into a person
+sessions.py      keeping them signed in afterwards
+```
+
+`reader.py` is the only one that needs `xmlsec`, so it is the only one that cannot
+run on Windows. Everything else is comparisons and database work and is tested
+anywhere, which is deliberate — see
+[ADR 0005](docs/adr/0005-validate-assertions-ourselves.md). `reader.py` itself is
+tested against a real assertion inside the container, in the `images` CI job.
 
 ---
 
@@ -265,8 +347,12 @@ Three jobs on every push and pull request:
   against an empty database, pytest with a Postgres service container.
 - **web** — `tsc --noEmit`, vitest, production build.
 - **images** — builds the API image, which is what proves the xmlsec source build
-  still works. Slowest job, and the reason a segfault in P2 will not be a
-  surprise.
+  still works, then runs the signature-verification tests inside it. Those cannot
+  run in the **api** job, because there is no xmlsec there. Slowest job, and the
+  reason a segfault in the SAML stack will not be a surprise.
+
+What CI cannot check is a login against a real identity provider: there isn't one
+in CI. `python -m scripts.smoke_login` is that check, and it has to be run by hand.
 # HRMS-IAM-CLOUD
 # HRMS-CLOUD-IAM
 # HRMS-CLOUD-IAM

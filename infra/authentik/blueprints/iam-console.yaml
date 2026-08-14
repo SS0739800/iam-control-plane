@@ -1,0 +1,103 @@
+# The SAML application for this console, declared instead of clicked.
+#
+# authentik applies this on startup, so a fresh volume comes up with the
+# application already there. The alternative is a page of setup instructions that
+# nobody follows identically twice, and a demo that only works on the machine
+# where somebody did the clicking.
+#
+# Mounted at /blueprints/custom by docker-compose.yml.
+#
+# The four values that have to be right, and what breaks when they aren't:
+#
+#   acs_url    where authentik posts the answer. Wrong, and people sign in
+#              successfully and land nowhere.
+#   audience   has to equal our entityID exactly. This is what our audience check
+#              compares against, and it's the check that stops a login issued for
+#              some other application from working here.
+#   issuer     what authentik calls itself. Our issuer check compares this, and
+#              the entityID in its metadata comes from the same field, so
+#              registering from that metadata keeps the two in step.
+#   sign_assertion  our metadata asks for the assertion itself to be signed, and
+#              we refuse logins where only the wrapper was. See check_assertion_signed.
+version: 1
+
+metadata:
+  name: IAM Console — SAML application
+  labels:
+    blueprints.goauthentik.io/description: |
+      Registers this console as a SAML application. Fetch the resulting metadata
+      from /application/saml/iam-console/metadata/?download and POST it to
+      /api/identity-providers on the console side.
+
+entries:
+  - model: authentik_providers_saml.samlprovider
+    id: iam-console-provider
+    identifiers:
+      name: IAM Console
+    attrs:
+      acs_url: !Format ['%s/saml/acs', !Env [IAM_BASE_URL, 'http://localhost:8080']]
+      audience: !Format ['%s/saml/metadata', !Env [IAM_BASE_URL, 'http://localhost:8080']]
+      issuer: !Format
+        [
+          '%s/application/saml/iam-console/',
+          !Env [AUTHENTIK_BASE_URL, 'http://localhost:9000'],
+        ]
+
+      # POST, matching the binding our metadata advertises for the answer.
+      sp_binding: post
+
+      # Sign the assertion, not just the response around it. Signing only the
+      # wrapper leaves the contents swappable, our metadata says
+      # WantAssertionsSigned, and the login would be refused without this.
+      sign_assertion: true
+      sign_response: false
+
+      signing_kp:
+        !Find [
+          authentik_crypto.certificatekeypair,
+          [name, 'authentik Self-signed Certificate'],
+        ]
+
+      authorization_flow:
+        !Find [
+          authentik_flows.flow,
+          [slug, 'default-provider-authorization-implicit-consent'],
+        ]
+      invalidation_flow:
+        !Find [authentik_flows.flow, [slug, 'default-provider-invalidation-flow']]
+
+      # What ends up in the assertion, and so what iam/saml/provisioning.py reads
+      # to work out who logged in. These four are authentik's own defaults and
+      # cover username, email, display name and a stable id.
+      #
+      # There is no given-name or surname mapping here because authentik models a
+      # person's name as one field, so there is nothing honest to split it into.
+      # read_claims falls back to the display name, which is why it can.
+      property_mappings:
+        - !Find [
+            authentik_providers_saml.samlpropertymapping,
+            [name, 'authentik default SAML Mapping: Username'],
+          ]
+        - !Find [
+            authentik_providers_saml.samlpropertymapping,
+            [name, 'authentik default SAML Mapping: Email'],
+          ]
+        - !Find [
+            authentik_providers_saml.samlpropertymapping,
+            [name, 'authentik default SAML Mapping: Name'],
+          ]
+        - !Find [
+            authentik_providers_saml.samlpropertymapping,
+            [name, 'authentik default SAML Mapping: User ID'],
+          ]
+
+  - model: authentik_core.application
+    identifiers:
+      slug: iam-console
+    attrs:
+      name: IAM Console
+      provider: !KeyOf iam-console-provider
+      meta_description: |
+        The identity control plane's own admin console. Signing in here is the
+        inbound half of SAML: authentik authenticates, we validate the assertion
+        and issue a session.

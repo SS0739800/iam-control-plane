@@ -118,7 +118,7 @@ jobs:
         run: npm run build
 
   images:
-    name: Images — build
+    name: Images — build and the xmlsec tests
     runs-on: ubuntu-latest
 
     steps:
@@ -136,9 +136,25 @@ jobs:
           target: runtime
           build-args: GIT_SHA=${{ github.sha }}
           push: false
-          load: false
+          # Loaded rather than discarded, because the step below runs it.
+          load: true
+          tags: iam-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Signature verification is the one part of this codebase where being wrong
+      # means accepting forged logins, and it is the only part that needs xmlsec.
+      # The api job cannot run these — no xmlsec there — so without this step
+      # reader.py has no coverage anywhere in CI.
+      #
+      # pytest is installed here rather than baked into the image, so the runtime
+      # image stays free of test tooling.
+      - name: Run the tests that need xmlsec
+        run: |
+          docker run --rm -u root -v "$PWD/apps/api:/srv" -w /srv iam-api:ci sh -c '
+            pip install --quiet pytest==8.3.4 pytest-asyncio==0.25.0 httpx==0.28.1 &&
+            python -m pytest tests/test_saml_reader.py -q
+          '
 
       - name: Build web bundle image
         uses: docker/build-push-action@v6

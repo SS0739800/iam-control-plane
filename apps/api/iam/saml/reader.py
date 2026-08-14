@@ -64,6 +64,18 @@ MAX_RESPONSE_BYTES = 512 * 1024
 """Refuse anything absurdly large before parsing it. A real login response is a
 few kilobytes; anything approaching this is either broken or deliberate."""
 
+# These point at the ds:Signature element, not at the element it signs, and that
+# distinction is the whole reason they're named constants with a comment.
+#
+# validate_sign() takes an xpath and treats whatever it selects as the signature
+# node. Handing it "/samlp:Response/saml:Assertion" — the thing being signed,
+# which is what you would write if you were describing intent — makes it try to
+# read an Assertion element as a signature. That fails, and it fails as
+# "signature missing or does not match", which points at the certificate and not
+# at the xpath. Cost an afternoon against a real authentik.
+ASSERTION_SIGNATURE_XPATH = "/samlp:Response/saml:Assertion/ds:Signature"
+RESPONSE_SIGNATURE_XPATH = "/samlp:Response/ds:Signature"
+
 
 def decode_response(raw: str) -> bytes:
     """Turn the base64 form field into XML bytes."""
@@ -138,8 +150,13 @@ def _verify(xml: bytes, cert: str, xpath: str) -> bool:
 
     The xpath matters. A response can contain several signed pieces, and verifying
     "a signature" rather than "the signature over the thing I'm about to read" is
-    the gap signature-wrapping attacks go through. The caller says which element it
-    cares about.
+    the gap signature-wrapping attacks go through. The caller says which signature
+    it means, and it has to be a path to a ds:Signature element — see
+    ASSERTION_SIGNATURE_XPATH.
+
+    Leaving the xpath off would let the library pick, and it prefers the signature
+    over the whole response. That is the one we specifically do not want to rely
+    on, so it is always passed.
 
     python3-saml does the actual work here, wrapping xmlsec and OpenSSL. Do not
     replace this with anything hand-written.
@@ -238,9 +255,9 @@ def read_response(raw_response: str, idp_signing_cert: str) -> AssertionFacts:
     # check_assertion_signed can object.
     assertion_was_signed = _signature_over(assertion)
     if assertion_was_signed:
-        signature_verified = _verify(xml, idp_signing_cert, "/samlp:Response/saml:Assertion")
+        signature_verified = _verify(xml, idp_signing_cert, ASSERTION_SIGNATURE_XPATH)
     else:
-        signature_verified = _verify(xml, idp_signing_cert, "/samlp:Response")
+        signature_verified = _verify(xml, idp_signing_cert, RESPONSE_SIGNATURE_XPATH)
 
     return AssertionFacts(
         assertion_id=assertion_id,
