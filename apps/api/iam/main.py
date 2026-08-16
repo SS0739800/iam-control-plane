@@ -25,6 +25,7 @@ from iam.routers import (
     identity_providers,
     login_inspector,
     me,
+    provisioning,
     saml,
     scim_discovery,
     scim_groups,
@@ -103,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(applications.router, prefix="/api")
     app.include_router(identity_providers.router, prefix="/api")
     app.include_router(login_inspector.router, prefix="/api")
+    app.include_router(provisioning.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
 
     # No /api prefix. Providers post to these from the person's browser, so they're

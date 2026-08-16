@@ -1718,6 +1718,118 @@
         "title": "PlatformRole",
         "type": "string"
       },
+      "ProvisioningActivity": {
+        "description": "One thing a provisioning system did to the directory.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which SCIM client did it.",
+            "title": "Client"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What changed, in words, when we know.",
+            "title": "Summary"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who or what it was done to.",
+            "title": "Target"
+          }
+        },
+        "required": [
+          "id",
+          "occurred_at",
+          "action",
+          "client",
+          "target",
+          "outcome"
+        ],
+        "title": "ProvisioningActivity",
+        "type": "object"
+      },
+      "ProvisioningOverview": {
+        "description": "What provisioning has actually done to this directory.\n\nCounts rather than a list, because the answer people want from this screen is\n\"is the sync working and what does it own\", not a directory listing they can\nalready get from the Users page.",
+        "properties": {
+          "active_clients": {
+            "title": "Active Clients",
+            "type": "integer"
+          },
+          "groups_from_scim": {
+            "title": "Groups From Scim",
+            "type": "integer"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most recent time any provisioning client wrote anything.",
+            "title": "Last Sync At"
+          },
+          "users_from_login": {
+            "description": "People who arrived by logging in rather than being provisioned. A healthy sync makes this number small: it means SCIM had not heard of them yet when they first signed in.",
+            "title": "Users From Login",
+            "type": "integer"
+          },
+          "users_from_scim": {
+            "description": "People the provider created or now manages.",
+            "title": "Users From Scim",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "users_from_scim",
+          "groups_from_scim",
+          "users_from_login",
+          "active_clients"
+        ],
+        "title": "ProvisioningOverview",
+        "type": "object"
+      },
       "Readiness": {
         "description": "Is the app able to do its job, i.e. can it reach the database.",
         "properties": {
@@ -1755,6 +1867,231 @@
           "database"
         ],
         "title": "Readiness",
+        "type": "object"
+      },
+      "ScimClientCreate": {
+        "description": "Ask for a new token.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it exists, for whoever finds it in six months.",
+            "title": "Description"
+          },
+          "name": {
+            "description": "What to call it, e.g. 'authentik (local)'. Has to be unique so the audit log is unambiguous about which system acted.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ScimClientCreate",
+        "type": "object"
+      },
+      "ScimClientIssued": {
+        "description": "A newly created client, with its token.\n\nThe only response that ever carries a token. Store it now; there is no way to\nread it again, because we kept only the hash.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When this token was last accepted. The useful question is the opposite one: a token nobody has used for months is one nobody would notice being stolen.",
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked Reason"
+          },
+          "token": {
+            "description": "The bearer token. Shown once. Give it to the provider as Authorization: Bearer <token>.",
+            "title": "Token",
+            "type": "string"
+          },
+          "usable": {
+            "description": "Whether this token would be accepted right now \u2014 enabled and not revoked.",
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "enabled",
+          "created_at",
+          "last_used_at",
+          "revoked_at",
+          "revoked_reason",
+          "usable",
+          "token"
+        ],
+        "title": "ScimClientIssued",
+        "type": "object"
+      },
+      "ScimClientRevoke": {
+        "properties": {
+          "reason": {
+            "default": "revoked from the console",
+            "description": "Why, so the audit log can say.",
+            "maxLength": 200,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "ScimClientRevoke",
+        "type": "object"
+      },
+      "ScimClientSummary": {
+        "description": "A system we accept directory writes from.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When this token was last accepted. The useful question is the opposite one: a token nobody has used for months is one nobody would notice being stolen.",
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked Reason"
+          },
+          "usable": {
+            "description": "Whether this token would be accepted right now \u2014 enabled and not revoked.",
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "enabled",
+          "created_at",
+          "last_used_at",
+          "revoked_at",
+          "revoked_reason",
+          "usable"
+        ],
+        "title": "ScimClientSummary",
         "type": "object"
       },
       "ScimGroup": {
@@ -3047,6 +3384,198 @@
         "summary": "The person this request is coming from",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/api/provisioning/activity": {
+      "get": {
+        "description": "Recent directory writes that came from a SCIM client.\n\nA view over the audit log, filtered to entries a provisioning system made. It\nanswers the question this screen exists for \u2014 \"is anything actually arriving,\nand what\" \u2014 without making somebody scroll the whole log looking for it.",
+        "operationId": "activity_api_provisioning_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisioningActivity"
+                  },
+                  "title": "Response Activity Api Provisioning Activity Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "What the provisioning systems have been doing",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/clients": {
+      "get": {
+        "description": "Every client, revoked ones included.\n\nNot filtered to the usable ones. A revoked token is exactly what somebody is\nlooking for when they are working out why a sync stopped.",
+        "operationId": "list_clients_api_provisioning_clients_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScimClientSummary"
+                  },
+                  "title": "Response List Clients Api Provisioning Clients Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The systems allowed to write to the directory",
+        "tags": [
+          "provisioning"
+        ]
+      },
+      "post": {
+        "description": "Create a client and hand back its token, once.\n\nThe token is in this response and nowhere else, ever. We keep only its hash,\nso there is nothing to show later even if the screen offered to.\n\nThe audit entry records that a token was issued and by whom. It does not\nrecord the token, which would rather defeat the point of not storing it.",
+        "operationId": "issue_client_api_provisioning_clients_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimClientCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimClientIssued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue a token for a provisioning system",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/clients/{client_id}/revoke": {
+      "post": {
+        "description": "Stop a token working, and record why.\n\nMarked rather than deleted. Revoking one is the thing you do when you think it\nhas leaked, and that is precisely when you want the row to survive so the\naudit log's references to it still resolve.\n\nRevoking an already-revoked client leaves the original reason and timestamp\nalone. When it was cut off is the fact that matters.",
+        "operationId": "revoke_client_api_provisioning_clients__client_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimClientRevoke"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimClientSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop accepting a token",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/overview": {
+      "get": {
+        "description": "The numbers that say whether the sync is doing its job.\n\n``users_from_login`` is the one worth watching. Somebody arriving by logging\nin means SCIM had not told us about them yet, which is fine occasionally and a\nsign of a broken or narrow sync if it keeps happening.",
+        "operationId": "overview_api_provisioning_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisioningOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "What provisioning has done to this directory",
+        "tags": [
+          "provisioning"
         ]
       }
     },

@@ -28,12 +28,16 @@ class Permission(StrEnum):
 
     IDP_READ = "idp:read"
     IDP_WRITE = "idp:write"
-    """Register or change an identity provider. Admin only, and it stays that way.
+    """Configure which outside systems we believe about identity. Admin only.
 
-    This is the most consequential write in the system. Everything about trusting
-    a login reduces to "was it signed with the key on this row", so whoever can
-    edit that row can decide who gets to be anybody. Helpdesk can look, so they
-    can answer "is SSO configured", and that is all."""
+    Covers both halves of that: registering an identity provider, and issuing or
+    revoking the tokens that let a system provision people into the directory.
+    They are the same decision asked twice — one at the moment somebody logs in,
+    the other continuously — and both reduce to "whoever controls this can decide
+    who exists here".
+
+    Helpdesk and auditor can look, so they can answer "is SSO configured" and "is
+    the sync running". Neither can change it."""
 
     AUDIT_READ = "audit:read"
     AUDIT_VERIFY = "audit:verify"
