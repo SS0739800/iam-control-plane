@@ -81,6 +81,11 @@ def make_group(**overrides: object) -> Group:
         # about the capital N.
         ('username eq "ada@demo.local"', "user_name", "ada@demo.local"),
         ('USERNAME EQ "ada@demo.local"', "user_name", "ada@demo.local"),
+        # Unquoted. The spec wants a quoted JSON string here and authentik sends
+        # this instead — found by watching a real sync, which stalled on its very
+        # first request until this was accepted.
+        ("userName eq akadmin", "user_name", "akadmin"),
+        ("externalId eq 6", "external_id", "6"),
     ],
 )
 def test_reads_the_filters_providers_actually_send(
@@ -119,6 +124,13 @@ def test_operators_we_do_not_support_are_refused(expression: str) -> None:
     assert raised.value.scim_type == ScimType.INVALID_FILTER
 
 
+def test_an_unquoted_true_is_still_a_boolean() -> None:
+    """Accepting unquoted values must not turn `active eq true` into the string
+    "true", which would match nobody and look like an empty directory."""
+    assert parse_user_filter("active eq true").value is True
+    assert parse_user_filter("active eq false").value is False
+
+
 def test_a_compound_filter_is_refused_rather_than_half_read() -> None:
     """The one that matters.
 
@@ -131,6 +143,10 @@ def test_a_compound_filter_is_refused_rather_than_half_read() -> None:
         parse_user_filter('userName eq "ada@demo.local" and active eq true')
 
     assert raised.value.scim_type == ScimType.INVALID_FILTER
+
+    # And the same without quotes, which is the form that made this possible.
+    with pytest.raises(ScimError):
+        parse_user_filter("userName eq ada and active eq true")
 
 
 def test_filtering_on_something_we_do_not_index_says_what_is_allowed() -> None:

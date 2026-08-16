@@ -9,6 +9,7 @@ and then translating its tree into SQL.
 We accept a subset, deliberately:
 
     userName eq "ada@demo.local"
+    userName eq ada@demo.local        (unquoted — authentik sends this)
     externalId eq "9f1c-..."
     displayName eq "Engineering"
     active eq true
@@ -33,18 +34,20 @@ from dataclasses import dataclass
 
 from iam.scim.errors import bad_filter
 
-# attribute, operator, value. The value is either a quoted string or a bare
-# true/false. Anchored at both ends so a filter with anything trailing — an
-# `and`, a bracket, a second clause — fails to match rather than being read as
-# just its first clause.
+# attribute, operator, value. The value is a quoted string, or an unquoted run of
+# non-space characters.
+#
+# Anchored at both ends, and that is what keeps the unquoted form safe: a second
+# clause like `userName eq a and active eq true` has a space after the `a`, so the
+# whole expression fails to match rather than being read as just its first part.
 _SIMPLE_EQ = re.compile(
     r"""
     ^\s*
     (?P<attribute>[A-Za-z][A-Za-z0-9_.\$]*)   # userName, externalId, urn:...:attr
     \s+(?P<operator>[A-Za-z]{2})\s+           # eq, co, sw, ...
     (?:
-        "(?P<quoted>(?:[^"\\]|\\.)*)"         # "ada@demo.local"
-      | (?P<bare>true|false)                  # active eq true
+        "(?P<quoted>(?:[^"\\]|\\.)*)"         # userName eq "ada@demo.local"
+      | (?P<bare>\S+)                         # userName eq akadmin, active eq true
     )
     \s*$
     """,
@@ -132,7 +135,16 @@ def parse_filter(expression: str, attributes: dict[str, str]) -> Comparison:
 
     bare = match.group("bare")
     if bare is not None:
-        return Comparison(column=column, value=bare.lower() == "true")
+        # true and false are booleans; anything else unquoted is a string.
+        #
+        # The spec says a string comparison value is a quoted JSON string, and
+        # authentik sends `userName eq akadmin` with no quotes at all. Refusing
+        # that is technically defensible and practically useless: the filter is
+        # the first thing a provider sends, so rejecting it means the sync never
+        # starts. Both forms are accepted, and the tests cover both.
+        if bare.lower() in ("true", "false"):
+            return Comparison(column=column, value=bare.lower() == "true")
+        return Comparison(column=column, value=bare)
 
     return Comparison(column=column, value=_unescape(match.group("quoted") or ""))
 
