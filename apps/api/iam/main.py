@@ -26,6 +26,8 @@ from iam.routers import (
     login_inspector,
     me,
     saml,
+    scim_discovery,
+    scim_groups,
     scim_users,
     users,
 )
@@ -111,7 +113,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # SCIM lives outside /api too, and for the same reason: a provider posts here
     # directly, so it is part of the site rather than the console's own JSON API.
     # Caddy proxies /scim/* on its own rule.
+    # Discovery first: a provider reads these before it sends anything.
+    app.include_router(scim_discovery.router)
     app.include_router(scim_users.router)
+    app.include_router(scim_groups.router)
 
     # SCIM has its own error document, and a provider reading FastAPI's
     # {"detail": ...} learns nothing it can act on. Registered here so no handler

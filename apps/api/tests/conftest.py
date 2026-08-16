@@ -50,8 +50,12 @@ from tests.saml_harness import (
 from tests.support import (
     TEST_DATABASE_ENV_VAR,
     UNREACHABLE_DATABASE_URL,
+    ScimCaller,
     build_settings,
+    create_scim_client,
     database_url,
+    new_scim_caller,
+    remove_scim_client,
 )
 
 __all__ = [
@@ -100,6 +104,15 @@ def console() -> Iterator[ConsoleUsers]:
     create_console_users(made)
     yield made
     remove_console_users(made)
+
+
+@pytest.fixture
+def caller() -> Iterator[ScimCaller]:
+    """A usable SCIM bearer token, and everything it created cleaned up after."""
+    made = new_scim_caller()
+    create_scim_client(made)
+    yield made
+    remove_scim_client(made)
 
 
 @pytest.fixture

@@ -9,14 +9,23 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import TypeVar
 
 import pytest
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.config import Settings
 from iam.db import build_engine, build_sessionmaker
+from iam.models.group import Group, GroupMember
+from iam.models.saml import SamlSession
+from iam.models.scim import ScimClient
+from iam.models.user import User
+from iam.scim.constants import SCIM_MEDIA_TYPE
+from iam.security.tokens import hash_token, new_token
 
 T = TypeVar("T")
 
@@ -43,6 +52,71 @@ def database_url() -> str:
     if not url:
         pytest.skip(f"{TEST_DATABASE_ENV_VAR} is not set")
     return url
+
+
+@dataclass(frozen=True, slots=True)
+class ScimCaller:
+    """A SCIM client and the token it was issued, unique to one test.
+
+    The token is generated here and only its hash is stored, the same way a real
+    one would be — so these tests exercise the actual lookup path rather than a
+    shortcut around it.
+    """
+
+    suffix: str
+    token: str
+
+    @property
+    def name(self) -> str:
+        return f"test-client-{self.suffix}"
+
+    @property
+    def user_name(self) -> str:
+        return f"scim.{self.suffix}@demo.local"
+
+    @property
+    def other_user_name(self) -> str:
+        """A second person, for the tests that need more than one row."""
+        return f"scim.other.{self.suffix}@demo.local"
+
+    @property
+    def group_name(self) -> str:
+        return f"SCIM Test Group {self.suffix}"
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.token}", "Content-Type": SCIM_MEDIA_TYPE}
+
+
+def new_scim_caller() -> ScimCaller:
+    return ScimCaller(suffix=uuid.uuid4().hex[:12], token=new_token())
+
+
+def create_scim_client(caller: ScimCaller) -> None:
+    async def work(session: AsyncSession) -> None:
+        session.add(ScimClient(name=caller.name, token_hash=hash_token(caller.token), enabled=True))
+
+    run_db(work)
+
+
+def remove_scim_client(caller: ScimCaller) -> None:
+    """Take away everything one SCIM test made.
+
+    Order matters: sessions and memberships reference people, and people are
+    referenced by nothing else here, so they go last.
+    """
+
+    async def work(session: AsyncSession) -> None:
+        names = (caller.user_name, caller.other_user_name)
+        people = (await session.scalars(select(User).where(User.user_name.in_(names)))).all()
+        for person in people:
+            await session.execute(delete(SamlSession).where(SamlSession.user_id == person.id))
+            await session.execute(delete(GroupMember).where(GroupMember.user_id == person.id))
+        await session.execute(delete(Group).where(Group.name.like(f"%{caller.suffix}%")))
+        await session.execute(delete(User).where(User.user_name.in_(names)))
+        await session.execute(delete(ScimClient).where(ScimClient.name == caller.name))
+
+    run_db(work)
 
 
 def run_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:

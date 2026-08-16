@@ -12,13 +12,11 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
-from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.models.audit import AuditEvent
@@ -27,59 +25,11 @@ from iam.models.saml import SamlSession
 from iam.models.scim import ScimClient
 from iam.models.user import User
 from iam.scim.constants import ENTERPRISE_USER_SCHEMA, SCIM_MEDIA_TYPE
-from iam.security.tokens import hash_token, new_token
-from tests.support import run_db
+from tests.support import ScimCaller, run_db
 
 pytestmark = pytest.mark.integration
 
 USERS = "/scim/v2/Users"
-
-
-@dataclass(frozen=True, slots=True)
-class ScimCaller:
-    """A SCIM client and the token it was issued, unique to one test."""
-
-    suffix: str
-    token: str
-
-    @property
-    def name(self) -> str:
-        return f"test-client-{self.suffix}"
-
-    @property
-    def user_name(self) -> str:
-        return f"scim.{self.suffix}@demo.local"
-
-    @property
-    def other_user_name(self) -> str:
-        """A second person, for the tests that need more than one row."""
-        return f"scim.other.{self.suffix}@demo.local"
-
-    @property
-    def headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.token}", "Content-Type": SCIM_MEDIA_TYPE}
-
-
-@pytest.fixture
-def caller() -> Iterator[ScimCaller]:
-    """A usable SCIM token, cleaned up afterwards."""
-    made = ScimCaller(suffix=uuid.uuid4().hex[:12], token=new_token())
-
-    async def create(session: AsyncSession) -> None:
-        session.add(ScimClient(name=made.name, token_hash=hash_token(made.token), enabled=True))
-
-    run_db(create)
-    yield made
-
-    async def tidy_up(session: AsyncSession) -> None:
-        names = (made.user_name, made.other_user_name)
-        people = (await session.scalars(select(User).where(User.user_name.in_(names)))).all()
-        for person in people:
-            await session.execute(delete(SamlSession).where(SamlSession.user_id == person.id))
-        await session.execute(delete(User).where(User.user_name.in_(names)))
-        await session.execute(delete(ScimClient).where(ScimClient.name == made.name))
-
-    run_db(tidy_up)
 
 
 def body(caller: ScimCaller, **overrides: object) -> dict[str, object]:

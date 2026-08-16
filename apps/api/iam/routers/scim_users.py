@@ -201,6 +201,20 @@ async def create_user(
     values = user_fields_from_scim(payload)
     user_name = str(values["user_name"])
 
+    # SCIM does not require an email and our column does. A provider that sends
+    # none gets the userName used instead, which is nearly always an address —
+    # the same fallback read_claims makes for a SAML login, for the same reason.
+    # If it isn't one, refuse clearly rather than letting the insert fail: a 500
+    # tells the provider nothing, and it would retry forever.
+    if "email" not in values:
+        if "@" in user_name:
+            values["email"] = user_name
+        else:
+            raise bad_value(
+                "This person has no email address, and the userName is not one "
+                "either, so there is nothing to store. Send emails[].value."
+            )
+
     existing = await session.scalar(
         select(User).where(func.lower(User.user_name) == user_name.lower())
     )
