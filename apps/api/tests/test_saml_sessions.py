@@ -27,7 +27,6 @@ from iam.saml.sessions import (
     clear_session_cookie,
     create_session,
     find_by_token,
-    hash_token,
     lookup_session,
     new_session_token,
     revoke_all_for_user,
@@ -36,6 +35,7 @@ from iam.saml.sessions import (
     set_session_cookie,
     touch_session,
 )
+from iam.security.tokens import hash_token
 
 NOW = dt.datetime(2026, 8, 14, 12, 0, 0, tzinfo=dt.UTC)
 

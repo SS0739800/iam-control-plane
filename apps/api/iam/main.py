@@ -26,8 +26,11 @@ from iam.routers import (
     login_inspector,
     me,
     saml,
+    scim_users,
     users,
 )
+from iam.scim.errors import ScimError
+from iam.scim.responses import scim_error_handler
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +107,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # part of the site rather than the JSON API, and Caddy proxies /saml/* on its
     # own rule.
     app.include_router(saml.router)
+
+    # SCIM lives outside /api too, and for the same reason: a provider posts here
+    # directly, so it is part of the site rather than the console's own JSON API.
+    # Caddy proxies /scim/* on its own rule.
+    app.include_router(scim_users.router)
+
+    # SCIM has its own error document, and a provider reading FastAPI's
+    # {"detail": ...} learns nothing it can act on. Registered here so no handler
+    # builds the envelope itself and the shape cannot drift between endpoints.
+    app.add_exception_handler(ScimError, scim_error_handler)
 
     # SAML login works now, but the development stand-in is still behind it for
     # requests that arrive without a session cookie. Say so on startup rather than

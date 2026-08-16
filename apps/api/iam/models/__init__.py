@@ -29,6 +29,7 @@ from iam.models.saml import (
     SamlRequestState,
     SamlSession,
 )
+from iam.models.scim import ScimClient
 from iam.models.user import User
 
 __all__ = [
@@ -51,5 +52,6 @@ __all__ = [
     "SamlAssertionSeen",
     "SamlRequestState",
     "SamlSession",
+    "ScimClient",
     "User",
 ]

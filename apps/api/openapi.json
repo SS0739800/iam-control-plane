@@ -578,6 +578,85 @@
         "title": "DashboardCounts",
         "type": "object"
       },
+      "Email": {
+        "additionalProperties": true,
+        "description": "One address. SCIM sends a list even when there is only ever one.",
+        "properties": {
+          "primary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": true,
+            "title": "Primary"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "work",
+            "title": "Type"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "Email",
+        "type": "object"
+      },
+      "EnterpriseUser": {
+        "additionalProperties": true,
+        "description": "The bits an HRMS cares about, which the base User schema leaves out.\n\nDeliberately an extension rather than core: a provider has to name the URN to\nsend these, so receiving them is always something the other side chose.",
+        "properties": {
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "employeeNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employeenumber"
+          },
+          "manager": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "EnterpriseUser",
+        "type": "object"
+      },
       "GroupDetail": {
         "properties": {
           "applications": {
@@ -1294,6 +1373,158 @@
         "title": "LoginCheck",
         "type": "object"
       },
+      "MemberRef": {
+        "additionalProperties": true,
+        "description": "A pointer from one resource to another.\n\n``$ref`` is a URL to the thing pointed at. Providers largely ignore it and\nthe spec asks for it, so it goes in.",
+        "properties": {
+          "$ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "$Ref"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "value": {
+            "description": "The id of the referenced resource.",
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "MemberRef",
+        "type": "object"
+      },
+      "Meta": {
+        "additionalProperties": true,
+        "description": "The bookkeeping SCIM attaches to every resource.",
+        "properties": {
+          "created": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "lastModified": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastmodified"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "resourceType": {
+            "title": "Resourcetype",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ETag. Providers use it for conditional updates; we send it so a client that cares can, and we do not require it back.",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "resourceType"
+        ],
+        "title": "Meta",
+        "type": "object"
+      },
+      "Name": {
+        "additionalProperties": true,
+        "description": "A person's name, split the way SCIM splits it.",
+        "properties": {
+          "familyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Familyname"
+          },
+          "formatted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formatted"
+          },
+          "givenName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Givenname"
+          }
+        },
+        "title": "Name",
+        "type": "object"
+      },
       "Page_ApplicationSummary_": {
         "properties": {
           "items": {
@@ -1422,6 +1653,60 @@
         "title": "Page[UserSummary]",
         "type": "object"
       },
+      "PatchOperation": {
+        "additionalProperties": true,
+        "description": "One change inside a PATCH.\n\n``value`` is deliberately untyped. It is a scalar for ``replace active``, an\nobject for ``replace`` on a complex attribute, and a list for ``add members``,\nand pinning it to one of those breaks the other two.",
+        "properties": {
+          "op": {
+            "title": "Op",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "title": "PatchOperation",
+        "type": "object"
+      },
+      "PatchRequest": {
+        "additionalProperties": true,
+        "description": "A set of changes to apply to one resource.\n\nThis is how deprovisioning arrives. When somebody leaves, the provider does\nnot delete them \u2014 it sends ``replace active false``, and that one operation\nis the most important thing this server handles.",
+        "properties": {
+          "Operations": {
+            "items": {
+              "$ref": "#/components/schemas/PatchOperation"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "schemas": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Schemas",
+            "type": "array"
+          }
+        },
+        "required": [
+          "Operations"
+        ],
+        "title": "PatchRequest",
+        "type": "object"
+      },
       "PlatformRole": {
         "description": "What someone can do inside this console.\n\nFour broad roles, stored straight on the user for now. P4 works them out from\nsomeone's access grants instead, and this column becomes a cached copy rather\nthan the real answer.",
         "enum": [
@@ -1470,6 +1755,111 @@
           "database"
         ],
         "title": "Readiness",
+        "type": "object"
+      },
+      "ScimUser": {
+        "additionalProperties": true,
+        "description": "A person, in SCIM's shape.\n\n``extra=\"allow\"`` is inherited on purpose. Providers send attributes we don't\nmodel \u2014 ``locale``, ``timezone``, ``phoneNumbers``, whole extension URNs \u2014\nand the spec says to ignore what you don't understand rather than reject it.\nRejecting means a provider whose default profile includes one extra field\ncannot create anybody here at all.",
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Displayname"
+          },
+          "emails": {
+            "items": {
+              "$ref": "#/components/schemas/Email"
+            },
+            "title": "Emails",
+            "type": "array"
+          },
+          "externalId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Externalid"
+          },
+          "groups": {
+            "description": "Read-only. Group membership is changed by PATCHing the group, not the person \u2014 see the note on ScimGroup.members.",
+            "items": {
+              "$ref": "#/components/schemas/MemberRef"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Meta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Name"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemas": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Schemas",
+            "type": "array"
+          },
+          "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnterpriseUser"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userName": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "userName"
+        ],
+        "title": "ScimUser",
         "type": "object"
       },
       "SignedInUser": {
@@ -3194,6 +3584,300 @@
         "summary": "Single logout, in both directions",
         "tags": [
           "saml"
+        ]
+      }
+    },
+    "/scim/v2/Users": {
+      "get": {
+        "description": "People, filtered and paged the way SCIM asks for.\n\nAlmost every call here is a provider asking \"do you already have this one?\"\nbefore deciding whether to create or update. That is why an unreadable filter\nis an error rather than being ignored \u2014 see iam/scim/filters.py.",
+        "operationId": "list_users_scim_v2_Users_get",
+        "parameters": [
+          {
+            "description": "A single comparison, e.g. userName eq \"ada@demo.local\"",
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A single comparison, e.g. userName eq \"ada@demo.local\"",
+              "title": "Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startIndex",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Startindex"
+            }
+          },
+          {
+            "in": "query",
+            "name": "count",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Count"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List or search people",
+        "tags": [
+          "scim"
+        ]
+      },
+      "post": {
+        "description": "Add somebody the provider has told us about.\n\nA userName that already exists answers 409 with scimType uniqueness rather\nthan creating a duplicate. That is not just correctness about the spec: it is\nwhat lets a provider recover, because it reads that code and switches to\nupdating the person instead of reporting a failed sync forever.\n\nSomebody who already exists gets a 409 whatever created them, including\nsomebody P2 created just-in-time at their first login. That is not a dead end:\na provider searches by userName before creating, finds them, and updates them\ninstead \u2014 and that update is what promotes a just-in-time record to a\nSCIM-managed one. See _adopt.",
+        "operationId": "create_user_scim_v2_Users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a person",
+        "tags": [
+          "scim"
+        ]
+      }
+    },
+    "/scim/v2/Users/{user_id}": {
+      "delete": {
+        "description": "Switch somebody off. Deliberately not a delete.\n\nA provider sending DELETE means \"this person has left\", and the useful\nresponse to that is to end their access, not to erase the evidence of what\nthey had. The row stays, active goes false, and their sessions are cut \u2014 the\nsame thing PATCH active false does, because they mean the same thing.\n\nAnswers 204 either way. A provider retrying a delete it already sent should\nnot get an error for being thorough.",
+        "operationId": "delete_user_scim_v2_Users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deactivate a person",
+        "tags": [
+          "scim"
+        ]
+      },
+      "get": {
+        "operationId": "get_user_scim_v2_Users__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One person",
+        "tags": [
+          "scim"
+        ]
+      },
+      "patch": {
+        "description": "Apply a partial change. This is how deprovisioning arrives.\n\nWhen somebody leaves, a provider does not delete them \u2014 it sends\n``replace active false``. That single operation is the most important thing\nthis endpoint handles, and it has to end their sessions as well as set the\nflag.",
+        "operationId": "patch_user_scim_v2_Users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change part of a person",
+        "tags": [
+          "scim"
+        ]
+      },
+      "put": {
+        "description": "Overwrite what the provider owns, leave the rest alone.\n\n\"Replace\" in SCIM means the resource, not the row. Fields the document does\nnot carry keep their values rather than being blanked, and fields SCIM is not\nallowed to write \u2014 what somebody may do in this console, most of all \u2014 are\nuntouched whatever the document says. See WRITABLE_USER_FIELDS.",
+        "operationId": "replace_user_scim_v2_Users__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimUser"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace a person",
+        "tags": [
+          "scim"
         ]
       }
     }

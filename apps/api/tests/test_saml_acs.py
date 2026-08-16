@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 
 from iam.models.enums import IdentitySource
 from iam.saml.checks import MalformedResponse
-from iam.saml.sessions import hash_token
 from iam.saml.sp import REQUEST_TTL
+from iam.security.tokens import hash_token
 from tests.saml_harness import (
     STUB_CERT,
     Scenario,

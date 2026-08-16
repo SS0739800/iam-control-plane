@@ -5,9 +5,10 @@ deliberate trade: a signed token means no database lookup on every request, but 
 can't take one back once you've issued it. P4 has to cut someone off the moment
 they're deactivated, and you can't un-issue a token — you can delete a row.
 
-The browser gets a long random string in a cookie. We store only its hash, the
-same way passwords are handled. Someone who reads this table still can't sign in as
-anybody, because the hash won't turn back into the cookie.
+The browser gets a long random string in a cookie. We store only its hash, so
+someone who reads this table still can't sign in as anybody. The issuing and
+hashing live in iam/security/tokens.py, shared with the SCIM tokens, because it
+is the same problem twice and the reasoning belongs in one place.
 
 No xmlsec here, so this is testable anywhere.
 """
@@ -15,8 +16,6 @@ No xmlsec here, so this is testable anywhere.
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
-import secrets
 import uuid
 
 from fastapi import Response
@@ -25,9 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.config import Settings
 from iam.models.saml import SamlSession
-
-SESSION_COOKIE_TOKEN_BYTES = 32
-"""Length of the random value in the cookie. Guessing one is guessing a login."""
+from iam.security.tokens import hash_token, new_token
 
 SESSION_LIFETIME = dt.timedelta(hours=8)
 """How long someone stays signed in. Roughly a working day, so people aren't
@@ -58,18 +55,7 @@ class RevokedReason:
 
 def new_session_token() -> str:
     """The value that goes in the cookie. Never stored anywhere."""
-    return secrets.token_urlsafe(SESSION_COOKIE_TOKEN_BYTES)
-
-
-def hash_token(token: str) -> str:
-    """What we store instead of the cookie value.
-
-    Plain SHA-256 rather than a slow password hash, on purpose. Slow hashing exists
-    to make guessing human-chosen passwords expensive. This token is 32 random
-    bytes, so there is nothing to guess, and doing it slowly would just add work to
-    every single request.
-    """
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return new_token()
 
 
 async def create_session(
