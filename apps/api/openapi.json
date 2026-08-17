@@ -1,6 +1,93 @@
 {
   "components": {
     "schemas": {
+      "AccessSummary": {
+        "description": "Everything one person has, and where it came from.\n\nThe access review view for a single person. Answers the three questions in\norder: what can they do here, what apps can they get into, and why.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "grant_history": {
+            "description": "Every role they have ever had, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/RoleGrantOut"
+            },
+            "title": "Grant History",
+            "type": "array"
+          },
+          "groups": {
+            "description": "Groups they are in.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/PlatformRole",
+            "description": "What they can do in this console right now."
+          },
+          "role_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Expires At"
+          },
+          "role_granted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Granted At"
+          },
+          "role_granted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who gave them that, if it was granted rather than default.",
+            "title": "Role Granted By"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "user_name": {
+            "title": "User Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "display_name",
+          "active",
+          "role"
+        ],
+        "title": "AccessSummary",
+        "type": "object"
+      },
       "ActorType": {
         "description": "What kind of thing did this.",
         "enum": [
@@ -656,6 +743,18 @@
         },
         "title": "EnterpriseUser",
         "type": "object"
+      },
+      "GrantSource": {
+        "description": "How somebody came to have an access grant.\n\nThe point of recording this is that \"why does this person have admin\" has an\nanswer other than shrugging. A grant with no provenance is indistinguishable\nfrom one somebody added to the database by hand.",
+        "enum": [
+          "direct",
+          "rule",
+          "request",
+          "seed",
+          "migrated"
+        ],
+        "title": "GrantSource",
+        "type": "string"
       },
       "GroupDetail": {
         "properties": {
@@ -1708,7 +1807,7 @@
         "type": "object"
       },
       "PlatformRole": {
-        "description": "What someone can do inside this console.\n\nFour broad roles, stored straight on the user for now. P4 works them out from\nsomeone's access grants instead, and this column becomes a cached copy rather\nthan the real answer.",
+        "description": "What someone can do inside this console.\n\nFour broad roles. Which one someone has is decided by their role grants, not\nby the column on the user \u2014 that column is a cached copy, rebuilt whenever a\ngrant changes. See iam/access/roles.py for why it works that way.\n\nEMPLOYEE is the odd one out: it isn't granted, it's what someone is when\nnothing has been granted to them. So there is never a role grant saying\n\"employee\", and asking for one is refused rather than quietly stored.",
         "enum": [
           "admin",
           "helpdesk",
@@ -1867,6 +1966,164 @@
           "database"
         ],
         "title": "Readiness",
+        "type": "object"
+      },
+      "RoleGrantCreate": {
+        "description": "Give somebody a console role.",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it should stop applying on its own. Strongly preferred for admin \u2014 standing access nobody revisits is how an unnoticed admin happens.",
+            "title": "Expires At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why. Worth filling in: it is the part of an access review that cannot be reconstructed later.",
+            "title": "Reason"
+          },
+          "role": {
+            "$ref": "#/components/schemas/PlatformRole",
+            "description": "admin, helpdesk or auditor. Not employee \u2014 that is what somebody is with no grant, so revoke instead of granting it."
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "RoleGrantCreate",
+        "type": "object"
+      },
+      "RoleGrantOut": {
+        "description": "One decision to give somebody a role, live or long finished.",
+        "properties": {
+          "created_at": {
+            "description": "When it was granted.",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "granted_by_label": {
+            "description": "Who granted it. A copy of their name, so it survives their own record being deleted.",
+            "title": "Granted By Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "live": {
+            "description": "Whether this grant is giving them anything right now. False for anything revoked, superseded, or past its expiry.",
+            "title": "Live",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_by_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked By Label"
+          },
+          "revoked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "revoked, superseded, expired, user_deactivated, or somebody's own wording.",
+            "title": "Revoked Reason"
+          },
+          "role": {
+            "$ref": "#/components/schemas/PlatformRole"
+          },
+          "source": {
+            "$ref": "#/components/schemas/GrantSource"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "source",
+          "reason",
+          "granted_by_label",
+          "created_at",
+          "expires_at",
+          "revoked_at",
+          "revoked_by_label",
+          "revoked_reason",
+          "live"
+        ],
+        "title": "RoleGrantOut",
+        "type": "object"
+      },
+      "RoleGrantRevoke": {
+        "properties": {
+          "reason": {
+            "default": "revoked",
+            "description": "Why it was taken away, so a review can say.",
+            "maxLength": 200,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "RoleGrantRevoke",
         "type": "object"
       },
       "ScimClientCreate": {
@@ -3940,6 +4197,50 @@
         ]
       }
     },
+    "/api/users/{user_id}/access": {
+      "get": {
+        "description": "One person's access, gathered in one place.",
+        "operationId": "access_summary_api_users__user_id__access_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Everything this person has, and why",
+        "tags": [
+          "access"
+        ]
+      }
+    },
     "/api/users/{user_id}/groups/{group_id}": {
       "delete": {
         "operationId": "remove_from_group_api_users__user_id__groups__group_id__delete",
@@ -4028,6 +4329,165 @@
         "summary": "Add a user to a group",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/users/{user_id}/role-grants": {
+      "delete": {
+        "description": "Revoke their role, putting them back to employee.\n\nRevoking when there is nothing to revoke is not an error \u2014 the end state is\nwhat was asked for.\n\nRaises:\n    HTTPException: 409 if they are the last admin.",
+        "operationId": "delete_role_grant_api_users__user_id__role_grants_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RoleGrantRevoke"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take this person's console role away",
+        "tags": [
+          "access"
+        ]
+      },
+      "get": {
+        "description": "The full history, newest first.\n\nRevoked and expired grants included, because \"what could they do last month\"\nis most of what an access review is asking.",
+        "operationId": "list_role_grants_api_users__user_id__role_grants_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoleGrantOut"
+                  },
+                  "title": "Response List Role Grants Api Users  User Id  Role Grants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Every role this person has ever had",
+        "tags": [
+          "access"
+        ]
+      },
+      "post": {
+        "description": "Grant a role, replacing whatever they had.\n\nRaises:\n    HTTPException: 400 if the grant doesn't make sense \u2014 'employee', an expiry\n        already in the past, or a deactivated person. 409 if it would demote\n        the last admin.",
+        "operationId": "create_role_grant_api_users__user_id__role_grants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleGrantCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleGrantOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Give this person a console role",
+        "tags": [
+          "access"
         ]
       }
     },

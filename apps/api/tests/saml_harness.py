@@ -27,7 +27,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from iam.models.enums import IdentitySource, PlatformRole
+from iam.models.access import RoleGrant
+from iam.models.enums import GrantSource, IdentitySource, PlatformRole
 from iam.models.saml import IdentityProvider, SamlAssertionSeen, SamlRequestState, SamlSession
 from iam.models.user import User
 from iam.saml.checks import (
@@ -172,6 +173,26 @@ class ConsoleUsers:
     def as_user(self, user_name: str) -> dict[str, str]:
         return {"X-Dev-Actor": user_name}
 
+    def id_of(self, user_name: str) -> uuid.UUID:
+        """The database id for one of these people."""
+
+        async def work(session: AsyncSession) -> uuid.UUID:
+            found = await session.scalar(select(User).where(User.user_name == user_name))
+            assert found is not None, f"{user_name} was not created"
+            return found.id
+
+        return run_db(work)
+
+    def user_name_of(self, user_id: uuid.UUID) -> str:
+        """The userName for an id, for tests that need to act as somebody they made."""
+
+        async def work(session: AsyncSession) -> str:
+            found = await session.get(User, user_id)
+            assert found is not None, f"no user {user_id}"
+            return found.user_name
+
+        return run_db(work)
+
     @property
     def by_role(self) -> tuple[tuple[str, PlatformRole], ...]:
         return (
@@ -191,18 +212,39 @@ def new_console_users() -> ConsoleUsers:
 
 
 def create_console_users(console: ConsoleUsers) -> None:
+    """One user per role, with a real grant behind each one.
+
+    The grant matters. Roles are decided by role_grants now and the column on the
+    user is a cache of them, so a fixture that set only the column would create
+    people the drift check reports and the last-admin guard cannot see. Anything
+    testing "who may do what" would then be testing a state the application can't
+    actually produce.
+    """
+
     async def work(session: AsyncSession) -> None:
         for user_name, role in console.by_role:
-            session.add(
-                User(
-                    user_name=user_name,
-                    email=user_name,
-                    display_name=f"{role.value.title()} {console.suffix}",
-                    active=True,
-                    platform_role=role,
-                    source=IdentitySource.SEED,
-                )
+            user = User(
+                user_name=user_name,
+                email=user_name,
+                display_name=f"{role.value.title()} {console.suffix}",
+                active=True,
+                platform_role=role,
+                source=IdentitySource.SEED,
             )
+            session.add(user)
+            await session.flush()
+
+            # Employee is the absence of a grant, so it gets none.
+            if role != PlatformRole.EMPLOYEE:
+                session.add(
+                    RoleGrant(
+                        user_id=user.id,
+                        role=role,
+                        source=GrantSource.SEED,
+                        reason="Created by the test fixture",
+                        granted_by_label="the test fixture",
+                    )
+                )
 
     run_db(work)
 
@@ -213,6 +255,13 @@ def remove_console_users(console: ConsoleUsers) -> None:
             delete(SamlRequestState).where(SamlRequestState.idp_slug == console.slug)
         )
         await session.execute(delete(IdentityProvider).where(IdentityProvider.slug == console.slug))
+        # Grants first: they point at these users, and the cascade only fires on a
+        # real DELETE of the parent row, which is what comes next.
+        await session.execute(
+            delete(RoleGrant).where(
+                RoleGrant.user_id.in_(select(User.id).where(User.user_name.in_(console.user_names)))
+            )
+        )
         await session.execute(delete(User).where(User.user_name.in_(console.user_names)))
 
     run_db(work)

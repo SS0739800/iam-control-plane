@@ -62,6 +62,8 @@ export type LoginAttempt = Schema<'LoginAttempt'>
 export type LoginAttemptDetail = Schema<'LoginAttemptDetail'>
 export type LoginCheck = Schema<'LoginCheck'>
 export type ScimClient = Schema<'ScimClientSummary'>
+export type RoleGrant = Schema<'RoleGrantOut'>
+export type AccessSummary = Schema<'AccessSummary'>
 export type ScimClientIssued = Schema<'ScimClientIssued'>
 export type ProvisioningOverview = Schema<'ProvisioningOverview'>
 export type ProvisioningActivity = Schema<'ProvisioningActivity'>
@@ -264,6 +266,43 @@ export async function revokeScimClient(clientId: string, reason: string): Promis
   return unwrap(
     await client.POST('/api/provisioning/clients/{client_id}/revoke', {
       params: { path: { client_id: clientId } },
+      body: { reason },
+    }),
+  )
+}
+
+// -------------------------------------------------------------- role grants
+
+export async function fetchRoleGrants(userId: string): Promise<RoleGrant[]> {
+  return unwrap(
+    await client.GET('/api/users/{user_id}/role-grants', {
+      params: { path: { user_id: userId } },
+    }),
+  )
+}
+
+export async function fetchAccessSummary(userId: string): Promise<AccessSummary> {
+  return unwrap(
+    await client.GET('/api/users/{user_id}/access', { params: { path: { user_id: userId } } }),
+  )
+}
+
+export async function grantRole(
+  userId: string,
+  body: { role: PlatformRole; reason?: string | null; expires_at?: string | null },
+): Promise<RoleGrant> {
+  return unwrap(
+    await client.POST('/api/users/{user_id}/role-grants', {
+      params: { path: { user_id: userId } },
+      body,
+    }),
+  )
+}
+
+export async function revokeRole(userId: string, reason: string): Promise<AccessSummary> {
+  return unwrap(
+    await client.DELETE('/api/users/{user_id}/role-grants', {
+      params: { path: { user_id: userId } },
       body: { reason },
     }),
   )

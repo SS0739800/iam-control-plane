@@ -491,6 +491,26 @@ export interface paths {
         patch: operations["update_user_api_users__user_id__patch"];
         trace?: never;
     };
+    "/api/users/{user_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything this person has, and why
+         * @description One person's access, gathered in one place.
+         */
+        get: operations["access_summary_api_users__user_id__access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/{user_id}/groups/{group_id}": {
         parameters: {
             query?: never;
@@ -507,6 +527,48 @@ export interface paths {
         post?: never;
         /** Remove a user from a group */
         delete: operations["remove_from_group_api_users__user_id__groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/role-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every role this person has ever had
+         * @description The full history, newest first.
+         *
+         *     Revoked and expired grants included, because "what could they do last month"
+         *     is most of what an access review is asking.
+         */
+        get: operations["list_role_grants_api_users__user_id__role_grants_get"];
+        put?: never;
+        /**
+         * Give this person a console role
+         * @description Grant a role, replacing whatever they had.
+         *
+         *     Raises:
+         *         HTTPException: 400 if the grant doesn't make sense — 'employee', an expiry
+         *             already in the past, or a deactivated person. 409 if it would demote
+         *             the last admin.
+         */
+        post: operations["create_role_grant_api_users__user_id__role_grants_post"];
+        /**
+         * Take this person's console role away
+         * @description Revoke their role, putting them back to employee.
+         *
+         *     Revoking when there is nothing to revoke is not an error — the end state is
+         *     what was asked for.
+         *
+         *     Raises:
+         *         HTTPException: 409 if they are the last admin.
+         */
+        delete: operations["delete_role_grant_api_users__user_id__role_grants_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -938,6 +1000,47 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccessSummary
+         * @description Everything one person has, and where it came from.
+         *
+         *     The access review view for a single person. Answers the three questions in
+         *     order: what can they do here, what apps can they get into, and why.
+         */
+        AccessSummary: {
+            /** Active */
+            active: boolean;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Grant History
+             * @description Every role they have ever had, newest first.
+             */
+            grant_history?: components["schemas"]["RoleGrantOut"][];
+            /**
+             * Groups
+             * @description Groups they are in.
+             */
+            groups?: string[];
+            /** @description What they can do in this console right now. */
+            role: components["schemas"]["PlatformRole"];
+            /** Role Expires At */
+            role_expires_at?: string | null;
+            /** Role Granted At */
+            role_granted_at?: string | null;
+            /**
+             * Role Granted By
+             * @description Who gave them that, if it was granted rather than default.
+             */
+            role_granted_by?: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** User Name */
+            user_name: string;
+        };
+        /**
          * ActorType
          * @description What kind of thing did this.
          * @enum {string}
@@ -1197,6 +1300,16 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * GrantSource
+         * @description How somebody came to have an access grant.
+         *
+         *     The point of recording this is that "why does this person have admin" has an
+         *     answer other than shrugging. A grant with no provenance is indistinguishable
+         *     from one somebody added to the database by hand.
+         * @enum {string}
+         */
+        GrantSource: "direct" | "rule" | "request" | "seed" | "migrated";
         /** GroupDetail */
         GroupDetail: {
             /** Applications */
@@ -1730,9 +1843,13 @@ export interface components {
          * PlatformRole
          * @description What someone can do inside this console.
          *
-         *     Four broad roles, stored straight on the user for now. P4 works them out from
-         *     someone's access grants instead, and this column becomes a cached copy rather
-         *     than the real answer.
+         *     Four broad roles. Which one someone has is decided by their role grants, not
+         *     by the column on the user — that column is a cached copy, rebuilt whenever a
+         *     grant changes. See iam/access/roles.py for why it works that way.
+         *
+         *     EMPLOYEE is the odd one out: it isn't granted, it's what someone is when
+         *     nothing has been granted to them. So there is never a role grant saying
+         *     "employee", and asking for one is refused rather than quietly stored.
          * @enum {string}
          */
         PlatformRole: "admin" | "helpdesk" | "auditor" | "employee";
@@ -1817,6 +1934,75 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "degraded";
+        };
+        /**
+         * RoleGrantCreate
+         * @description Give somebody a console role.
+         */
+        RoleGrantCreate: {
+            /**
+             * Expires At
+             * @description When it should stop applying on its own. Strongly preferred for admin — standing access nobody revisits is how an unnoticed admin happens.
+             */
+            expires_at?: string | null;
+            /**
+             * Reason
+             * @description Why. Worth filling in: it is the part of an access review that cannot be reconstructed later.
+             */
+            reason?: string | null;
+            /** @description admin, helpdesk or auditor. Not employee — that is what somebody is with no grant, so revoke instead of granting it. */
+            role: components["schemas"]["PlatformRole"];
+        };
+        /**
+         * RoleGrantOut
+         * @description One decision to give somebody a role, live or long finished.
+         */
+        RoleGrantOut: {
+            /**
+             * Created At
+             * Format: date-time
+             * @description When it was granted.
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Granted By Label
+             * @description Who granted it. A copy of their name, so it survives their own record being deleted.
+             */
+            granted_by_label: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Live
+             * @description Whether this grant is giving them anything right now. False for anything revoked, superseded, or past its expiry.
+             */
+            live: boolean;
+            /** Reason */
+            reason: string | null;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revoked By Label */
+            revoked_by_label: string | null;
+            /**
+             * Revoked Reason
+             * @description revoked, superseded, expired, user_deactivated, or somebody's own wording.
+             */
+            revoked_reason: string | null;
+            role: components["schemas"]["PlatformRole"];
+            source: components["schemas"]["GrantSource"];
+        };
+        /** RoleGrantRevoke */
+        RoleGrantRevoke: {
+            /**
+             * Reason
+             * @description Why it was taken away, so a review can say.
+             * @default revoked
+             */
+            reason: string;
         };
         /**
          * ScimClientCreate
@@ -2859,6 +3045,37 @@ export interface operations {
             };
         };
     };
+    access_summary_api_users__user_id__access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     add_to_group_api_users__user_id__groups__group_id__put: {
         parameters: {
             query?: never;
@@ -2907,6 +3124,107 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_role_grants_api_users__user_id__role_grants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleGrantOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_role_grant_api_users__user_id__role_grants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleGrantCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleGrantOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_role_grant_api_users__user_id__role_grants_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RoleGrantRevoke"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessSummary"];
+                };
             };
             /** @description Validation Error */
             422: {

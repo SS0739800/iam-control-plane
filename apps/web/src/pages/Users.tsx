@@ -19,7 +19,8 @@ import {
   Th,
   type Tone,
 } from '../components/ui'
-import { fetchUser, fetchUsers } from '../lib/api'
+import { fetchMe, fetchUser, fetchUsers } from '../lib/api'
+import RoleGrantPanel from '../components/RoleGrantPanel'
 
 const PAGE_SIZE = 25
 
@@ -111,6 +112,10 @@ export function UsersPage() {
 export function UserDetailPage() {
   const { userId = '' } = useParams()
   const user = useQuery({ queryKey: ['user', userId], queryFn: () => fetchUser(userId) })
+  // The API enforces this; asking here only decides whether to draw the form.
+  // A control that always fails is worse than no control.
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
+  const canGrantRoles = me.data?.permissions.includes('roles:write') ?? false
 
   if (user.isPending) return <Loading />
   if (user.isError) return <ErrorBox error={user.error} />
@@ -141,13 +146,14 @@ export function UserDetailPage() {
               '—'
             )}
           </Row>
-          <Row label="Console role">{person.platform_role}</Row>
           <Row label="Created by">{person.source}</Row>
           <Row label="External id">
             <Mono>{person.external_id ?? '—'}</Mono>
           </Row>
         </dl>
       </Panel>
+
+      <RoleGrantPanel userId={userId} canWrite={canGrantRoles} />
 
       <Panel title={`Groups (${person.groups.length})`}>
         {person.groups.length === 0 ? (

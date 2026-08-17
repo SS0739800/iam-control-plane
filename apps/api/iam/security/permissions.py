@@ -26,6 +26,22 @@ class Permission(StrEnum):
     APPS_READ = "apps:read"
     APPS_WRITE = "apps:write"
 
+    ROLES_READ = "roles:read"
+    """See who has been given what in this console, and the history of it.
+
+    Review work, so helpdesk and auditor get it. Being able to see that somebody
+    is an admin is not a power; being unable to see it is how an unnoticed admin
+    happens."""
+
+    ROLES_WRITE = "roles:write"
+    """Grant or revoke a console role. Admin only, and it must never be widened.
+
+    Deliberately not part of users:write, which helpdesk holds. If granting a role
+    were a user edit, then anybody who can fix a name could make themselves an
+    admin, and the whole permission table would be decoration. This is the one
+    permission that can create more of itself, which is exactly why it gets its
+    own line and the narrowest possible audience."""
+
     IDP_READ = "idp:read"
     IDP_WRITE = "idp:write"
     """Configure which outside systems we believe about identity. Admin only.
@@ -60,6 +76,7 @@ ROLE_PERMISSIONS: Mapping[PlatformRole, frozenset[Permission]] = {
             Permission.USERS_WRITE,
             Permission.GROUPS_READ,
             Permission.APPS_READ,
+            Permission.ROLES_READ,
             Permission.IDP_READ,
             Permission.AUDIT_READ,
         }
@@ -71,6 +88,7 @@ ROLE_PERMISSIONS: Mapping[PlatformRole, frozenset[Permission]] = {
             Permission.USERS_READ,
             Permission.GROUPS_READ,
             Permission.APPS_READ,
+            Permission.ROLES_READ,
             Permission.IDP_READ,
             Permission.AUDIT_READ,
             Permission.AUDIT_VERIFY,
