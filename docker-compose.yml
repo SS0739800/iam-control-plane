@@ -124,13 +124,18 @@ services:
       # Creates the akadmin account on first boot instead of making you click
       # through the setup wizard, so a fresh volume comes up ready to use and the
       # README can tell you the password rather than a URL to go and pick one.
-      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-akadmin@demo.local}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-akadmin@demo-corp.com}
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?set AUTHENTIK_BOOTSTRAP_PASSWORD in .env}
       # Read by infra/authentik/blueprints/iam-console.yaml, so the addresses in
       # the SAML application come from the same BASE_URL as everything else
       # instead of being written out twice and drifting apart.
       IAM_BASE_URL: ${BASE_URL:-http://localhost:8080}
       AUTHENTIK_BASE_URL: ${AUTHENTIK_BASE_URL:-http://localhost:9000}
+      # Where authentik pushes accounts to. A service name, not localhost: this
+      # one is server to server with no browser in it, unlike the SAML addresses
+      # above. See infra/authentik/blueprints/iam-scim.yaml.
+      IAM_SCIM_URL: ${IAM_SCIM_URL:-http://caddy:8080/scim/v2}
+      IAM_SCIM_TOKEN: ${IAM_SCIM_TOKEN:-}
     ports:
       - '9000:9000'
     volumes:

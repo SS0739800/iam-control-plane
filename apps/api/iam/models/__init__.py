@@ -10,6 +10,7 @@ name ("Group", "AppAssignment") on import rather than on the first query.
 
 from __future__ import annotations
 
+from iam.models.access import RevokedGrantReason, RoleGrant
 from iam.models.application import AppAssignment, Application
 from iam.models.audit import GENESIS_HASH, HASH_LENGTH, AuditEvent
 from iam.models.base import Base
@@ -18,6 +19,7 @@ from iam.models.enums import (
     AppProtocol,
     AppStatus,
     AuditOutcome,
+    GrantSource,
     IdentitySource,
     PlatformRole,
     PrincipalType,
@@ -43,12 +45,15 @@ __all__ = [
     "AuditEvent",
     "AuditOutcome",
     "Base",
+    "GrantSource",
     "Group",
     "GroupMember",
     "IdentityProvider",
     "IdentitySource",
     "PlatformRole",
     "PrincipalType",
+    "RevokedGrantReason",
+    "RoleGrant",
     "SamlAssertionSeen",
     "SamlRequestState",
     "SamlSession",

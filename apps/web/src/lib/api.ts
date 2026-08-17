@@ -61,6 +61,10 @@ export type IdentityProviderSummary = Schema<'IdentityProviderSummary'>
 export type LoginAttempt = Schema<'LoginAttempt'>
 export type LoginAttemptDetail = Schema<'LoginAttemptDetail'>
 export type LoginCheck = Schema<'LoginCheck'>
+export type ScimClient = Schema<'ScimClientSummary'>
+export type ScimClientIssued = Schema<'ScimClientIssued'>
+export type ProvisioningOverview = Schema<'ProvisioningOverview'>
+export type ProvisioningActivity = Schema<'ProvisioningActivity'>
 
 export type PlatformRole = UserSummary['platform_role']
 
@@ -227,6 +231,40 @@ export async function fetchLoginAttempt(eventId: number): Promise<LoginAttemptDe
   return unwrap(
     await client.GET('/api/saml/logins/{event_id}', {
       params: { path: { event_id: eventId } },
+    }),
+  )
+}
+
+// ------------------------------------------------------------- provisioning
+
+export async function fetchProvisioningOverview(): Promise<ProvisioningOverview> {
+  return unwrap(await client.GET('/api/provisioning/overview'))
+}
+
+export async function fetchScimClients(): Promise<ScimClient[]> {
+  return unwrap(await client.GET('/api/provisioning/clients'))
+}
+
+export async function fetchProvisioningActivity(limit = 25): Promise<ProvisioningActivity[]> {
+  return unwrap(await client.GET('/api/provisioning/activity', { params: { query: { limit } } }))
+}
+
+/**
+ * Issue a token. The response carries it once and nothing can fetch it again,
+ * so whatever calls this has to be the thing that shows it to the person.
+ */
+export async function issueScimClient(body: {
+  name: string
+  description?: string | null
+}): Promise<ScimClientIssued> {
+  return unwrap(await client.POST('/api/provisioning/clients', { body }))
+}
+
+export async function revokeScimClient(clientId: string, reason: string): Promise<ScimClient> {
+  return unwrap(
+    await client.POST('/api/provisioning/clients/{client_id}/revoke', {
+      params: { path: { client_id: clientId } },
+      body: { reason },
     }),
   )
 }

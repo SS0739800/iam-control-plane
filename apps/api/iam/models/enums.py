@@ -56,15 +56,48 @@ class IdentitySource(StrEnum):
 class PlatformRole(StrEnum):
     """What someone can do inside this console.
 
-    Four broad roles, stored straight on the user for now. P4 works them out from
-    someone's access grants instead, and this column becomes a cached copy rather
-    than the real answer.
+    Four broad roles. Which one someone has is decided by their role grants, not
+    by the column on the user — that column is a cached copy, rebuilt whenever a
+    grant changes. See iam/access/roles.py for why it works that way.
+
+    EMPLOYEE is the odd one out: it isn't granted, it's what someone is when
+    nothing has been granted to them. So there is never a role grant saying
+    "employee", and asking for one is refused rather than quietly stored.
     """
 
     ADMIN = "admin"
     HELPDESK = "helpdesk"
     AUDITOR = "auditor"
     EMPLOYEE = "employee"
+
+
+class GrantSource(StrEnum):
+    """How somebody came to have an access grant.
+
+    The point of recording this is that "why does this person have admin" has an
+    answer other than shrugging. A grant with no provenance is indistinguishable
+    from one somebody added to the database by hand.
+    """
+
+    DIRECT = "direct"
+    """An admin granted it in the console, on purpose, to this one person."""
+
+    RULE = "rule"
+    """An access rule gave it to them because of who they are."""
+
+    REQUEST = "request"
+    """They asked for it and somebody approved."""
+
+    SEED = "seed"
+    """The demo data script. Never appears in a real deployment."""
+
+    MIGRATED = "migrated"
+    """The role was already on the user's row before grants existed.
+
+    Nobody can say who decided these or when, because that was never recorded —
+    which is the whole reason grants exist now. They are marked rather than
+    invented so a review can tell "this one predates us knowing" apart from "an
+    admin chose this on Tuesday"."""
 
 
 class AppProtocol(StrEnum):

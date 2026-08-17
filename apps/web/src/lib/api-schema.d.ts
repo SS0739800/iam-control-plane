@@ -283,6 +283,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/provisioning/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the provisioning systems have been doing
+         * @description Recent directory writes that came from a SCIM client.
+         *
+         *     A view over the audit log, filtered to entries a provisioning system made. It
+         *     answers the question this screen exists for — "is anything actually arriving,
+         *     and what" — without making somebody scroll the whole log looking for it.
+         */
+        get: operations["activity_api_provisioning_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/provisioning/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The systems allowed to write to the directory
+         * @description Every client, revoked ones included.
+         *
+         *     Not filtered to the usable ones. A revoked token is exactly what somebody is
+         *     looking for when they are working out why a sync stopped.
+         */
+        get: operations["list_clients_api_provisioning_clients_get"];
+        put?: never;
+        /**
+         * Issue a token for a provisioning system
+         * @description Create a client and hand back its token, once.
+         *
+         *     The token is in this response and nowhere else, ever. We keep only its hash,
+         *     so there is nothing to show later even if the screen offered to.
+         *
+         *     The audit entry records that a token was issued and by whom. It does not
+         *     record the token, which would rather defeat the point of not storing it.
+         */
+        post: operations["issue_client_api_provisioning_clients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/provisioning/clients/{client_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop accepting a token
+         * @description Stop a token working, and record why.
+         *
+         *     Marked rather than deleted. Revoking one is the thing you do when you think it
+         *     has leaked, and that is precisely when you want the row to survive so the
+         *     audit log's references to it still resolve.
+         *
+         *     Revoking an already-revoked client leaves the original reason and timestamp
+         *     alone. When it was cut off is the fact that matters.
+         */
+        post: operations["revoke_client_api_provisioning_clients__client_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/provisioning/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What provisioning has done to this directory
+         * @description The numbers that say whether the sync is doing its job.
+         *
+         *     ``users_from_login`` is the one worth watching. Somebody arriving by logging
+         *     in means SCIM had not told us about them yet, which is fine occasionally and a
+         *     sign of a broken or narrow sync if it keeps happening.
+         */
+        get: operations["overview_api_provisioning_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/saml/logins": {
         parameters: {
             query?: never;
@@ -609,6 +717,222 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scim/v2/Groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List or search groups */
+        get: operations["list_groups_scim_v2_Groups_get"];
+        put?: never;
+        /**
+         * Create a group
+         * @description Create a group, with whoever it says is in it.
+         */
+        post: operations["create_group_scim_v2_Groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One group */
+        get: operations["get_group_scim_v2_Groups__group_id__get"];
+        /**
+         * Replace a group
+         * @description Set the group to exactly what arrived, members included.
+         *
+         *     PUT means replace, so the membership becomes the list in the document and
+         *     anybody missing from it is removed. That is the destructive reading and it is
+         *     the correct one here — unlike PATCH add, which only ever puts people in.
+         */
+        put: operations["replace_group_scim_v2_Groups__group_id__put"];
+        post?: never;
+        /**
+         * Delete a group
+         * @description Remove a group. Unlike a person, this really does delete.
+         *
+         *     A group is a container, not somebody's record. Keeping an emptied group
+         *     around forever would clutter the directory without answering any question the
+         *     audit log doesn't already answer — the entries saying who was in it and when
+         *     they were removed survive this, because the audit log is append-only.
+         *
+         *     The membership rows go with it through the cascade; the people do not.
+         */
+        delete: operations["delete_group_scim_v2_Groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change part of a group
+         * @description Add or remove members, or rename the group.
+         *
+         *     This is how membership actually changes in practice: somebody joins a team
+         *     upstream and the provider sends one ``add`` with one member in it.
+         *
+         *     The distinction that matters is between ``add`` and ``replace`` on
+         *     ``members``. Add puts people in and leaves everyone else alone. Replace sets
+         *     the list to exactly what arrived, removing anybody absent from it. Treating
+         *     an add as a replace empties groups, and does it quietly.
+         */
+        patch: operations["patch_group_scim_v2_Groups__group_id__patch"];
+        trace?: never;
+    };
+    "/scim/v2/ResourceTypes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The kinds of thing that live here */
+        get: operations["resource_types_scim_v2_ResourceTypes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Schemas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The attributes each kind of thing has */
+        get: operations["schemas_scim_v2_Schemas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/ServiceProviderConfig": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this server supports
+         * @description What we can do, answered honestly.
+         *
+         *     ``patch`` is true and it matters more than the rest: it is how deprovisioning
+         *     arrives. A provider told patch is unsupported falls back to PUT, which means
+         *     sending a whole resource to change one boolean.
+         *
+         *     ``bulk`` is false. A provider that believes otherwise will post a bundle of
+         *     operations to an endpoint that does not exist.
+         */
+        get: operations["service_provider_config_scim_v2_ServiceProviderConfig_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List or search people
+         * @description People, filtered and paged the way SCIM asks for.
+         *
+         *     Almost every call here is a provider asking "do you already have this one?"
+         *     before deciding whether to create or update. That is why an unreadable filter
+         *     is an error rather than being ignored — see iam/scim/filters.py.
+         */
+        get: operations["list_users_scim_v2_Users_get"];
+        put?: never;
+        /**
+         * Create a person
+         * @description Add somebody the provider has told us about.
+         *
+         *     A userName that already exists answers 409 with scimType uniqueness rather
+         *     than creating a duplicate. That is not just correctness about the spec: it is
+         *     what lets a provider recover, because it reads that code and switches to
+         *     updating the person instead of reporting a failed sync forever.
+         *
+         *     Somebody who already exists gets a 409 whatever created them, including
+         *     somebody P2 created just-in-time at their first login. That is not a dead end:
+         *     a provider searches by userName before creating, finds them, and updates them
+         *     instead — and that update is what promotes a just-in-time record to a
+         *     SCIM-managed one. See _adopt.
+         */
+        post: operations["create_user_scim_v2_Users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One person */
+        get: operations["get_user_scim_v2_Users__user_id__get"];
+        /**
+         * Replace a person
+         * @description Overwrite what the provider owns, leave the rest alone.
+         *
+         *     "Replace" in SCIM means the resource, not the row. Fields the document does
+         *     not carry keep their values rather than being blanked, and fields SCIM is not
+         *     allowed to write — what somebody may do in this console, most of all — are
+         *     untouched whatever the document says. See WRITABLE_USER_FIELDS.
+         */
+        put: operations["replace_user_scim_v2_Users__user_id__put"];
+        post?: never;
+        /**
+         * Deactivate a person
+         * @description Switch somebody off. Deliberately not a delete.
+         *
+         *     A provider sending DELETE means "this person has left", and the useful
+         *     response to that is to end their access, not to erase the evidence of what
+         *     they had. The row stays, active goes false, and their sessions are cut — the
+         *     same thing PATCH active false does, because they mean the same thing.
+         *
+         *     Answers 204 either way. A provider retrying a delete it already sent should
+         *     not get an error for being thorough.
+         */
+        delete: operations["delete_user_scim_v2_Users__user_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change part of a person
+         * @description Apply a partial change. This is how deprovisioning arrives.
+         *
+         *     When somebody leaves, a provider does not delete them — it sends
+         *     ``replace active false``. That single operation is the most important thing
+         *     this endpoint handles, and it has to end their sessions as well as set the
+         *     flag.
+         */
+        patch: operations["patch_user_scim_v2_Users__user_id__patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -836,6 +1160,42 @@ export interface components {
             sso_applications: number;
             /** Users */
             users: number;
+        };
+        /**
+         * Email
+         * @description One address. SCIM sends a list even when there is only ever one.
+         */
+        Email: {
+            /**
+             * Primary
+             * @default true
+             */
+            primary: boolean | null;
+            /**
+             * Type
+             * @default work
+             */
+            type: string | null;
+            /** Value */
+            value: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * EnterpriseUser
+         * @description The bits an HRMS cares about, which the base User schema leaves out.
+         *
+         *     Deliberately an extension rather than core: a provider has to name the URN to
+         *     send these, so receiving them is always something the other side chose.
+         */
+        EnterpriseUser: {
+            /** Department */
+            department?: string | null;
+            /** Employeenumber */
+            employeeNumber?: string | null;
+            manager?: components["schemas"]["MemberRef"] | null;
+        } & {
+            [key: string]: unknown;
         };
         /** GroupDetail */
         GroupDetail: {
@@ -1219,6 +1579,63 @@ export interface components {
             /** Passed */
             passed: boolean;
         };
+        /**
+         * MemberRef
+         * @description A pointer from one resource to another.
+         *
+         *     ``$ref`` is a URL to the thing pointed at. Providers largely ignore it and
+         *     the spec asks for it, so it goes in.
+         */
+        MemberRef: {
+            /** $Ref */
+            $ref?: string | null;
+            /** Display */
+            display?: string | null;
+            /** Type */
+            type?: string | null;
+            /**
+             * Value
+             * @description The id of the referenced resource.
+             */
+            value: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * Meta
+         * @description The bookkeeping SCIM attaches to every resource.
+         */
+        Meta: {
+            /** Created */
+            created?: string | null;
+            /** Lastmodified */
+            lastModified?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Resourcetype */
+            resourceType: string;
+            /**
+             * Version
+             * @description An ETag. Providers use it for conditional updates; we send it so a client that cares can, and we do not require it back.
+             */
+            version?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * Name
+         * @description A person's name, split the way SCIM splits it.
+         */
+        Name: {
+            /** Familyname */
+            familyName?: string | null;
+            /** Formatted */
+            formatted?: string | null;
+            /** Givenname */
+            givenName?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** Page[ApplicationSummary] */
         Page_ApplicationSummary_: {
             /** Items */
@@ -1276,6 +1693,40 @@ export interface components {
             total: number;
         };
         /**
+         * PatchOperation
+         * @description One change inside a PATCH.
+         *
+         *     ``value`` is deliberately untyped. It is a scalar for ``replace active``, an
+         *     object for ``replace`` on a complex attribute, and a list for ``add members``,
+         *     and pinning it to one of those breaks the other two.
+         */
+        PatchOperation: {
+            /** Op */
+            op: string;
+            /** Path */
+            path?: string | null;
+            /** Value */
+            value?: unknown;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PatchRequest
+         * @description A set of changes to apply to one resource.
+         *
+         *     This is how deprovisioning arrives. When somebody leaves, the provider does
+         *     not delete them — it sends ``replace active false``, and that one operation
+         *     is the most important thing this server handles.
+         */
+        PatchRequest: {
+            /** Operations */
+            Operations: components["schemas"]["PatchOperation"][];
+            /** Schemas */
+            schemas?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * PlatformRole
          * @description What someone can do inside this console.
          *
@@ -1285,6 +1736,67 @@ export interface components {
          * @enum {string}
          */
         PlatformRole: "admin" | "helpdesk" | "auditor" | "employee";
+        /**
+         * ProvisioningActivity
+         * @description One thing a provisioning system did to the directory.
+         */
+        ProvisioningActivity: {
+            /** Action */
+            action: string;
+            /**
+             * Client
+             * @description Which SCIM client did it.
+             */
+            client: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Outcome */
+            outcome: string;
+            /**
+             * Summary
+             * @description What changed, in words, when we know.
+             */
+            summary?: string | null;
+            /**
+             * Target
+             * @description Who or what it was done to.
+             */
+            target: string | null;
+        };
+        /**
+         * ProvisioningOverview
+         * @description What provisioning has actually done to this directory.
+         *
+         *     Counts rather than a list, because the answer people want from this screen is
+         *     "is the sync working and what does it own", not a directory listing they can
+         *     already get from the Users page.
+         */
+        ProvisioningOverview: {
+            /** Active Clients */
+            active_clients: number;
+            /** Groups From Scim */
+            groups_from_scim: number;
+            /**
+             * Last Sync At
+             * @description The most recent time any provisioning client wrote anything.
+             */
+            last_sync_at?: string | null;
+            /**
+             * Users From Login
+             * @description People who arrived by logging in rather than being provisioned. A healthy sync makes this number small: it means SCIM had not heard of them yet when they first signed in.
+             */
+            users_from_login: number;
+            /**
+             * Users From Scim
+             * @description People the provider created or now manages.
+             */
+            users_from_scim: number;
+        };
         /**
          * Readiness
          * @description Is the app able to do its job, i.e. can it reach the database.
@@ -1305,6 +1817,172 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "degraded";
+        };
+        /**
+         * ScimClientCreate
+         * @description Ask for a new token.
+         */
+        ScimClientCreate: {
+            /**
+             * Description
+             * @description Why it exists, for whoever finds it in six months.
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @description What to call it, e.g. 'authentik (local)'. Has to be unique so the audit log is unambiguous about which system acted.
+             */
+            name: string;
+        };
+        /**
+         * ScimClientIssued
+         * @description A newly created client, with its token.
+         *
+         *     The only response that ever carries a token. Store it now; there is no way to
+         *     read it again, because we kept only the hash.
+         */
+        ScimClientIssued: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Used At
+             * @description When this token was last accepted. The useful question is the opposite one: a token nobody has used for months is one nobody would notice being stolen.
+             */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revoked Reason */
+            revoked_reason: string | null;
+            /**
+             * Token
+             * @description The bearer token. Shown once. Give it to the provider as Authorization: Bearer <token>.
+             */
+            token: string;
+            /**
+             * Usable
+             * @description Whether this token would be accepted right now — enabled and not revoked.
+             */
+            usable: boolean;
+        };
+        /** ScimClientRevoke */
+        ScimClientRevoke: {
+            /**
+             * Reason
+             * @description Why, so the audit log can say.
+             * @default revoked from the console
+             */
+            reason: string;
+        };
+        /**
+         * ScimClientSummary
+         * @description A system we accept directory writes from.
+         */
+        ScimClientSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Used At
+             * @description When this token was last accepted. The useful question is the opposite one: a token nobody has used for months is one nobody would notice being stolen.
+             */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revoked Reason */
+            revoked_reason: string | null;
+            /**
+             * Usable
+             * @description Whether this token would be accepted right now — enabled and not revoked.
+             */
+            usable: boolean;
+        };
+        /**
+         * ScimGroup
+         * @description A group, in SCIM's shape.
+         */
+        ScimGroup: {
+            /** Displayname */
+            displayName: string;
+            /** Externalid */
+            externalId?: string | null;
+            /** Id */
+            id?: string | null;
+            /**
+             * Members
+             * @description Who is in the group. This is the writable side of membership: a provider adds somebody by PATCHing the group here, and User.groups is the read-only reflection of it.
+             */
+            members?: components["schemas"]["MemberRef"][];
+            meta?: components["schemas"]["Meta"] | null;
+            /** Schemas */
+            schemas?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ScimUser
+         * @description A person, in SCIM's shape.
+         *
+         *     ``extra="allow"`` is inherited on purpose. Providers send attributes we don't
+         *     model — ``locale``, ``timezone``, ``phoneNumbers``, whole extension URNs —
+         *     and the spec says to ignore what you don't understand rather than reject it.
+         *     Rejecting means a provider whose default profile includes one extra field
+         *     cannot create anybody here at all.
+         */
+        ScimUser: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Displayname */
+            displayName?: string | null;
+            /** Emails */
+            emails?: components["schemas"]["Email"][];
+            /** Externalid */
+            externalId?: string | null;
+            /**
+             * Groups
+             * @description Read-only. Group membership is changed by PATCHing the group, not the person — see the note on ScimGroup.members.
+             */
+            groups?: components["schemas"]["MemberRef"][];
+            /** Id */
+            id?: string | null;
+            meta?: components["schemas"]["Meta"] | null;
+            name?: components["schemas"]["Name"] | null;
+            /** Schemas */
+            schemas?: string[];
+            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"?: components["schemas"]["EnterpriseUser"] | null;
+            /** Username */
+            userName: string;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * SignedInUser
@@ -1871,6 +2549,145 @@ export interface operations {
             };
         };
     };
+    activity_api_provisioning_activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningActivity"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_clients_api_provisioning_clients_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScimClientSummary"][];
+                };
+            };
+        };
+    };
+    issue_client_api_provisioning_clients_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScimClientCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScimClientIssued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_client_api_provisioning_clients__client_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScimClientRevoke"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScimClientSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_provisioning_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningOverview"];
+                };
+            };
+        };
+    };
     list_login_attempts_api_saml_logins_get: {
         parameters: {
             query?: {
@@ -2236,6 +3053,460 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_groups_scim_v2_Groups_get: {
+        parameters: {
+            query?: {
+                /** @description A single comparison, e.g. displayName eq "Engineering" */
+                filter?: string | null;
+                startIndex?: number | null;
+                count?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_group_scim_v2_Groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScimGroup"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_group_scim_v2_Groups__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_group_scim_v2_Groups__group_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScimGroup"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_group_scim_v2_Groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_group_scim_v2_Groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resource_types_scim_v2_ResourceTypes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    schemas_scim_v2_Schemas_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    service_provider_config_scim_v2_ServiceProviderConfig_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_users_scim_v2_Users_get: {
+        parameters: {
+            query?: {
+                /** @description A single comparison, e.g. userName eq "ada@demo.local" */
+                filter?: string | null;
+                startIndex?: number | null;
+                count?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_user_scim_v2_Users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScimUser"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_scim_v2_Users__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_user_scim_v2_Users__user_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScimUser"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_user_scim_v2_Users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_user_scim_v2_Users__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

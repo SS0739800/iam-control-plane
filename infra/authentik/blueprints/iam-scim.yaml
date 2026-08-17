@@ -1,0 +1,86 @@
+# Pushing accounts from authentik into this console, over SCIM.
+#
+# The other half of the pair. iam-console.yaml lets people sign in; this one keeps
+# the directory in step whether they sign in or not — somebody added in authentik
+# appears here straight away, and somebody removed there is switched off here
+# without waiting for them to come back and prove it.
+#
+# Needs a bearer token, which this console issues:
+#
+#   cd apps/api && python -m scripts.issue_scim_token "authentik (local)"
+#
+# Put the result in .env as IAM_SCIM_TOKEN and restart the idp profile. The token
+# is read from the environment rather than written here on purpose: a blueprint
+# is a file in git, and a credential in git is a credential you have to rotate
+# the day somebody clones the repo.
+#
+# Without IAM_SCIM_TOKEN set this blueprint still applies, with an obviously
+# empty token, and the sync fails with a 401 that says exactly that. That beats
+# refusing to apply, which would take the SAML application down with it.
+version: 1
+
+metadata:
+  name: IAM Console — SCIM provisioning
+  labels:
+    blueprints.goauthentik.io/description: |
+      Pushes users and groups into the IAM console. Needs IAM_SCIM_TOKEN in the
+      environment, issued by apps/api/scripts/issue_scim_token.py.
+
+entries:
+  - model: authentik_providers_scim.scimprovider
+    id: iam-console-scim
+    identifiers:
+      name: IAM Console SCIM
+    attrs:
+      # A container name, not localhost — and this is the one thing here most
+      # likely to be got wrong.
+      #
+      # The SAML addresses in iam-console.yaml are browser-facing, so they are
+      # localhost: a person's browser resolves them. SCIM is authentik talking to
+      # us directly, with no browser involved, so it has to be an address that
+      # means something inside the compose network. "localhost" in authentik's
+      # container is authentik, and it would cheerfully POST our users to itself.
+      #
+      # No trailing slash: authentik appends /Users and /Groups itself.
+      url: !Env [IAM_SCIM_URL, 'http://caddy:8080/scim/v2']
+      token: !Env [IAM_SCIM_TOKEN, 'not-set-see-iam-scim-yaml']
+
+      # Service accounts are authentik's own internal robots — outpost
+      # connections and the like. They are not people and have no business in an
+      # HR directory.
+      exclude_users_service_account: true
+
+      # Everybody, rather than one group. The console is the system of record for
+      # who exists, so a filter here would mean the directory quietly disagreeing
+      # with authentik about who works here.
+      filter_group: null
+
+      property_mappings:
+        - !Find [
+            authentik_providers_scim.scimmapping,
+            [name, 'authentik default SCIM Mapping: User'],
+          ]
+      property_mappings_group:
+        - !Find [
+            authentik_providers_scim.scimmapping,
+            [name, 'authentik default SCIM Mapping: Group'],
+          ]
+
+  # Attach the provider to the application, as a *backchannel* provider.
+  #
+  # This is what actually switches the sync on, and leaving it out is a quiet
+  # failure rather than a loud one: the provider exists, its settings look right
+  # in the admin UI, sync tasks run and report success, and nothing is ever sent.
+  # authentik only syncs SCIM providers that are attached to an application this
+  # way — "backchannel" meaning it talks to the application directly rather than
+  # through somebody's browser, which is exactly what provisioning is.
+  #
+  # The application itself is declared in iam-console.yaml. Naming it here by its
+  # slug rather than by !KeyOf means the two files can be applied in either
+  # order: whichever runs first creates the row, and the second updates it.
+  - model: authentik_core.application
+    identifiers:
+      slug: iam-console
+    attrs:
+      backchannel_providers:
+        - !KeyOf iam-console-scim

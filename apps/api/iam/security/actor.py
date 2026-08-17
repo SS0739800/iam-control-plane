@@ -36,6 +36,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from iam.access.roles import expire_due_grants_for
 from iam.config import Settings
 from iam.db import get_session
 from iam.deps import app_settings
@@ -76,6 +77,29 @@ class Actor:
     def audit_label(self) -> str:
         """How this person's name appears in the audit log."""
         return f"{self.display_name} <{self.user_name}>"
+
+
+async def _drop_expired_role(db: AsyncSession, user: User, *, now: dt.datetime) -> None:
+    """Take away a role whose end date has passed, before we act on it.
+
+    The cached role on the user's row is only refreshed when somebody writes a
+    grant, and expiry is the one change that happens with nobody writing anything.
+    A nightly sweep would leave a window where an expired admin is still an admin,
+    and that window is exactly the thing the expiry date was meant to close.
+
+    Only runs for people the cache says are privileged. Everybody else is already
+    an employee, so there is nothing an expiry could take away, and skipping them
+    keeps this off the hot path for almost every request.
+    """
+    if user.platform_role == PlatformRole.EMPLOYEE:
+        return
+
+    if await expire_due_grants_for(db, user, now=now):
+        await db.commit()
+        logger.info(
+            "auth.expired_role_dropped",
+            extra={"user_name": user.user_name, "now_role": str(user.platform_role)},
+        )
 
 
 def _actor_for(user: User, *, session_id: uuid.UUID | None = None) -> Actor:
@@ -139,6 +163,9 @@ async def _actor_from_cookie(
             detail="This account is deactivated.",
         )
 
+    # Before the role on this row is used for anything.
+    await _drop_expired_role(db, user, now=now)
+
     # Only when it's actually gone stale. See SESSION_TOUCH_INTERVAL — otherwise
     # this would be a database write on every single request.
     if now - live.last_seen_at >= SESSION_TOUCH_INTERVAL:
@@ -152,6 +179,8 @@ async def _actor_from_dev_header(
     request: Request,
     db: AsyncSession,
     settings: Settings,
+    *,
+    now: dt.datetime,
 ) -> Actor:
     """The development stand-in. Never reached in production — see the module docstring.
 
@@ -177,12 +206,16 @@ async def _actor_from_dev_header(
         )
 
     # We keep deactivated users around so their history stays readable, but they
-    # can't do anything. P4's "someone left, cut their access" flow leans on this.
+    # can't do anything. The leaver flow leans on this.
     if not user.active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account is deactivated.",
         )
+
+    # Expiry applies here too. The stand-in is a way to skip logging in, not a way
+    # to keep a role somebody's grant already gave back.
+    await _drop_expired_role(db, user, now=now)
 
     return _actor_for(user)
 
@@ -213,7 +246,7 @@ async def resolve_actor(
             detail=NOT_SIGNED_IN,
         )
 
-    return await _actor_from_dev_header(request, session, settings)
+    return await _actor_from_dev_header(request, session, settings, now=now)
 
 
 CurrentActor = Annotated[Actor, Depends(resolve_actor)]

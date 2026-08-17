@@ -19,6 +19,7 @@ from iam.models.enums import IdentitySource, PlatformRole, enum_type
 from iam.models.mixins import Timestamps, UUIDPrimaryKey
 
 if TYPE_CHECKING:
+    from iam.models.access import RoleGrant
     from iam.models.application import AppAssignment
     from iam.models.group import Group, GroupMember
 
@@ -72,8 +73,8 @@ class User(UUIDPrimaryKey, Timestamps, Base):
         nullable=False,
         default=PlatformRole.EMPLOYEE,
         server_default=PlatformRole.EMPLOYEE.value,
-        comment="What this person can do in the console. In P4 this gets worked "
-        "out from their access grants instead of being stored here.",
+        comment="What this person can do in the console. A cached copy of their "
+        "role grants — iam/access/roles.py is the only thing that writes it.",
     )
 
     source: Mapped[IdentitySource] = mapped_column(
@@ -109,6 +110,16 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     app_assignments: Mapped[list[AppAssignment]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+
+    role_grants: Mapped[list[RoleGrant]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        # Only the grants belonging to this person. RoleGrant also points at the
+        # granter and the revoker, so without this SQLAlchemy can't tell which of
+        # the three foreign keys this relationship means.
+        foreign_keys="RoleGrant.user_id",
+        order_by="RoleGrant.created_at.desc()",
     )
 
     __table_args__ = (
