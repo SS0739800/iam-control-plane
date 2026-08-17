@@ -64,6 +64,12 @@ export type LoginCheck = Schema<'LoginCheck'>
 export type ScimClient = Schema<'ScimClientSummary'>
 export type RoleGrant = Schema<'RoleGrantOut'>
 export type AccessSummary = Schema<'AccessSummary'>
+export type AccessRule = Schema<'AccessRuleOut'>
+export type AccessRuleCreate = Schema<'AccessRuleCreate'>
+export type RuleAttribute = Schema<'RuleAttribute'>
+export type RulePreview = Schema<'RulePreview'>
+export type RuleRunResult = Schema<'RuleRunResult'>
+export type RuleOperator = AccessRule['operator']
 export type ScimClientIssued = Schema<'ScimClientIssued'>
 export type ProvisioningOverview = Schema<'ProvisioningOverview'>
 export type ProvisioningActivity = Schema<'ProvisioningActivity'>
@@ -304,6 +310,45 @@ export async function revokeRole(userId: string, reason: string): Promise<Access
     await client.DELETE('/api/users/{user_id}/role-grants', {
       params: { path: { user_id: userId } },
       body: { reason },
+    }),
+  )
+}
+
+// ------------------------------------------------------------- access rules
+
+export async function fetchAccessRules(): Promise<AccessRule[]> {
+  return unwrap(await client.GET('/api/access-rules'))
+}
+
+export async function fetchRuleAttributes(): Promise<RuleAttribute[]> {
+  return unwrap(await client.GET('/api/access-rules/attributes'))
+}
+
+/** Try a rule without saving it. Writes nothing. */
+export async function previewAccessRule(body: AccessRuleCreate): Promise<RulePreview> {
+  return unwrap(await client.POST('/api/access-rules/preview', { body }))
+}
+
+export async function createAccessRule(body: AccessRuleCreate): Promise<AccessRule> {
+  return unwrap(await client.POST('/api/access-rules', { body }))
+}
+
+export async function setAccessRuleEnabled(
+  ruleId: string,
+  enabled: boolean,
+): Promise<AccessRule> {
+  return unwrap(
+    await client.PATCH('/api/access-rules/{rule_id}', {
+      params: { path: { rule_id: ruleId } },
+      body: { enabled },
+    }),
+  )
+}
+
+export async function deleteAccessRule(ruleId: string): Promise<RuleRunResult> {
+  return unwrap(
+    await client.DELETE('/api/access-rules/{rule_id}', {
+      params: { path: { rule_id: ruleId } },
     }),
   )
 }
