@@ -46,6 +46,7 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from iam.access.requests import cancel_open_for_leaver
 from iam.access.roles import Granter, revoke_for_leaver
 from iam.models.application import AppAssignment, Application
 from iam.models.enums import PlatformRole
@@ -70,10 +71,16 @@ class RemovedAccess:
     role_revoked: PlatformRole | None
     apps_removed: tuple[str, ...]
     groups_at_departure: tuple[str, ...]
+    requests_cancelled: int = 0
 
     @property
     def anything_happened(self) -> bool:
-        return bool(self.sessions_ended or self.role_revoked is not None or self.apps_removed)
+        return bool(
+            self.sessions_ended
+            or self.role_revoked is not None
+            or self.apps_removed
+            or self.requests_cancelled
+        )
 
     def as_audit_detail(self) -> dict[str, object]:
         return {
@@ -83,6 +90,7 @@ class RemovedAccess:
             # Recorded rather than removed. See the module docstring on why group
             # membership is left alone.
             "groups_at_departure": list(self.groups_at_departure),
+            "requests_cancelled": self.requests_cancelled,
         }
 
 
@@ -138,11 +146,17 @@ async def cut_access(
     if apps:
         await db.execute(delete(AppAssignment).where(AppAssignment.user_id == user.id))
 
+    # Anything they had outstanding stops being a question. Left open, their
+    # requests sit in the approvers' queue and the obvious failure is somebody
+    # approving one months later without noticing the requester is gone.
+    cancelled = await cancel_open_for_leaver(db, user.id, now=now)
+
     removed = RemovedAccess(
         sessions_ended=sessions_ended,
         role_revoked=revoked.role if revoked else None,
         apps_removed=tuple(f"{name} ({role})" if role else name for name, role in apps),
         groups_at_departure=tuple(groups),
+        requests_cancelled=cancelled,
     )
 
     if removed.anything_happened:

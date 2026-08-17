@@ -33,6 +33,25 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # ---------------------------------------------------------------- email
+    # Mailpit in compose, which accepts anything and delivers nowhere. That is the
+    # right default for a system that emails people about access: a misconfigured
+    # environment should fail to reach anybody rather than mail a real person.
+    smtp_host: str = "mailpit"
+    smtp_port: int = 1025
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = False
+    mail_from: str = "iam@demo.local"
+
+    mail_enabled: bool = True
+    """Set false to log what would have been sent instead of sending it.
+
+    Not a testing convenience — it is what keeps the notification optional. An
+    approval must not fail because a mail server is down, so sending is best
+    effort either way, and this makes "no mail server at all" a supported setup
+    rather than a stream of errors."""
+
     # ---------------------------------------------------------- application
     app_env: AppEnv = "local"
     log_level: str = "INFO"

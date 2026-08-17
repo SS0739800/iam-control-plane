@@ -25,6 +25,7 @@ from iam.models.enums import (
     PrincipalType,
 )
 from iam.models.group import Group, GroupMember
+from iam.models.requests import AccessRequest
 from iam.models.rules import ATTRIBUTES, AccessRule
 from iam.models.saml import (
     IdentityProvider,
@@ -39,6 +40,7 @@ __all__ = [
     "ATTRIBUTES",
     "GENESIS_HASH",
     "HASH_LENGTH",
+    "AccessRequest",
     "AccessRule",
     "ActorType",
     "AppAssignment",
@@ -56,6 +58,7 @@ __all__ = [
     "MembershipSource",
     "PlatformRole",
     "PrincipalType",
+    "RequestState",
     "RevokedGrantReason",
     "RoleGrant",
     "RuleOperator",

@@ -18,6 +18,7 @@ from iam.db import build_engine, build_sessionmaker
 from iam.logging_setup import configure_logging
 from iam.routers import (
     access,
+    access_requests,
     access_rules,
     applications,
     audit,
@@ -105,6 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(access.router, prefix="/api")
     app.include_router(groups.router, prefix="/api")
     app.include_router(access_rules.router, prefix="/api")
+    app.include_router(access_requests.router, prefix="/api")
     app.include_router(applications.router, prefix="/api")
     app.include_router(identity_providers.router, prefix="/api")
     app.include_router(login_inspector.router, prefix="/api")

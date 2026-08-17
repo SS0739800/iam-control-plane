@@ -1,6 +1,136 @@
 {
   "components": {
     "schemas": {
+      "AccessRequestCreate": {
+        "description": "Ask to be put in a group.",
+        "properties": {
+          "group_id": {
+            "format": "uuid",
+            "title": "Group Id",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the access is needed. Required \u2014 an approver with no reason in front of them is rubber-stamping rather than deciding.",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "reason"
+        ],
+        "title": "AccessRequestCreate",
+        "type": "object"
+      },
+      "AccessRequestOut": {
+        "description": "One request, and what happened to it.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Label"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "group_id": {
+            "format": "uuid",
+            "title": "Group Id",
+            "type": "string"
+          },
+          "group_label": {
+            "title": "Group Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_open": {
+            "title": "Is Open",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requester_id": {
+            "format": "uuid",
+            "title": "Requester Id",
+            "type": "string"
+          },
+          "requester_label": {
+            "title": "Requester Label",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RequestState"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "requester_id",
+          "requester_label",
+          "group_id",
+          "group_label",
+          "reason",
+          "decided_by_label",
+          "decided_at",
+          "decision_note",
+          "expires_at",
+          "created_at",
+          "is_open"
+        ],
+        "title": "AccessRequestOut",
+        "type": "object"
+      },
       "AccessRuleCreate": {
         "description": "Write a new rule.",
         "properties": {
@@ -963,6 +1093,39 @@
           "audit_events"
         ],
         "title": "DashboardCounts",
+        "type": "object"
+      },
+      "Decision": {
+        "description": "An approver's answer.",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Approvals only. When the access should end. 'Until the end of the quarter' is the usual honest answer to an access request.",
+            "title": "Expires At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What you decided and why. The most useful field here during a review, and the one most likely to be left empty.",
+            "title": "Note"
+          }
+        },
+        "title": "Decision",
         "type": "object"
       },
       "Email": {
@@ -2268,6 +2431,18 @@
         "title": "Readiness",
         "type": "object"
       },
+      "RequestState": {
+        "description": "Where an access request has got to.\n\nEvery state after PENDING is final. A request is a record of somebody asking\nand somebody answering, so reopening one would make \"who approved this\" have\nmore than one answer.",
+        "enum": [
+          "pending",
+          "approved",
+          "denied",
+          "withdrawn",
+          "cancelled"
+        ],
+        "title": "RequestState",
+        "type": "string"
+      },
       "RoleGrantCreate": {
         "description": "Give somebody a console role.",
         "properties": {
@@ -3302,6 +3477,392 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/access-requests": {
+      "get": {
+        "description": "Open requests, oldest first \u2014 the order they should be worked in.",
+        "operationId": "queue_api_access_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessRequestOut"
+                  },
+                  "title": "Response Queue Api Access Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "The requests waiting to be decided",
+        "tags": [
+          "access requests"
+        ]
+      },
+      "post": {
+        "description": "Raise a request for yourself.\n\nNo permission required, on purpose. An employee holds no permissions, and a\nrequest system they cannot use is not a request system. Asking grants nothing.\n\nRaises:\n    HTTPException: 400 if the request doesn't make sense, 404 for a group that\n        isn't there.",
+        "operationId": "create_request_api_access_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask for access to a group",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/group/{group_id}": {
+      "get": {
+        "description": "The history for a group, decided ones included.\n\nDenied requests are the interesting ones here. \"Three people asked for this and\nwere all refused\" says something about the group that its membership list does\nnot.",
+        "operationId": "for_group_api_access_requests_group__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessRequestOut"
+                  },
+                  "title": "Response For Group Api Access Requests Group  Group Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Every request ever raised for one group",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/mine": {
+      "get": {
+        "description": "Your own requests, newest first.\n\nNo permission check. Somebody is always allowed to see what they asked for.",
+        "operationId": "my_requests_api_access_requests_mine_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessRequestOut"
+                  },
+                  "title": "Response My Requests Api Access Requests Mine Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Everything I have asked for",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/states/summary": {
+      "get": {
+        "description": "Counts by state, for the console's badge and a quick health read.",
+        "operationId": "state_summary_api_access_requests_states_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response State Summary Api Access Requests States Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "How many requests are in each state",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/{request_id}": {
+      "get": {
+        "description": "Read one request.\n\nYours always; anybody else's needs groups:read. \"Who has been asking for the\nfinance system\" is review information, not public.",
+        "operationId": "get_request_api_access_requests__request_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "One request",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/{request_id}/approve": {
+      "post": {
+        "description": "Approve, and put them in the group in the same transaction.\n\nRaises:\n    HTTPException: 400 if it can't be approved \u2014 already decided, self-approval,\n        an expiry in the past, or the requester has since left.",
+        "operationId": "approve_request_api_access_requests__request_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve a request and grant the access",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/{request_id}/deny": {
+      "post": {
+        "description": "Refuse a request, and keep the record of having refused it.",
+        "operationId": "deny_request_api_access_requests__request_id__deny_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Turn a request down",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
+    "/api/access-requests/{request_id}/withdraw": {
+      "post": {
+        "description": "Withdraw your own request.\n\nNo permission needed, because it is your own. Somebody else closing it is a\ndenial and goes through the other endpoint \u2014 the two are different answers to\nthe same question and the record should say which happened.",
+        "operationId": "withdraw_request_api_access_requests__request_id__withdraw_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take back a request you raised",
+        "tags": [
+          "access requests"
+        ]
+      }
+    },
     "/api/access-rules": {
       "get": {
         "description": "All of them, disabled ones included.\n\nA disabled rule is part of the answer to \"why did this person used to have\nthat\", so hiding it would make the screen less useful, not tidier.",

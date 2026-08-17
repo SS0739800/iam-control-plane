@@ -1,9 +1,23 @@
 """The fixed sets of values used across the tables.
 
-These are stored as plain text columns with a rule limiting what can go in them,
-rather than as real Postgres enum types. Adding a value to a real Postgres enum
-needs an ALTER TYPE, which is awkward in a migration. Swapping a rule is a normal
-drop-and-add.
+Stored as plain text columns rather than real Postgres enum types, because adding
+a value to a real enum needs an ALTER TYPE and that is awkward inside a migration.
+
+Be clear about what does and does not enforce these. SQLAlchemy checks the value
+on the way in — ``validate_strings=True`` below — so nothing written through the
+ORM can hold a value that is not listed here. **The database itself does not
+check.** ``create_constraint`` defaults to False, so these are unconstrained
+VARCHAR(32) columns, and a hand-written UPDATE in psql or a migration can put
+anything in one.
+
+This docstring used to claim the columns carried "a rule limiting what can go in
+them". They do not, and it was checked: ``UPDATE users SET
+platform_role = 'not-a-real-role'`` succeeds. An unrecognised role reads as no
+permissions at all, because permissions_for falls back to an empty set, so it
+fails safe rather than dangerously — but it fails silently.
+
+Adding create_constraint=True plus a migration for the existing columns is the
+fix, and it is worth doing.
 """
 
 from __future__ import annotations
@@ -120,6 +134,12 @@ class MembershipSource(StrEnum):
     """An access rule added them because of who they are. The only kind the rule
     engine will ever remove."""
 
+    REQUEST = "request"
+    """They asked for it and somebody approved. Kept distinct from 'manual' because
+    "somebody approved a request" and "somebody added them" are different answers to
+    "why is this person in here", and the request holds the reason and the
+    approver."""
+
     SEED = "seed"
     """Demo data."""
 
@@ -140,6 +160,25 @@ class RuleOperator(StrEnum):
     IS_SET = "is_set"
     """They have any value at all for it. For "everybody with a department"."""
     IS_NOT_SET = "is_not_set"
+
+
+class RequestState(StrEnum):
+    """Where an access request has got to.
+
+    Every state after PENDING is final. A request is a record of somebody asking
+    and somebody answering, so reopening one would make "who approved this" have
+    more than one answer.
+    """
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    WITHDRAWN = "withdrawn"
+    """The person who asked changed their mind. Kept, because a withdrawn request
+    still says what somebody thought they needed."""
+
+    CANCELLED = "cancelled"
+    """Overtaken by events — usually the requester left, or already has it."""
 
 
 class AppProtocol(StrEnum):
