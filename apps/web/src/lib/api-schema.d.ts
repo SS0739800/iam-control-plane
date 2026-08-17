@@ -4,6 +4,164 @@
  */
 
 export interface paths {
+    "/api/access-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every access rule
+         * @description All of them, disabled ones included.
+         *
+         *     A disabled rule is part of the answer to "why did this person used to have
+         *     that", so hiding it would make the screen less useful, not tidier.
+         */
+        get: operations["list_rules_api_access_rules_get"];
+        put?: never;
+        /**
+         * Write a new rule and apply it
+         * @description Create a rule, then run it against everybody.
+         *
+         *     Raises:
+         *         HTTPException: 400 for a condition that doesn't make sense, 404 for a
+         *             missing group, 409 if the same condition already grants that group.
+         */
+        post: operations["create_rule_api_access_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-rules/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The fields a rule may look at
+         * @description What a rule is allowed to read.
+         *
+         *     A fixed list, not every column on the user. The console builds its dropdown
+         *     from this so the two can't disagree about what is allowed.
+         */
+        get: operations["list_attributes_api_access_rules_attributes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Who would this rule affect?
+         * @description Try a rule without saving it.
+         *
+         *     Writes nothing. A condition that reads correctly and matches four hundred
+         *     people usually means the value was mistyped, and this is where somebody notices
+         *     before it becomes four hundred audit entries.
+         */
+        post: operations["preview_api_access_rules_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a rule and take back what it granted
+         * @description Remove a rule, and remove the access it was giving people.
+         *
+         *     Deleted rather than kept, unlike a role grant. A rule is a statement of intent
+         *     rather than a record of something that happened to somebody, and the audit entry
+         *     holds what it said and who deleted it.
+         *
+         *     The memberships it granted go with it. Leaving them behind would turn automatic
+         *     access into permanent access that nothing explains, which is exactly the
+         *     situation access reviews exist to find.
+         */
+        delete: operations["delete_rule_api_access_rules__rule_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a rule and re-apply it
+         * @description Edit a rule, then bring everybody into line with it.
+         *
+         *     Disabling a rule here takes back what it granted, which is the only reading of
+         *     "disabled" that means anything.
+         */
+        patch: operations["update_rule_api_access_rules__rule_id__patch"];
+        trace?: never;
+    };
+    "/api/access-rules/{rule_id}/affected": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who this rule currently applies to
+         * @description The people a rule matches right now.
+         */
+        get: operations["affected_api_access_rules__rule_id__affected_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-rules/{rule_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply this rule to everybody now
+         * @description Re-run a rule over everybody.
+         *
+         *     Normally unnecessary — writes here apply immediately and attribute changes
+         *     reconcile as they arrive — so this is for the case where somebody edited the
+         *     database directly, or wants to confirm the current state matches the rules.
+         *     A run that reports nothing changed is the answer you want.
+         */
+        post: operations["run_rule_api_access_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/applications": {
         parameters: {
             query?: never;
@@ -1000,6 +1158,109 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccessRuleCreate
+         * @description Write a new rule.
+         */
+        AccessRuleCreate: {
+            /**
+             * Attribute
+             * @description One of the names from GET /api/access-rules/attributes.
+             */
+            attribute: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @description A rule created switched off grants nothing until it is enabled.
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Group Id
+             * Format: uuid
+             * @description The group people matching this rule go into.
+             */
+            group_id: string;
+            /** Name */
+            name: string;
+            operator: components["schemas"]["RuleOperator"];
+            /**
+             * Value
+             * @description Leave empty for is_set and is_not_set; required for everything else.
+             */
+            value?: string | null;
+        };
+        /**
+         * AccessRuleOut
+         * @description A rule, with the sentence it reads as.
+         */
+        AccessRuleOut: {
+            /** Attribute */
+            attribute: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Label */
+            created_by_label: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Group Id
+             * Format: uuid
+             */
+            group_id: string;
+            /** Group Name */
+            group_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Member Count
+             * @description How many people are in the group because of a rule right now.
+             */
+            member_count: number;
+            /** Name */
+            name: string;
+            operator: components["schemas"]["RuleOperator"];
+            /**
+             * Sentence
+             * @description The condition in words, e.g. "Department is 'Engineering'". The console shows this rather than the three fields, because a rule that can't be read out loud can't be reviewed.
+             */
+            sentence: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Value */
+            value: string | null;
+        };
+        /**
+         * AccessRuleUpdate
+         * @description Change a rule. Anything left out stays as it is.
+         */
+        AccessRuleUpdate: {
+            /** Attribute */
+            attribute?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Group Id */
+            group_id?: string | null;
+            /** Name */
+            name?: string | null;
+            operator?: components["schemas"]["RuleOperator"] | null;
+            /** Value */
+            value?: string | null;
+        };
+        /**
          * AccessSummary
          * @description Everything one person has, and where it came from.
          *
@@ -1046,6 +1307,25 @@ export interface components {
          * @enum {string}
          */
         ActorType: "user" | "system" | "idp";
+        /**
+         * AffectedPerson
+         * @description Somebody a rule applies to.
+         */
+        AffectedPerson: {
+            /** Department */
+            department: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Title */
+            job_title: string | null;
+            /** User Name */
+            user_name: string;
+        };
         /**
          * AppProtocol
          * @description How an application integrates with this control plane.
@@ -2005,6 +2285,67 @@ export interface components {
             reason: string;
         };
         /**
+         * RuleAttribute
+         * @description One field a rule is allowed to look at.
+         */
+        RuleAttribute: {
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * RuleOperator
+         * @description How an access rule compares an attribute.
+         *
+         *     A short list on purpose. Every operator here is one somebody can read out loud
+         *     and predict the effect of — "department is Engineering". A general expression
+         *     language would be more powerful and much harder to review, and reviewing is
+         *     the point of writing access down.
+         * @enum {string}
+         */
+        RuleOperator: "equals" | "not_equals" | "contains" | "starts_with" | "is_set" | "is_not_set";
+        /**
+         * RulePreview
+         * @description Who a rule would affect, before anybody commits to it.
+         *
+         *     The difference between writing a rule confidently and writing one and hoping.
+         *     A condition that reads correctly and matches four hundred people usually means
+         *     the value was mistyped, and this is where that gets noticed.
+         */
+        RulePreview: {
+            /**
+             * Already In Group
+             * @description Of those, how many are in the group already — so the rule would change nothing for them.
+             */
+            already_in_group: number;
+            /** Group Name */
+            group_name: string;
+            /** Matches */
+            matches: number;
+            /**
+             * Sample
+             * @description A few of the people who match, to eyeball. Not the whole list.
+             */
+            sample: components["schemas"]["AffectedPerson"][];
+            /** Sentence */
+            sentence: string;
+            /** Would Be Added */
+            would_be_added: number;
+        };
+        /**
+         * RuleRunResult
+         * @description What happened when a rule was applied to everybody.
+         */
+        RuleRunResult: {
+            /** Added */
+            added: string[];
+            /** Removed */
+            removed: string[];
+            /** Unchanged */
+            unchanged: boolean;
+        };
+        /**
          * ScimClientCreate
          * @description Ask for a new token.
          */
@@ -2305,7 +2646,6 @@ export interface components {
             department?: string | null;
             /** Job Title */
             job_title?: string | null;
-            platform_role?: components["schemas"]["PlatformRole"] | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2325,6 +2665,242 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_rules_api_access_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleOut"][];
+                };
+            };
+        };
+    };
+    create_rule_api_access_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_attributes_api_access_rules_attributes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleAttribute"][];
+                };
+            };
+        };
+    };
+    preview_api_access_rules_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulePreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_rule_api_access_rules__rule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleRunResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_rule_api_access_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    affected_api_access_rules__rule_id__affected_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffectedPerson"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_rule_api_access_rules__rule_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleRunResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_applications_api_applications_get: {
         parameters: {
             query?: {

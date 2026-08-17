@@ -36,6 +36,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import uuid
+from collections.abc import Iterable
 from typing import assert_never
 
 from sqlalchemy import delete, select
@@ -141,6 +142,20 @@ class Reconciliation:
         }
 
 
+def touches_rules(fields: Iterable[str]) -> bool:
+    """Whether a change to these fields could alter what the rules want.
+
+    The gate on the update paths. A provider re-syncs everybody on a schedule, and
+    most of those writes touch a display name or a timestamp — running the engine
+    for each one would be three extra queries per person per sync to reach the same
+    answer. Changing a field no rule reads cannot change the outcome.
+
+    A rule being created or edited is the other way round, and does not come
+    through here: nobody's attributes changed, so use ``reconcile_group``.
+    """
+    return bool(set(fields) & set(ATTRIBUTES))
+
+
 async def matching_rules(db: AsyncSession, user: User) -> list[AccessRule]:
     """Every enabled rule that applies to this person.
 
@@ -163,6 +178,15 @@ async def reconcile(db: AsyncSession, user: User) -> Reconciliation:
     still removed, so somebody who has left stops appearing in the group listings
     a reviewer reads — but see iam/access/lifecycle.py, which deliberately leaves
     provider-granted membership in place for a leaver.
+
+    Reactivating somebody does let the rules grant again, which looks like it
+    contradicts lifecycle.py saying nothing comes back. It doesn't, and the
+    difference is worth being precise about. A role grant and a direct application
+    assignment were decisions somebody made once, and a rehire should not silently
+    inherit a decision made about a different job two years ago. A rule is not a
+    past decision — it is a standing statement that anybody with this attribute
+    belongs in this group. If they still have the attribute, the rule still means
+    it, and refusing would make the rule inconsistent with itself.
     """
     applicable = await matching_rules(db, user)
     wanted: set[uuid.UUID] = set() if not user.active else {rule.group_id for rule in applicable}

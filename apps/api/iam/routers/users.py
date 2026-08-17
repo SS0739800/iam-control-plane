@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 
+from iam.access import reconcile, touches_rules
 from iam.api.pagination import MAX_LIMIT, Page, clamp_limit
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep
@@ -228,6 +229,13 @@ async def update_user(
     for field, value in changes.items():
         setattr(user, field, value)
 
+    # Editing somebody's department here has the same consequence as the provider
+    # changing it, so it runs the same rules. Without this, the console would be a
+    # way to move somebody between departments and leave their groups behind.
+    reconciled = None
+    if touches_rules(changes):
+        reconciled = await reconcile(session, user)
+
     ip, user_agent = _client_context(request)
     await append_event(
         session,
@@ -245,7 +253,15 @@ async def update_user(
                 "changed": {
                     field: {"from": str(before[field]), "to": str(value)}
                     for field, value in changes.items()
-                }
+                },
+                # Folded into the same entry rather than written separately, so
+                # "moved to Sales, and here is what that did to their groups" reads
+                # as one event.
+                **(
+                    {"rules": reconciled.as_audit_detail()}
+                    if reconciled is not None and reconciled.changed
+                    else {}
+                ),
             },
         ),
     )

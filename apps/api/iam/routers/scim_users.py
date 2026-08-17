@@ -29,7 +29,7 @@ from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from iam.access import Granter, cut_access
+from iam.access import Granter, cut_access, reconcile, touches_rules
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep, SettingsDep
 from iam.models.enums import ActorType, AuditOutcome, IdentitySource
@@ -39,7 +39,7 @@ from iam.models.user import User
 from iam.saml.sessions import RevokedReason
 from iam.schemas.scim import PatchRequest, ScimUser
 from iam.scim.auth import ScimClientDep
-from iam.scim.constants import SCIM_PREFIX, USER_RESOURCE
+from iam.scim.constants import ENTERPRISE_USER_SCHEMA, SCIM_PREFIX, USER_RESOURCE
 from iam.scim.errors import already_exists, bad_path, bad_value, not_found
 from iam.scim.filters import parse_user_filter
 from iam.scim.mapping import apply_user, user_fields_from_scim, user_to_scim
@@ -231,6 +231,9 @@ async def create_user(
     apply_user(user, values)
     session.add(user)
     await session.flush()
+    await session.flush()
+
+    await _apply_rules(session, request, client, user)
 
     await _record(
         session,
@@ -292,6 +295,11 @@ async def replace_user(
         )
     if was_active and not user.active:
         await _cut_access(session, request, client, user)
+    elif touches_rules(changed) or (not was_active and user.active):
+        # Reactivation counts. A rule is a standing statement about attributes, not
+        # a past decision, so it applies again — see the note in iam/access/rules.py
+        # on why that isn't a contradiction of the leaver flow.
+        await _apply_rules(session, request, client, user)
 
     await session.commit()
     await session.refresh(user)
@@ -363,6 +371,29 @@ async def _cut_access(
     )
 
 
+async def _apply_rules(
+    session: SessionDep, request: Request, client: ScimClient, user: User
+) -> None:
+    """Put them in whatever groups the rules now want, and record it if that moved.
+
+    Called after a create and after any update that touched an attribute a rule
+    reads. This is the joiner and mover half of the lifecycle arriving through the
+    provider, which is how it actually arrives: somebody's department changes in
+    the HR system, the provider syncs it, and their group membership follows.
+    """
+    outcome = await reconcile(session, user)
+
+    if outcome.changed:
+        await _record(
+            session,
+            request,
+            client,
+            action="user.groups_reconciled",
+            user=user,
+            detail={"via": "access rules", **outcome.as_audit_detail()},
+        )
+
+
 def _patch_values(patch: PatchRequest) -> dict[str, object]:
     """Work out what a PATCH is asking to change.
 
@@ -418,8 +449,21 @@ def _patch_values(patch: PatchRequest) -> dict[str, object]:
 
 
 # What a PATCH may touch, by the SCIM attribute name the provider uses.
-# `active` is the one that matters; the rest are here because providers correct
-# a name or an email through PATCH rather than PUT.
+#
+# `active` is the one that matters most, because that is how deprovisioning
+# arrives. The employment fields matter for the opposite reason: they are how the
+# *mover* case arrives. Somebody changes department in the HR system, and if this
+# map doesn't accept it, the access rules never hear about it — the endpoint
+# refuses with a 400 and the person keeps the groups from a job they have left.
+#
+# PUT already accepted department through the enterprise extension, so leaving it
+# out here meant the same change was accepted one way and refused the other,
+# depending only on which verb the provider happened to use. Entra uses PATCH.
+#
+# Both spellings of the enterprise fields are here. The spec puts them under the
+# extension URN, and providers send them both with and without it.
+_ENTERPRISE = ENTERPRISE_USER_SCHEMA.lower()
+
 _PATCHABLE = {
     "active": "active",
     "username": "user_name",
@@ -429,6 +473,12 @@ _PATCHABLE = {
     "name.familyname": "family_name",
     'emails[type eq "work"].value': "email",
     "emails.value": "email",
+    # Employment details. The mover case.
+    "title": "job_title",
+    "department": "department",
+    "employeenumber": "employee_number",
+    f"{_ENTERPRISE}:department": "department",
+    f"{_ENTERPRISE}:employeenumber": "employee_number",
 }
 
 
@@ -470,6 +520,11 @@ async def patch_user(
 
     if was_active and not user.active:
         await _cut_access(session, request, client, user)
+    elif touches_rules(changed) or (not was_active and user.active):
+        # Reactivation counts. A rule is a standing statement about attributes, not
+        # a past decision, so it applies again — see the note in iam/access/rules.py
+        # on why that isn't a contradiction of the leaver flow.
+        await _apply_rules(session, request, client, user)
 
     await session.commit()
     await session.refresh(user)

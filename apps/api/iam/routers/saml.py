@@ -28,6 +28,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from iam.access import reconcile, touches_rules
 from iam.audit import AuditDraft, append_event
 from iam.config import Settings
 from iam.deps import SessionDep, SettingsDep, app_settings
@@ -519,6 +520,22 @@ async def assertion_consumer_service(
             extra={"checks": checks, "user_name": claims.user_name},
             raw_response=saml_response,
         )
+
+    # Somebody arriving by logging in is a joiner too, and somebody whose
+    # department changed at the provider brings that change in with their next
+    # login. Both are the same question — what do the rules want now — so both run
+    # the same reconcile. Skipped when nothing a rule reads moved, which is the
+    # common case for a returning user.
+    if outcome.created or touches_rules(outcome.updated_fields):
+        rules_outcome = await reconcile(session, outcome.user)
+        if rules_outcome.changed:
+            logger.info(
+                "saml.groups_reconciled",
+                extra={
+                    "user_name": outcome.user.user_name,
+                    **rules_outcome.as_audit_detail(),
+                },
+            )
 
     # Remember the assertion so it can't be used again. Written before the session
     # exists, so the two go into the same transaction and there's no window where

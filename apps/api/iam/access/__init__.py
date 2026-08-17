@@ -33,6 +33,7 @@ from iam.access.rules import (
     matching_rules,
     reconcile,
     reconcile_group,
+    touches_rules,
     validate,
 )
 
@@ -58,5 +59,6 @@ __all__ = [
     "reconcile_group",
     "revoke_for_leaver",
     "revoke_role",
+    "touches_rules",
     "validate",
 ]

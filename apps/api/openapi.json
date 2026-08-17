@@ -1,6 +1,257 @@
 {
   "components": {
     "schemas": {
+      "AccessRuleCreate": {
+        "description": "Write a new rule.",
+        "properties": {
+          "attribute": {
+            "description": "One of the names from GET /api/access-rules/attributes.",
+            "title": "Attribute",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "default": true,
+            "description": "A rule created switched off grants nothing until it is enabled.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "group_id": {
+            "description": "The group people matching this rule go into.",
+            "format": "uuid",
+            "title": "Group Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/RuleOperator"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Leave empty for is_set and is_not_set; required for everything else.",
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "attribute",
+          "operator",
+          "group_id"
+        ],
+        "title": "AccessRuleCreate",
+        "type": "object"
+      },
+      "AccessRuleOut": {
+        "description": "A rule, with the sentence it reads as.",
+        "properties": {
+          "attribute": {
+            "title": "Attribute",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_label": {
+            "title": "Created By Label",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "group_id": {
+            "format": "uuid",
+            "title": "Group Id",
+            "type": "string"
+          },
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "member_count": {
+            "description": "How many people are in the group because of a rule right now.",
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/RuleOperator"
+          },
+          "sentence": {
+            "description": "The condition in words, e.g. \"Department is 'Engineering'\". The console shows this rather than the three fields, because a rule that can't be read out loud can't be reviewed.",
+            "title": "Sentence",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "enabled",
+          "attribute",
+          "operator",
+          "value",
+          "group_id",
+          "group_name",
+          "sentence",
+          "member_count",
+          "created_by_label",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AccessRuleOut",
+        "type": "object"
+      },
+      "AccessRuleUpdate": {
+        "additionalProperties": false,
+        "description": "Change a rule. Anything left out stays as it is.",
+        "properties": {
+          "attribute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribute"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleOperator"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "title": "AccessRuleUpdate",
+        "type": "object"
+      },
       "AccessSummary": {
         "description": "Everything one person has, and where it came from.\n\nThe access review view for a single person. Answers the three questions in\norder: what can they do here, what apps can they get into, and why.",
         "properties": {
@@ -97,6 +348,55 @@
         ],
         "title": "ActorType",
         "type": "string"
+      },
+      "AffectedPerson": {
+        "description": "Somebody a rule applies to.",
+        "properties": {
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "user_name": {
+            "title": "User Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_name",
+          "display_name",
+          "department",
+          "job_title"
+        ],
+        "title": "AffectedPerson",
+        "type": "object"
       },
       "AppProtocol": {
         "description": "How an application integrates with this control plane.",
@@ -2126,6 +2426,112 @@
         "title": "RoleGrantRevoke",
         "type": "object"
       },
+      "RuleAttribute": {
+        "description": "One field a rule is allowed to look at.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label"
+        ],
+        "title": "RuleAttribute",
+        "type": "object"
+      },
+      "RuleOperator": {
+        "description": "How an access rule compares an attribute.\n\nA short list on purpose. Every operator here is one somebody can read out loud\nand predict the effect of \u2014 \"department is Engineering\". A general expression\nlanguage would be more powerful and much harder to review, and reviewing is\nthe point of writing access down.",
+        "enum": [
+          "equals",
+          "not_equals",
+          "contains",
+          "starts_with",
+          "is_set",
+          "is_not_set"
+        ],
+        "title": "RuleOperator",
+        "type": "string"
+      },
+      "RulePreview": {
+        "description": "Who a rule would affect, before anybody commits to it.\n\nThe difference between writing a rule confidently and writing one and hoping.\nA condition that reads correctly and matches four hundred people usually means\nthe value was mistyped, and this is where that gets noticed.",
+        "properties": {
+          "already_in_group": {
+            "description": "Of those, how many are in the group already \u2014 so the rule would change nothing for them.",
+            "title": "Already In Group",
+            "type": "integer"
+          },
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          },
+          "sample": {
+            "description": "A few of the people who match, to eyeball. Not the whole list.",
+            "items": {
+              "$ref": "#/components/schemas/AffectedPerson"
+            },
+            "title": "Sample",
+            "type": "array"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          },
+          "would_be_added": {
+            "title": "Would Be Added",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sentence",
+          "group_name",
+          "matches",
+          "already_in_group",
+          "would_be_added",
+          "sample"
+        ],
+        "title": "RulePreview",
+        "type": "object"
+      },
+      "RuleRunResult": {
+        "description": "What happened when a rule was applied to everybody.",
+        "properties": {
+          "added": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed",
+            "type": "array"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "added",
+          "removed",
+          "unchanged"
+        ],
+        "title": "RuleRunResult",
+        "type": "object"
+      },
       "ScimClientCreate": {
         "description": "Ask for a new token.",
         "properties": {
@@ -2849,16 +3255,6 @@
               }
             ],
             "title": "Job Title"
-          },
-          "platform_role": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PlatformRole"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "title": "UserUpdate",
@@ -2906,6 +3302,340 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/access-rules": {
+      "get": {
+        "description": "All of them, disabled ones included.\n\nA disabled rule is part of the answer to \"why did this person used to have\nthat\", so hiding it would make the screen less useful, not tidier.",
+        "operationId": "list_rules_api_access_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccessRuleOut"
+                  },
+                  "title": "Response List Rules Api Access Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Every access rule",
+        "tags": [
+          "access rules"
+        ]
+      },
+      "post": {
+        "description": "Create a rule, then run it against everybody.\n\nRaises:\n    HTTPException: 400 for a condition that doesn't make sense, 404 for a\n        missing group, 409 if the same condition already grants that group.",
+        "operationId": "create_rule_api_access_rules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write a new rule and apply it",
+        "tags": [
+          "access rules"
+        ]
+      }
+    },
+    "/api/access-rules/attributes": {
+      "get": {
+        "description": "What a rule is allowed to read.\n\nA fixed list, not every column on the user. The console builds its dropdown\nfrom this so the two can't disagree about what is allowed.",
+        "operationId": "list_attributes_api_access_rules_attributes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuleAttribute"
+                  },
+                  "title": "Response List Attributes Api Access Rules Attributes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The fields a rule may look at",
+        "tags": [
+          "access rules"
+        ]
+      }
+    },
+    "/api/access-rules/preview": {
+      "post": {
+        "description": "Try a rule without saving it.\n\nWrites nothing. A condition that reads correctly and matches four hundred\npeople usually means the value was mistyped, and this is where somebody notices\nbefore it becomes four hundred audit entries.",
+        "operationId": "preview_api_access_rules_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Who would this rule affect?",
+        "tags": [
+          "access rules"
+        ]
+      }
+    },
+    "/api/access-rules/{rule_id}": {
+      "delete": {
+        "description": "Remove a rule, and remove the access it was giving people.\n\nDeleted rather than kept, unlike a role grant. A rule is a statement of intent\nrather than a record of something that happened to somebody, and the audit entry\nholds what it said and who deleted it.\n\nThe memberships it granted go with it. Leaving them behind would turn automatic\naccess into permanent access that nothing explains, which is exactly the\nsituation access reviews exist to find.",
+        "operationId": "delete_rule_api_access_rules__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete a rule and take back what it granted",
+        "tags": [
+          "access rules"
+        ]
+      },
+      "patch": {
+        "description": "Edit a rule, then bring everybody into line with it.\n\nDisabling a rule here takes back what it granted, which is the only reading of\n\"disabled\" that means anything.",
+        "operationId": "update_rule_api_access_rules__rule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRuleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change a rule and re-apply it",
+        "tags": [
+          "access rules"
+        ]
+      }
+    },
+    "/api/access-rules/{rule_id}/affected": {
+      "get": {
+        "description": "The people a rule matches right now.",
+        "operationId": "affected_api_access_rules__rule_id__affected_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AffectedPerson"
+                  },
+                  "title": "Response Affected Api Access Rules  Rule Id  Affected Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Who this rule currently applies to",
+        "tags": [
+          "access rules"
+        ]
+      }
+    },
+    "/api/access-rules/{rule_id}/run": {
+      "post": {
+        "description": "Re-run a rule over everybody.\n\nNormally unnecessary \u2014 writes here apply immediately and attribute changes\nreconcile as they arrive \u2014 so this is for the case where somebody edited the\ndatabase directly, or wants to confirm the current state matches the rules.\nA run that reports nothing changed is the answer you want.",
+        "operationId": "run_rule_api_access_rules__rule_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply this rule to everybody now",
+        "tags": [
+          "access rules"
+        ]
+      }
+    },
     "/api/applications": {
       "get": {
         "operationId": "list_applications_api_applications_get",
