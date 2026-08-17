@@ -66,6 +66,8 @@ export type RoleGrant = Schema<'RoleGrantOut'>
 export type AccessSummary = Schema<'AccessSummary'>
 export type AccessRule = Schema<'AccessRuleOut'>
 export type AccessRequest = Schema<'AccessRequestOut'>
+export type AccessReview = Schema<'AccessReviewOut'>
+export type ReviewFinding = Schema<'FindingOut'>
 export type RequestState = AccessRequest['state']
 export type AccessRuleCreate = Schema<'AccessRuleCreate'>
 export type RuleAttribute = Schema<'RuleAttribute'>
@@ -402,4 +404,10 @@ export async function withdrawAccessRequest(requestId: string): Promise<AccessRe
       params: { path: { request_id: requestId } },
     }),
   )
+}
+
+// ------------------------------------------------------------ access review
+
+export async function fetchAccessReview(): Promise<AccessReview> {
+  return unwrap(await client.GET('/api/access-review'))
 }

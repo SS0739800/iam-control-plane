@@ -192,6 +192,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/access-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Things worth asking about
+         * @description Run every check and report what turned up, worst first.
+         *
+         *     Computed on request rather than stored. The answer changes whenever anybody
+         *     grants anything, and a cached review is one that tells an auditor about a
+         *     problem somebody fixed last week.
+         */
+        get: operations["access_review_api_access_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/access-rules": {
         parameters: {
             query?: never;
@@ -1405,6 +1429,28 @@ export interface components {
             state: components["schemas"]["RequestState"];
         };
         /**
+         * AccessReviewOut
+         * @description One pass over the directory.
+         */
+        AccessReviewOut: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /**
+             * Clean
+             * @description True when nothing turned up, which is the goal.
+             */
+            clean: boolean;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Findings */
+            findings: components["schemas"]["FindingOut"][];
+        };
+        /**
          * AccessRuleCreate
          * @description Write a new rule.
          */
@@ -1842,6 +1888,44 @@ export interface components {
             manager?: components["schemas"]["MemberRef"] | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * FindingOut
+         * @description One thing worth asking about.
+         */
+        FindingOut: {
+            /**
+             * Concern
+             * @description Why this is a question, in a sentence.
+             */
+            concern: string;
+            /**
+             * Kind
+             * @description Which check produced this, e.g. standing_privilege.
+             */
+            kind: string;
+            /**
+             * Severity
+             * @description high — somebody has access they should not, now. medium — it is probably fine and nobody can prove it. low — worth tidying.
+             */
+            severity: string;
+            /** Since */
+            since?: string | null;
+            /**
+             * Subject
+             * @description Who or what it is about.
+             */
+            subject: string;
+            /**
+             * Subject User Id
+             * @description The person, when it is about one, so the console can link to them.
+             */
+            subject_user_id: string | null;
+            /**
+             * Suggested Action
+             * @description What to do about it. Every finding has one — a finding nobody can act on is a complaint, and after the second review nobody reads those.
+             */
+            suggested_action: string;
         };
         /**
          * GrantSource
@@ -3203,6 +3287,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    access_review_api_access_review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessReviewOut"];
                 };
             };
         };

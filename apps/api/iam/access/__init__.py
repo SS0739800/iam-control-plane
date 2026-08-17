@@ -4,8 +4,9 @@
 - lifecycle.py — someone left, take everything away
 - rules.py — groups granted from somebody's attributes (joiner and mover)
 - requests.py — asking for access, and somebody deciding
+- review.py — the things an access review should look at
 
-Coming in the rest of P4: the review screens that read it all back.
+That is P4: role grants, the leaver flow, rules, requests, and the review.
 """
 
 from __future__ import annotations

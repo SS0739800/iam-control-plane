@@ -131,6 +131,43 @@
         "title": "AccessRequestOut",
         "type": "object"
       },
+      "AccessReviewOut": {
+        "description": "One pass over the directory.",
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "clean": {
+            "description": "True when nothing turned up, which is the goal.",
+            "title": "Clean",
+            "type": "boolean"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "checked_at",
+          "clean",
+          "counts",
+          "findings"
+        ],
+        "title": "AccessReviewOut",
+        "type": "object"
+      },
       "AccessRuleCreate": {
         "description": "Write a new rule.",
         "properties": {
@@ -1205,6 +1242,71 @@
           }
         },
         "title": "EnterpriseUser",
+        "type": "object"
+      },
+      "FindingOut": {
+        "description": "One thing worth asking about.",
+        "properties": {
+          "concern": {
+            "description": "Why this is a question, in a sentence.",
+            "title": "Concern",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Which check produced this, e.g. standing_privilege.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "severity": {
+            "description": "high \u2014 somebody has access they should not, now. medium \u2014 it is probably fine and nobody can prove it. low \u2014 worth tidying.",
+            "title": "Severity",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "subject": {
+            "description": "Who or what it is about.",
+            "title": "Subject",
+            "type": "string"
+          },
+          "subject_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person, when it is about one, so the console can link to them.",
+            "title": "Subject User Id"
+          },
+          "suggested_action": {
+            "description": "What to do about it. Every finding has one \u2014 a finding nobody can act on is a complaint, and after the second review nobody reads those.",
+            "title": "Suggested Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "severity",
+          "subject",
+          "subject_user_id",
+          "concern",
+          "suggested_action"
+        ],
+        "title": "FindingOut",
         "type": "object"
       },
       "GrantSource": {
@@ -3860,6 +3962,28 @@
         "summary": "Take back a request you raised",
         "tags": [
           "access requests"
+        ]
+      }
+    },
+    "/api/access-review": {
+      "get": {
+        "description": "Run every check and report what turned up, worst first.\n\nComputed on request rather than stored. The answer changes whenever anybody\ngrants anything, and a cached review is one that tells an auditor about a\nproblem somebody fixed last week.",
+        "operationId": "access_review_api_access_review_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Things worth asking about",
+        "tags": [
+          "access review"
         ]
       }
     },

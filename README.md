@@ -59,9 +59,46 @@ See [`iam/security/actor.py`](apps/api/iam/security/actor.py).
 One thing to know before the demo: nobody becomes an admin by logging in. A
 SAML-created person starts as an employee with no console permissions, on purpose,
 so there is no path from "the provider let them in" to "they can change things
-here". Granting the first real role is an admin action, which for now means the
-development stand-in or a hand-written `UPDATE`. P4 replaces that with access
-grants.
+here". Granting a role is a deliberate admin action on the user's page, and it is
+recorded as a grant with a reason, an author and an optional end date.
+
+### Lifecycle and entitlements (P4)
+
+Who has what, why, and what happens when that changes.
+
+| Screen              | What it answers                                          |
+| ------------------- | -------------------------------------------------------- |
+| A user's page       | What can this person do here, since when, and who decided |
+| **Access rules**    | What access follows automatically from who somebody is   |
+| **Requests**        | Who has asked for what, and who answered                 |
+| **Review**          | What is worth asking about right now                     |
+
+Four decisions worth knowing:
+
+**A console role is a grant, not a column.** `users.platform_role` is a cache of
+the person's role grants, and `iam/access/roles.py` is the only thing that writes
+it. That is what makes "why is this person an admin" answerable, and what lets
+admin access expire on its own. One live grant per person, enforced by a partial
+unique index.
+
+**Granting a role has its own permission.** `roles:write`, admin only, and
+deliberately not `users:write` — helpdesk holds that, so reusing it would let
+anybody who can fix a misspelled name make themselves an admin.
+
+**The last admin cannot be removed.** There is no root account, so an empty admin
+set can only be fixed by editing the database by hand.
+
+**Nobody approves their own request.** Checked in the service layer and held as a
+CHECK constraint. Withdrawing your own is fine — the rule is about who may
+*decide*.
+
+Rules grant group membership from attributes, and reconcile rather than add: the
+mover case is the one that goes unnoticed. `group_members.source` records whether
+a membership came from the provider, a person, a rule or an approved request, and
+the rule engine only ever removes its own — otherwise it would fight the SCIM sync
+forever.
+
+Approval email goes to Mailpit at http://localhost:8025.
 
 CI is configured but has not run yet — it executes on the first push to a remote.
 
@@ -70,9 +107,9 @@ CI is configured but has not run yet — it executes on the first push to a remo
 | P0    | Foundation: compose, CI, health probes            | ✅ done         |
 | P1    | Core domain + admin console, hash-chained audit   | ✅ done         |
 | P2    | SAML SP — inbound SSO                             | ✅ done         |
-| P3    | SCIM 2.0 server — inbound provisioning            | next            |
-| P4    | Lifecycle + entitlements *(MVP line)*             | planned         |
-| P5    | SAML IdP — outbound SSO                           | planned         |
+| P3    | SCIM 2.0 server — inbound provisioning            | ✅ done         |
+| P4    | Lifecycle + entitlements *(MVP line)*             | ✅ done         |
+| P5    | SAML IdP — outbound SSO                           | next            |
 | P6    | SCIM client — outbound provisioning               | planned         |
 | P7    | Production deploy                                 | planned         |
 | P8    | Entra ID integration sprint                       | planned         |

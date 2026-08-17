@@ -21,6 +21,7 @@ const NAV = [
   { to: '/logins', label: 'Sign-ins', end: false },
   { to: '/access-rules', label: 'Access rules', end: false },
   { to: '/access-requests', label: 'Requests', end: false },
+  { to: '/access-review', label: 'Review', end: false },
   { to: '/provisioning', label: 'Provisioning', end: false },
   { to: '/audit', label: 'Audit log', end: false },
 ]

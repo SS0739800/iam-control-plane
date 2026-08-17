@@ -39,6 +39,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iam}:${POSTGRES_PASSWORD:-iam}@db:5432/${POSTGRES_DB:-iam}
       ALEMBIC_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-iam}:${POSTGRES_PASSWORD:-iam}@db:5432/${POSTGRES_DB:-iam}
       DB_POOLER_MODE: direct
+      # Same reasoning as the database URL: inside the network the mail server is
+      # reachable by service name, whatever a .env written for a native run says.
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025' 
     volumes:
       # Mounts the source so --reload picks up edits. The container's packages live
       # at /opt/venv, so your local .venv showing up here does nothing.

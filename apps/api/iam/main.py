@@ -19,6 +19,7 @@ from iam.logging_setup import configure_logging
 from iam.routers import (
     access,
     access_requests,
+    access_review,
     access_rules,
     applications,
     audit,
@@ -111,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(identity_providers.router, prefix="/api")
     app.include_router(login_inspector.router, prefix="/api")
     app.include_router(provisioning.router, prefix="/api")
+    app.include_router(access_review.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
 
     # No /api prefix. Providers post to these from the person's browser, so they're
