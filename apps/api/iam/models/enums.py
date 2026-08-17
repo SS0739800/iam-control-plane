@@ -100,6 +100,48 @@ class GrantSource(StrEnum):
     admin chose this on Tuesday"."""
 
 
+class MembershipSource(StrEnum):
+    """Why somebody is in a group.
+
+    This exists because three different things add memberships — the provider, a
+    person in the console, and an access rule — and the rule engine has to be able
+    to take back only what it put there. Without it, reconciling rules would delete
+    memberships the provider believes in, the next sync would put them back, and
+    the two would fight forever.
+    """
+
+    SCIM = "scim"
+    """The provider put them here. Ours to read, not to remove."""
+
+    MANUAL = "manual"
+    """Somebody added them in the console, on purpose."""
+
+    RULE = "rule"
+    """An access rule added them because of who they are. The only kind the rule
+    engine will ever remove."""
+
+    SEED = "seed"
+    """Demo data."""
+
+
+class RuleOperator(StrEnum):
+    """How an access rule compares an attribute.
+
+    A short list on purpose. Every operator here is one somebody can read out loud
+    and predict the effect of — "department is Engineering". A general expression
+    language would be more powerful and much harder to review, and reviewing is
+    the point of writing access down.
+    """
+
+    EQUALS = "equals"
+    NOT_EQUALS = "not_equals"
+    CONTAINS = "contains"
+    STARTS_WITH = "starts_with"
+    IS_SET = "is_set"
+    """They have any value at all for it. For "everybody with a department"."""
+    IS_NOT_SET = "is_not_set"
+
+
 class AppProtocol(StrEnum):
     """How an application integrates with this control plane."""
 

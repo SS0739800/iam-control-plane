@@ -25,6 +25,7 @@ from iam.models.enums import (
     PrincipalType,
 )
 from iam.models.group import Group, GroupMember
+from iam.models.rules import ATTRIBUTES, AccessRule
 from iam.models.saml import (
     IdentityProvider,
     SamlAssertionSeen,
@@ -35,8 +36,10 @@ from iam.models.scim import ScimClient
 from iam.models.user import User
 
 __all__ = [
+    "ATTRIBUTES",
     "GENESIS_HASH",
     "HASH_LENGTH",
+    "AccessRule",
     "ActorType",
     "AppAssignment",
     "AppProtocol",
@@ -50,10 +53,12 @@ __all__ = [
     "GroupMember",
     "IdentityProvider",
     "IdentitySource",
+    "MembershipSource",
     "PlatformRole",
     "PrincipalType",
     "RevokedGrantReason",
     "RoleGrant",
+    "RuleOperator",
     "SamlAssertionSeen",
     "SamlRequestState",
     "SamlSession",

@@ -12,7 +12,7 @@ from iam.api.pagination import MAX_LIMIT, Page, clamp_limit
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep
 from iam.models.application import AppAssignment, Application
-from iam.models.enums import ActorType, IdentitySource, PlatformRole
+from iam.models.enums import ActorType, IdentitySource, MembershipSource, PlatformRole
 from iam.models.group import Group, GroupMember
 from iam.models.user import User
 from iam.schemas.common import AppRef, GroupRef, UserRef
@@ -286,7 +286,14 @@ async def add_to_group(
     if existing is not None:
         return
 
-    session.add(GroupMember(group_id=group_id, user_id=user_id))
+    session.add(
+        GroupMember(
+            group_id=group_id,
+            user_id=user_id,
+            # Somebody chose this in the console, so the rule engine leaves it alone.
+            source=MembershipSource.MANUAL,
+        )
+    )
 
     ip, user_agent = _client_context(request)
     await append_event(

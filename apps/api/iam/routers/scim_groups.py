@@ -27,7 +27,7 @@ from sqlalchemy import delete, func, select
 
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep, SettingsDep
-from iam.models.enums import ActorType, AuditOutcome, IdentitySource
+from iam.models.enums import ActorType, AuditOutcome, IdentitySource, MembershipSource
 from iam.models.group import Group, GroupMember
 from iam.models.scim import ScimClient
 from iam.models.user import User
@@ -152,7 +152,15 @@ async def _add_members(session: SessionDep, group: Group, ids: list[uuid.UUID]) 
     for user_id in ids:
         if user_id in already or user_id not in real:
             continue
-        session.add(GroupMember(group_id=group.id, user_id=user_id))
+        session.add(
+            GroupMember(
+                group_id=group.id,
+                user_id=user_id,
+                # The provider owns this row. The rule engine reads it and never
+                # removes it — see iam/access/rules.py.
+                source=MembershipSource.SCIM,
+            )
+        )
         already.add(user_id)
         added += 1
     return added
