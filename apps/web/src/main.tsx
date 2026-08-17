@@ -10,6 +10,7 @@ import { ApplicationDetailPage, ApplicationsPage } from './pages/Applications'
 import Dashboard from './pages/Dashboard'
 import { GroupDetailPage, GroupsPage } from './pages/Groups'
 import LoginsPage from './pages/Logins'
+import AccessRequestsPage from './pages/AccessRequests'
 import AccessRulesPage from './pages/AccessRules'
 import ProvisioningPage from './pages/Provisioning'
 import { UserDetailPage, UsersPage } from './pages/Users'
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
       { path: 'applications/:appId', element: <ApplicationDetailPage /> },
       { path: 'logins', element: <LoginsPage /> },
       { path: 'access-rules', element: <AccessRulesPage /> },
+      { path: 'access-requests', element: <AccessRequestsPage /> },
       { path: 'provisioning', element: <ProvisioningPage /> },
       { path: 'audit', element: <AuditPage /> },
       // Anything else falls back to the dashboard rather than a blank screen.

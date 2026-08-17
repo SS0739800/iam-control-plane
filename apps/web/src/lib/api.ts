@@ -65,6 +65,8 @@ export type ScimClient = Schema<'ScimClientSummary'>
 export type RoleGrant = Schema<'RoleGrantOut'>
 export type AccessSummary = Schema<'AccessSummary'>
 export type AccessRule = Schema<'AccessRuleOut'>
+export type AccessRequest = Schema<'AccessRequestOut'>
+export type RequestState = AccessRequest['state']
 export type AccessRuleCreate = Schema<'AccessRuleCreate'>
 export type RuleAttribute = Schema<'RuleAttribute'>
 export type RulePreview = Schema<'RulePreview'>
@@ -349,6 +351,55 @@ export async function deleteAccessRule(ruleId: string): Promise<RuleRunResult> {
   return unwrap(
     await client.DELETE('/api/access-rules/{rule_id}', {
       params: { path: { rule_id: ruleId } },
+    }),
+  )
+}
+
+// ---------------------------------------------------------- access requests
+
+export async function fetchRequestQueue(): Promise<AccessRequest[]> {
+  return unwrap(await client.GET('/api/access-requests'))
+}
+
+export async function fetchMyRequests(): Promise<AccessRequest[]> {
+  return unwrap(await client.GET('/api/access-requests/mine'))
+}
+
+export async function raiseAccessRequest(body: {
+  group_id: string
+  reason: string
+}): Promise<AccessRequest> {
+  return unwrap(await client.POST('/api/access-requests', { body }))
+}
+
+export async function approveAccessRequest(
+  requestId: string,
+  body: { note?: string | null; expires_at?: string | null },
+): Promise<AccessRequest> {
+  return unwrap(
+    await client.POST('/api/access-requests/{request_id}/approve', {
+      params: { path: { request_id: requestId } },
+      body,
+    }),
+  )
+}
+
+export async function denyAccessRequest(
+  requestId: string,
+  body: { note?: string | null },
+): Promise<AccessRequest> {
+  return unwrap(
+    await client.POST('/api/access-requests/{request_id}/deny', {
+      params: { path: { request_id: requestId } },
+      body,
+    }),
+  )
+}
+
+export async function withdrawAccessRequest(requestId: string): Promise<AccessRequest> {
+  return unwrap(
+    await client.POST('/api/access-requests/{request_id}/withdraw', {
+      params: { path: { request_id: requestId } },
     }),
   )
 }

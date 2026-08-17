@@ -4,6 +4,194 @@
  */
 
 export interface paths {
+    "/api/access-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The requests waiting to be decided
+         * @description Open requests, oldest first — the order they should be worked in.
+         */
+        get: operations["queue_api_access_requests_get"];
+        put?: never;
+        /**
+         * Ask for access to a group
+         * @description Raise a request for yourself.
+         *
+         *     No permission required, on purpose. An employee holds no permissions, and a
+         *     request system they cannot use is not a request system. Asking grants nothing.
+         *
+         *     Raises:
+         *         HTTPException: 400 if the request doesn't make sense, 404 for a group that
+         *             isn't there.
+         */
+        post: operations["create_request_api_access_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/group/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every request ever raised for one group
+         * @description The history for a group, decided ones included.
+         *
+         *     Denied requests are the interesting ones here. "Three people asked for this and
+         *     were all refused" says something about the group that its membership list does
+         *     not.
+         */
+        get: operations["for_group_api_access_requests_group__group_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything I have asked for
+         * @description Your own requests, newest first.
+         *
+         *     No permission check. Somebody is always allowed to see what they asked for.
+         */
+        get: operations["my_requests_api_access_requests_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/states/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many requests are in each state
+         * @description Counts by state, for the console's badge and a quick health read.
+         */
+        get: operations["state_summary_api_access_requests_states_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One request
+         * @description Read one request.
+         *
+         *     Yours always; anybody else's needs groups:read. "Who has been asking for the
+         *     finance system" is review information, not public.
+         */
+        get: operations["get_request_api_access_requests__request_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/{request_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a request and grant the access
+         * @description Approve, and put them in the group in the same transaction.
+         *
+         *     Raises:
+         *         HTTPException: 400 if it can't be approved — already decided, self-approval,
+         *             an expiry in the past, or the requester has since left.
+         */
+        post: operations["approve_request_api_access_requests__request_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/{request_id}/deny": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn a request down
+         * @description Refuse a request, and keep the record of having refused it.
+         */
+        post: operations["deny_request_api_access_requests__request_id__deny_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-requests/{request_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take back a request you raised
+         * @description Withdraw your own request.
+         *
+         *     No permission needed, because it is your own. Somebody else closing it is a
+         *     denial and goes through the other endpoint — the two are different answers to
+         *     the same question and the record should say which happened.
+         */
+        post: operations["withdraw_request_api_access_requests__request_id__withdraw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/access-rules": {
         parameters: {
             query?: never;
@@ -1158,6 +1346,65 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AccessRequestCreate
+         * @description Ask to be put in a group.
+         */
+        AccessRequestCreate: {
+            /**
+             * Group Id
+             * Format: uuid
+             */
+            group_id: string;
+            /**
+             * Reason
+             * @description Why the access is needed. Required — an approver with no reason in front of them is rubber-stamping rather than deciding.
+             */
+            reason: string;
+        };
+        /**
+         * AccessRequestOut
+         * @description One request, and what happened to it.
+         */
+        AccessRequestOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By Label */
+            decided_by_label: string | null;
+            /** Decision Note */
+            decision_note: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Group Id
+             * Format: uuid
+             */
+            group_id: string;
+            /** Group Label */
+            group_label: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Open */
+            is_open: boolean;
+            /** Reason */
+            reason: string;
+            /**
+             * Requester Id
+             * Format: uuid
+             */
+            requester_id: string;
+            /** Requester Label */
+            requester_label: string;
+            state: components["schemas"]["RequestState"];
+        };
+        /**
          * AccessRuleCreate
          * @description Write a new rule.
          */
@@ -1543,6 +1790,22 @@ export interface components {
             sso_applications: number;
             /** Users */
             users: number;
+        };
+        /**
+         * Decision
+         * @description An approver's answer.
+         */
+        Decision: {
+            /**
+             * Expires At
+             * @description Approvals only. When the access should end. 'Until the end of the quarter' is the usual honest answer to an access request.
+             */
+            expires_at?: string | null;
+            /**
+             * Note
+             * @description What you decided and why. The most useful field here during a review, and the one most likely to be left empty.
+             */
+            note?: string | null;
         };
         /**
          * Email
@@ -2216,6 +2479,16 @@ export interface components {
             status: "ready" | "degraded";
         };
         /**
+         * RequestState
+         * @description Where an access request has got to.
+         *
+         *     Every state after PENDING is final. A request is a record of somebody asking
+         *     and somebody answering, so reopening one would make "who approved this" have
+         *     more than one answer.
+         * @enum {string}
+         */
+        RequestState: "pending" | "approved" | "denied" | "withdrawn" | "cancelled";
+        /**
          * RoleGrantCreate
          * @description Give somebody a console role.
          */
@@ -2665,6 +2938,275 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    queue_api_access_requests_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_request_api_access_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    for_group_api_access_requests_group__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_requests_api_access_requests_mine_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"][];
+                };
+            };
+        };
+    };
+    state_summary_api_access_requests_states_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    get_request_api_access_requests__request_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_request_api_access_requests__request_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deny_request_api_access_requests__request_id__deny_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    withdraw_request_api_access_requests__request_id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_rules_api_access_rules_get: {
         parameters: {
             query?: never;
