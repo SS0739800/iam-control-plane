@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from iam.db import get_session
 from iam.models.scim import ScimClient
 from iam.scim.errors import ScimError
-from iam.security.tokens import hash_token
+from iam.tokens import hash_token
 
 logger = logging.getLogger(__name__)
 

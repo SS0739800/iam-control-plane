@@ -29,7 +29,7 @@ from sqlalchemy import select
 from iam.config import get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.models.scim import ScimClient
-from iam.security.tokens import hash_token, new_token
+from iam.tokens import hash_token, new_token
 
 
 async def issue(name: str, description: str | None) -> str:

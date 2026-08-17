@@ -371,3 +371,74 @@ def test_granting_to_somebody_who_is_not_there(
     )
 
     assert response.status_code == 404
+
+
+# --------------------------------------------- the back door that must stay shut
+
+
+def test_the_user_edit_endpoint_cannot_set_a_role(
+    db_client: TestClient, console: ConsoleUsers, subject: uuid.UUID
+) -> None:
+    """PATCH /api/users/{id} must not accept platform_role.
+
+    Two things break if it does. Helpdesk holds users:write, so it becomes a way
+    around roles:write and anybody who can edit a user can make themselves an
+    admin. And it writes the cached column with no grant behind it, which is
+    exactly the drift the grant table was built to prevent.
+
+    This is a regression test for a hole that was real: the field stayed on
+    UserUpdate after roles moved to grants.
+    """
+    response = db_client.patch(
+        f"/api/users/{subject}",
+        json={"platform_role": "admin"},
+        headers=console.as_admin,
+    )
+
+    assert response.status_code == 422, (
+        "platform_role is still accepted by the user edit endpoint, which bypasses "
+        "roles:write and writes the cached role with no grant behind it"
+    )
+
+    summary = db_client.get(f"/api/users/{subject}/access", headers=console.as_admin).json()
+    assert summary["role"] == "employee"
+
+
+def test_helpdesk_cannot_promote_through_the_user_edit_endpoint(
+    db_client: TestClient, console: ConsoleUsers
+) -> None:
+    """The escalation that hole allowed, aimed where it would actually be aimed."""
+    helpdesk_id = console.id_of(console.helpdesk)
+
+    response = db_client.patch(
+        f"/api/users/{helpdesk_id}",
+        json={"platform_role": "admin"},
+        headers=console.as_user(console.helpdesk),
+    )
+
+    assert response.status_code in (403, 422)
+
+    summary = db_client.get(f"/api/users/{helpdesk_id}/access", headers=console.as_admin).json()
+    assert summary["role"] == "helpdesk"
+
+
+def test_editing_a_user_still_works(
+    db_client: TestClient, console: ConsoleUsers, subject: uuid.UUID
+) -> None:
+    """A regression test for a 500 that had been there since P1.
+
+    PATCH on a user committed the change and then read updated_at off the row.
+    That column has a server-side onupdate, so the UPDATE leaves it expired, and
+    reading an expired column outside an await is a MissingGreenlet under async.
+    Every edit through the console returned a 500 after writing the change, and
+    nothing noticed because the endpoint had no test.
+    """
+    response = db_client.patch(
+        f"/api/users/{subject}",
+        json={"department": "Engineering", "job_title": "Platform Engineer"},
+        headers=console.as_admin,
+    )
+
+    assert response.status_code == 200, response.text[:300]
+    assert response.json()["department"] == "Engineering"
+    assert response.json()["job_title"] == "Platform Engineer"

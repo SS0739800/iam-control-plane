@@ -41,7 +41,7 @@ from iam.schemas.provisioning import (
     ScimClientSummary,
 )
 from iam.security import Actor, Permission, require
-from iam.security.tokens import hash_token, new_token
+from iam.tokens import hash_token, new_token
 
 logger = logging.getLogger(__name__)
 

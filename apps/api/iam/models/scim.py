@@ -12,7 +12,7 @@ apart means either can be turned off without touching the other, and the audit
 log can say which one did something.
 
 The token works the way the session cookie does: the client is handed a long
-random string once, and we keep only its hash. See iam/security/tokens.py.
+random string once, and we keep only its hash. See iam/tokens.py.
 """
 
 from __future__ import annotations

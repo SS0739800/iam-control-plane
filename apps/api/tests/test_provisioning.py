@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.models.audit import AuditEvent
 from iam.models.scim import ScimClient
-from iam.security.tokens import hash_token
+from iam.tokens import hash_token
 from tests.saml_harness import ConsoleUsers
 from tests.support import run_db
 

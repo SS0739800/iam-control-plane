@@ -19,6 +19,18 @@ own.
 **Compared in constant time.** Two hashes of the same length compared with `==`
 return faster on an earlier mismatch. That leaks very little, and comparing
 properly costs nothing, so there is no reason to take the trade.
+
+Why this is not in iam/security/
+--------------------------------
+
+It was, and it caused a circular import. ``iam/security/__init__.py`` re-exports
+the actor resolution, which reaches the access grants, which reach the leaver
+flow, which reaches the session store — which needs this. Importing one leaf
+function pulled in that whole graph and the loop closed.
+
+Nothing here is a policy decision. It is randomness and a hash: a primitive that
+several parts of the system happen to share. Keeping primitives outside the
+packages that make decisions is what stops this happening again.
 """
 
 from __future__ import annotations

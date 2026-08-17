@@ -73,7 +73,12 @@ class UserUpdate(BaseModel):
     active: bool | None = None
     department: str | None = None
     job_title: str | None = None
-    platform_role: PlatformRole | None = None
+
+    # platform_role is deliberately absent. It used to be here, and it was a hole:
+    # helpdesk holds users:write, so editing a user was a way around roles:write
+    # and straight to admin. It would also write the cached role with no grant
+    # behind it, which is the drift the grant table exists to prevent. Roles are
+    # granted at POST /api/users/{id}/role-grants and nowhere else.
 
 
 # --------------------------------------------------------------------- groups

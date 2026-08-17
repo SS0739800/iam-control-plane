@@ -7,7 +7,7 @@ they're deactivated, and you can't un-issue a token — you can delete a row.
 
 The browser gets a long random string in a cookie. We store only its hash, so
 someone who reads this table still can't sign in as anybody. The issuing and
-hashing live in iam/security/tokens.py, shared with the SCIM tokens, because it
+hashing live in iam/tokens.py, shared with the SCIM tokens, because it
 is the same problem twice and the reasoning belongs in one place.
 
 No xmlsec here, so this is testable anywhere.
@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.config import Settings
 from iam.models.saml import SamlSession
-from iam.security.tokens import hash_token, new_token
+from iam.tokens import hash_token, new_token
 
 SESSION_LIFETIME = dt.timedelta(hours=8)
 """How long someone stays signed in. Roughly a working day, so people aren't

@@ -29,13 +29,14 @@ from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from iam.access import Granter, cut_access
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep, SettingsDep
 from iam.models.enums import ActorType, AuditOutcome, IdentitySource
 from iam.models.group import Group, GroupMember
 from iam.models.scim import ScimClient
 from iam.models.user import User
-from iam.saml.sessions import RevokedReason, revoke_all_for_user
+from iam.saml.sessions import RevokedReason
 from iam.schemas.scim import PatchRequest, ScimUser
 from iam.scim.auth import ScimClientDep
 from iam.scim.constants import SCIM_PREFIX, USER_RESOURCE
@@ -290,7 +291,7 @@ async def replace_user(
             detail={"changed": list(changed), "via": "scim.put", "adopted": adopted},
         )
     if was_active and not user.active:
-        await _deactivate_sessions(session, request, client, user)
+        await _cut_access(session, request, client, user)
 
     await session.commit()
     await session.refresh(user)
@@ -318,34 +319,47 @@ def _adopt(user: User) -> bool:
     return False
 
 
-async def _deactivate_sessions(
+async def _cut_access(
     session: SessionDep, request: Request, client: ScimClient, user: User
 ) -> None:
-    """Cut every session somebody has, because they were just switched off.
+    """Take everything away, because the provider just switched them off.
 
     The part that makes deprovisioning mean something. Setting a flag while
     leaving them signed in for the next eight hours is the failure mode this
     whole design exists to avoid — see the note on SamlSession about why sessions
     are rows.
+
+    This used to cut sessions only, which left somebody who had been given admin
+    still holding it after they left the company. iam/access/lifecycle.py now owns
+    the whole removal, and everything that can mean "they left" goes through it.
     """
-    ended = await revoke_all_for_user(
+    removed = await cut_access(
         session,
-        user.id,
-        reason=RevokedReason.USER_DEACTIVATED,
+        user,
+        by=Granter(user_id=None, label=f"SCIM client <{client.name}>"),
         now=dt.datetime.now(dt.UTC),
     )
-    if ended:
+
+    if removed.anything_happened:
+        # One entry for the whole departure. Four separate entries would be
+        # impossible to line up afterwards, and lining them up is the entire
+        # point of writing them down.
         await _record(
             session,
             request,
             client,
-            action="user.sessions_revoked",
+            action="user.access_cut",
             user=user,
-            detail={"sessions_ended": ended, "reason": RevokedReason.USER_DEACTIVATED},
+            detail={"reason": RevokedReason.USER_DEACTIVATED, **removed.as_audit_detail()},
         )
+
     logger.info(
         "scim.user_deactivated",
-        extra={"user_id": str(user.id), "sessions_ended": ended, "client": client.name},
+        extra={
+            "user_id": str(user.id),
+            "client": client.name,
+            **removed.as_audit_detail(),
+        },
     )
 
 
@@ -455,7 +469,7 @@ async def patch_user(
         )
 
     if was_active and not user.active:
-        await _deactivate_sessions(session, request, client, user)
+        await _cut_access(session, request, client, user)
 
     await session.commit()
     await session.refresh(user)
@@ -494,7 +508,7 @@ async def delete_user(
             user=user,
             detail={"via": "scim.delete", "note": "row kept; SCIM delete means deprovision"},
         )
-        await _deactivate_sessions(session, request, client, user)
+        await _cut_access(session, request, client, user)
 
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

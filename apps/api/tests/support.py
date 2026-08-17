@@ -25,7 +25,7 @@ from iam.models.saml import SamlSession
 from iam.models.scim import ScimClient
 from iam.models.user import User
 from iam.scim.constants import SCIM_MEDIA_TYPE
-from iam.security.tokens import hash_token, new_token
+from iam.tokens import hash_token, new_token
 
 T = TypeVar("T")
 

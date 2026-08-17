@@ -251,6 +251,12 @@ async def update_user(
     )
     await session.commit()
 
+    # Refreshed before reading anything off this row again. updated_at has a
+    # server-side onupdate, so the UPDATE leaves that one column expired, and
+    # touching it outside an await is a MissingGreenlet under async — which is
+    # exactly what this endpoint did for every edit until there was a test for it.
+    await session.refresh(user)
+
     return await get_user(session, user_id)
 
 
