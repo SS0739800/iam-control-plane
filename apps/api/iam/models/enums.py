@@ -3,21 +3,23 @@
 Stored as plain text columns rather than real Postgres enum types, because adding
 a value to a real enum needs an ALTER TYPE and that is awkward inside a migration.
 
-Be clear about what does and does not enforce these. SQLAlchemy checks the value
-on the way in — ``validate_strings=True`` below — so nothing written through the
-ORM can hold a value that is not listed here. **The database itself does not
-check.** ``create_constraint`` defaults to False, so these are unconstrained
-VARCHAR(32) columns, and a hand-written UPDATE in psql or a migration can put
-anything in one.
+Two things enforce the values, and it is worth knowing both.
 
-This docstring used to claim the columns carried "a rule limiting what can go in
-them". They do not, and it was checked: ``UPDATE users SET
-platform_role = 'not-a-real-role'`` succeeds. An unrecognised role reads as no
-permissions at all, because permissions_for falls back to an empty set, so it
-fails safe rather than dangerously — but it fails silently.
+SQLAlchemy checks on the way in, through ``validate_strings=True``, so nothing
+written via the ORM can hold an unlisted value. Postgres checks too, through
+``create_constraint=True``, which puts a CHECK on each column.
 
-Adding create_constraint=True plus a migration for the existing columns is the
-fix, and it is worth doing.
+The second one had been missing. ``create_constraint`` defaults to False in
+SQLAlchemy 2.0, so every one of these was an unconstrained VARCHAR(32) until the
+constraints were added — and this docstring claimed otherwise for three phases.
+It was checked rather than assumed: ``UPDATE users SET platform_role =
+'not-a-real-role'`` succeeded. An unrecognised role reads as no permissions,
+because permissions_for falls back to an empty set, so it failed safe. It also
+failed silently, which is why the ORM check alone was not enough.
+
+Adding a value now means a migration that drops and recreates one CHECK — which
+is the trade this design was chosen for, and cheaper than the ALTER TYPE a real
+Postgres enum would need.
 """
 
 from __future__ import annotations
@@ -43,6 +45,11 @@ def enum_type(enum_cls: type[StrEnum]) -> SAEnum:
         native_enum=False,
         length=ENUM_LENGTH,
         validate_strings=True,
+        # Don't drop this either. Without it the column is a plain VARCHAR and only
+        # the ORM checks the value, so anything writing SQL directly — a migration,
+        # psql, a future job — can store a value that is not in the enum. See the
+        # module docstring: that was the state of things until it was measured.
+        create_constraint=True,
         values_callable=lambda cls: [member.value for member in cls],
     )
 
