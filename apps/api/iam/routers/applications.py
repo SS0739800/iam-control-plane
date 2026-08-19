@@ -1,5 +1,7 @@
 """Listing applications, looking at one, and registering one.
 
+Listing, registering, and granting access.
+
 Registering happens by pasting the application's own metadata rather than by
 filling in a form of addresses. That is the same decision as registering an
 identity provider and it matters more here, not less: the ACS URL is where we post
@@ -22,7 +24,7 @@ from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep
 from iam.models.application import AppAssignment, Application
 from iam.models.enums import ActorType, AppProtocol, AppStatus, AuditOutcome
-from iam.models.group import Group
+from iam.models.group import Group, GroupMember
 from iam.models.user import User
 from iam.saml.metadata import UnreadableMetadata, read_sp_metadata
 from iam.schemas.common import GroupRef, UserRef
@@ -275,3 +277,271 @@ async def register_application(
     )
 
     return await get_application(session, application.id)
+
+
+# --------------------------------------------------------- granting app access
+#
+# Until now nothing could create an app_assignments row except the seed script,
+# which meant P5 decided every login from a table the API had no way to write. The
+# console could show who had access and nobody could grant it — the same shape as
+# the pre-P4 problem where making somebody an admin meant a hand-written UPDATE.
+#
+# Both permissions are required for a group assignment, and that asymmetry is on
+# purpose. Giving one person access affects one person; giving a group access
+# affects everybody in it and everybody added to it later, so it needs the
+# permission that governs changing what a group means.
+
+
+async def _assignable_application(session: SessionDep, app_id: uuid.UUID) -> Application:
+    app = await session.get(Application, app_id)
+    if app is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such application")
+    return app
+
+
+async def _record_assignment(
+    session: SessionDep,
+    request: Request,
+    actor: Actor,
+    *,
+    action: str,
+    app: Application,
+    subject: str,
+    detail: dict[str, object],
+) -> None:
+    await append_event(
+        session,
+        AuditDraft(
+            action=action,
+            actor_type=ActorType.USER,
+            actor_id=actor.user_id,
+            actor_label=actor.audit_label,
+            outcome=AuditOutcome.SUCCESS,
+            target_type="application",
+            target_id=str(app.id),
+            target_label=app.slug,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            detail={"application": app.slug, "granted_to": subject, **detail},
+        ),
+    )
+
+
+@router.put(
+    "/{app_id}/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="Give one person access to an application",
+)
+async def assign_user(
+    request: Request,
+    session: SessionDep,
+    app_id: uuid.UUID,
+    user_id: uuid.UUID,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+    role: Annotated[str | None, Query(description="What role this gives them in the app")] = None,
+) -> None:
+    """Safe to call twice. Assigning somebody who already has it does nothing.
+
+    This is what /idp/sso reads before it will sign an assertion, so an assignment
+    here is the difference between a login working and being refused.
+    """
+    app = await _assignable_application(session, app_id)
+
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such user")
+
+    if not user.active:
+        # Assigning access to somebody who has left is either a mistake or the first
+        # half of one. Reactivating is a separate, deliberate act.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"{user.display_name} is deactivated. Reactivate them first.",
+        )
+
+    existing = await session.scalar(
+        select(AppAssignment).where(
+            AppAssignment.application_id == app_id,
+            AppAssignment.user_id == user_id,
+        )
+    )
+    if existing is not None:
+        return
+
+    session.add(AppAssignment(application_id=app_id, user_id=user_id, role=role))
+
+    await _record_assignment(
+        session,
+        request,
+        actor,
+        action="app_access.granted",
+        app=app,
+        subject=f"{user.display_name} <{user.user_name}>",
+        detail={"through": "direct", "role": role},
+    )
+    await session.commit()
+
+    logger.info(
+        "app_access.granted",
+        extra={"application": app.slug, "user": user.user_name, "by": actor.user_name},
+    )
+
+
+@router.delete(
+    "/{app_id}/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="Take away one person's access to an application",
+)
+async def unassign_user(
+    request: Request,
+    session: SessionDep,
+    app_id: uuid.UUID,
+    user_id: uuid.UUID,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+) -> None:
+    """Safe to call twice.
+
+    Deleted rather than marked, unlike a role grant. An assignment carries no reason
+    or expiry of its own, so there is nothing in the row worth keeping — the audit
+    entry holds who removed it and when, which is the part somebody asks about.
+    That asymmetry is a known one; see the note in models/application.py.
+    """
+    app = await _assignable_application(session, app_id)
+
+    existing = await session.scalar(
+        select(AppAssignment).where(
+            AppAssignment.application_id == app_id,
+            AppAssignment.user_id == user_id,
+        )
+    )
+    if existing is None:
+        return
+
+    user = await session.get(User, user_id)
+    await session.delete(existing)
+
+    await _record_assignment(
+        session,
+        request,
+        actor,
+        action="app_access.removed",
+        app=app,
+        subject=(f"{user.display_name} <{user.user_name}>" if user else str(user_id)),
+        detail={"through": "direct"},
+    )
+    await session.commit()
+
+
+@router.put(
+    "/{app_id}/groups/{group_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="Give a group access to an application",
+)
+async def assign_group(
+    request: Request,
+    session: SessionDep,
+    app_id: uuid.UUID,
+    group_id: uuid.UUID,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE, Permission.GROUPS_WRITE))],
+    role: Annotated[str | None, Query(description="What role this gives them in the app")] = None,
+) -> None:
+    """Grant through a group, which is how access should usually be given.
+
+    Needs groups:write as well as apps:write. Giving one person access affects one
+    person; giving a group access affects everybody in it now and everybody added to
+    it later, including by an access rule nobody re-reads.
+    """
+    app = await _assignable_application(session, app_id)
+
+    group = await session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such group")
+
+    existing = await session.scalar(
+        select(AppAssignment).where(
+            AppAssignment.application_id == app_id,
+            AppAssignment.group_id == group_id,
+        )
+    )
+    if existing is not None:
+        return
+
+    members = (
+        await session.scalar(
+            select(func.count()).select_from(GroupMember).where(GroupMember.group_id == group_id)
+        )
+        or 0
+    )
+
+    session.add(AppAssignment(application_id=app_id, group_id=group_id, role=role))
+
+    await _record_assignment(
+        session,
+        request,
+        actor,
+        action="app_access.granted",
+        app=app,
+        subject=f"everybody in {group.name}",
+        detail={
+            "through": "group",
+            "group": group.name,
+            "role": role,
+            # How many people this actually reached. A group assignment is the one
+            # here with a blast radius, and it belongs in the record.
+            "people_affected": members,
+        },
+    )
+    await session.commit()
+
+    logger.info(
+        "app_access.granted",
+        extra={
+            "application": app.slug,
+            "group": group.name,
+            "people_affected": members,
+            "by": actor.user_name,
+        },
+    )
+
+
+@router.delete(
+    "/{app_id}/groups/{group_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="Take a group's access to an application away",
+)
+async def unassign_group(
+    request: Request,
+    session: SessionDep,
+    app_id: uuid.UUID,
+    group_id: uuid.UUID,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE, Permission.GROUPS_WRITE))],
+) -> None:
+    """Safe to call twice."""
+    app = await _assignable_application(session, app_id)
+
+    existing = await session.scalar(
+        select(AppAssignment).where(
+            AppAssignment.application_id == app_id,
+            AppAssignment.group_id == group_id,
+        )
+    )
+    if existing is None:
+        return
+
+    group = await session.get(Group, group_id)
+    await session.delete(existing)
+
+    await _record_assignment(
+        session,
+        request,
+        actor,
+        action="app_access.removed",
+        app=app,
+        subject=f"everybody in {group.name}" if group else str(group_id),
+        detail={"through": "group"},
+    )
+    await session.commit()

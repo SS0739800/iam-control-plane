@@ -638,7 +638,7 @@
         "type": "string"
       },
       "ApplicationDetail": {
-        "description": "Everything on the app page, including its SAML settings.\n\nNothing uses the SAML fields until P5. They're here because the console shows\nthem, and a mistyped entity id is much easier to spot on a page than by\nreading the database.",
+        "description": "Everything on the app page, including its SAML settings.\n\nThe SAML fields are what iam/routers/idp.py reads to answer a login, so they are\nshown rather than hidden: a mistyped entity id is much easier to spot on a page\nthan by reading the database, and it is the difference between an application\nworking and every login for it being refused as an unknown issuer.",
         "properties": {
           "acs_url": {
             "anyOf": [
@@ -773,6 +773,57 @@
           "assigned_users"
         ],
         "title": "ApplicationDetail",
+        "type": "object"
+      },
+      "ApplicationRegistration": {
+        "description": "Register an application, or update one that already exists.\n\nThe metadata document carries the entity id, the addresses and the certificate,\nso none of those are fields here. Letting somebody type them separately is how an\nassertion ends up posted to an address the application never published \u2014 see\ndocs/adr/0006-paste-metadata-do-not-fetch-it.md.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "default": true,
+            "description": "Turn an application off to stop issuing logins for it without losing its settings or who had access.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "metadata_xml": {
+            "description": "The application's SAML metadata document, pasted in whole.",
+            "minLength": 1,
+            "title": "Metadata Xml",
+            "type": "string"
+          },
+          "name": {
+            "description": "What to call it in the console.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "description": "Short name used in links, e.g. /idp/sso/expenses. Lowercase, digits and dashes, because it goes in a URL.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "metadata_xml"
+        ],
+        "title": "ApplicationRegistration",
         "type": "object"
       },
       "ApplicationSummary": {
@@ -981,6 +1032,34 @@
           "saml_response"
         ],
         "title": "Body_assertion_consumer_service_saml_acs_post",
+        "type": "object"
+      },
+      "Body_slo_post_idp_slo_post": {
+        "properties": {
+          "relay_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relay State"
+          },
+          "saml_request": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saml Request"
+          }
+        },
+        "title": "Body_slo_post_idp_slo_post",
         "type": "object"
       },
       "Body_sso_post_idp_sso_post": {
@@ -4453,6 +4532,46 @@
         "tags": [
           "applications"
         ]
+      },
+      "post": {
+        "description": "Read an application's metadata and store what it says.\n\n``apps:write``, reused rather than given a permission of its own. Registering an\napplication is managing an application, and the audience is already the narrowest\none \u2014 admin. Inventing a separate permission would suggest it was a different\nkind of power and then let the two drift apart. The opposite call was made for\nrole grants, where ``users:write`` was genuinely *not* an equivalent power.\n\nThe document is pasted in, never fetched from a URL. Same reasoning as\nregistering an identity provider, and it applies here for the same reason: our\nserver can reach things the person pasting cannot. See\ndocs/adr/0006-paste-metadata-do-not-fetch-it.md.\n\nRegistering the same slug again replaces the details, which is how a certificate\nor an address change is handled \u2014 paste the new metadata and the row updates.\n\nRaises:\n    HTTPException: 400 if the metadata can't be read or is missing something.\n        409 if another slug has already claimed the same entity id.",
+        "operationId": "register_application_api_applications_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register an application from its metadata, or update one",
+        "tags": [
+          "applications"
+        ]
       }
     },
     "/api/applications/{app_id}": {
@@ -4493,6 +4612,226 @@
           }
         },
         "summary": "One application, with its SAML wiring and assignments",
+        "tags": [
+          "applications"
+        ]
+      }
+    },
+    "/api/applications/{app_id}/groups/{group_id}": {
+      "delete": {
+        "description": "Safe to call twice.",
+        "operationId": "unassign_group_api_applications__app_id__groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take a group's access to an application away",
+        "tags": [
+          "applications"
+        ]
+      },
+      "put": {
+        "description": "Grant through a group, which is how access should usually be given.\n\nNeeds groups:write as well as apps:write. Giving one person access affects one\nperson; giving a group access affects everybody in it now and everybody added to\nit later, including by an access rule nobody re-reads.",
+        "operationId": "assign_group_api_applications__app_id__groups__group_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "What role this gives them in the app",
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What role this gives them in the app",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Give a group access to an application",
+        "tags": [
+          "applications"
+        ]
+      }
+    },
+    "/api/applications/{app_id}/users/{user_id}": {
+      "delete": {
+        "description": "Safe to call twice.\n\nDeleted rather than marked, unlike a role grant. An assignment carries no reason\nor expiry of its own, so there is nothing in the row worth keeping \u2014 the audit\nentry holds who removed it and when, which is the part somebody asks about.\nThat asymmetry is a known one; see the note in models/application.py.",
+        "operationId": "unassign_user_api_applications__app_id__users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take away one person's access to an application",
+        "tags": [
+          "applications"
+        ]
+      },
+      "put": {
+        "description": "Safe to call twice. Assigning somebody who already has it does nothing.\n\nThis is what /idp/sso reads before it will sign an assertion, so an assignment\nhere is the difference between a login working and being refused.",
+        "operationId": "assign_user_api_applications__app_id__users__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "What role this gives them in the app",
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What role this gives them in the app",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Give one person access to an application",
         "tags": [
           "applications"
         ]
@@ -5947,6 +6286,107 @@
           }
         },
         "summary": "Our details, for registering an application against this system",
+        "tags": [
+          "identity provider"
+        ]
+      }
+    },
+    "/idp/slo": {
+      "get": {
+        "description": "The redirect binding, which is what our metadata advertises.\n\nThis address was in the metadata before it was in the code, which is worth\nnaming plainly: we published a document promising an endpoint that answered 404.\n\nIt could not simply be written, either. The reason is in\niam/models/idp_session.py \u2014 the SessionIndex we put in every assertion was\ngenerated fresh and never stored, so a logout request quoting one had nothing to\nbe matched against.",
+        "operationId": "slo_redirect_idp_slo_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "SAMLRequest",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Samlrequest"
+            }
+          },
+          {
+            "in": "query",
+            "name": "RelayState",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relaystate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "An application telling us somebody signed out",
+        "tags": [
+          "identity provider"
+        ]
+      },
+      "post": {
+        "description": "The POST binding. Same decisions, different envelope.",
+        "operationId": "slo_post_idp_slo_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_slo_post_idp_slo_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "An application telling us somebody signed out (POST binding)",
         "tags": [
           "identity provider"
         ]
