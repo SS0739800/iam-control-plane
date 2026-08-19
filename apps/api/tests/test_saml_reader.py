@@ -23,6 +23,7 @@ acceptable is checks.py's job and is covered in test_saml_checks.py.
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import pathlib
 
 import pytest
@@ -37,7 +38,13 @@ from iam.saml.reader import (  # noqa: E402
     ASSERTION_SIGNATURE_XPATH,
     RESPONSE_SIGNATURE_XPATH,
     decoded_xml_for_display,
+    read_authn_request,
     read_response,
+)
+from iam.saml.sp import (  # noqa: E402
+    ServiceProvider,
+    build_authn_request,
+    deflate_and_encode,
 )
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
@@ -232,3 +239,148 @@ def test_the_inspector_can_pretty_print_a_real_response() -> None:
 
 def test_the_inspector_says_so_rather_than_raising_on_rubbish() -> None:
     assert decoded_xml_for_display("not base64 at all !!") == "(could not be parsed)"
+
+
+# ------------------------------------------ requests applications send to us
+
+# The direction where we are the one being asked. An AuthnRequest carries no claims
+# — it only says "somebody at this application would like to sign in" — so anybody
+# can send one, and nothing read out of it may be treated as an instruction. These
+# tests are about reading it correctly, and about never reporting a signature as
+# checked when it was not.
+
+OUR_SP = ServiceProvider.from_base_url("https://expenses.test")
+
+WHEN = dt.datetime(2026, 8, 19, 12, 0, tzinfo=dt.UTC)
+
+
+def an_authn_request(**overrides: object) -> str:
+    """A request the way a real service provider sends it: deflated, then base64.
+
+    Built with our own service-provider code from P2 rather than by hand. Two halves
+    written months apart against the spec, so if this reader can read what that
+    builder produces, the document is very likely real rather than merely plausible.
+    """
+    defaults: dict[str, object] = {
+        "sp": OUR_SP,
+        "idp_sso_url": "https://iam.test/idp/sso",
+        "request_id": "_id-from-the-application",
+        "issued_at": WHEN,
+    }
+    defaults.update(overrides)
+    return deflate_and_encode(build_authn_request(**defaults))  # type: ignore[arg-type]
+
+
+def test_our_own_login_request_is_readable_by_our_own_reader() -> None:
+    facts = read_authn_request(an_authn_request())
+
+    assert facts.request_id == "_id-from-the-application"
+    assert facts.issuer == OUR_SP.entity_id
+    assert facts.destination == "https://iam.test/idp/sso"
+    assert facts.name_id_policy is not None and "persistent" in facts.name_id_policy
+
+
+def test_the_address_it_asks_for_is_read_but_stays_a_claim() -> None:
+    """Reading a value and acting on it are different things, and this is the first.
+
+    What stops the second is in the endpoint: the registered address is the only one
+    an assertion is ever posted to. See test_idp_sso.py.
+    """
+    facts = read_authn_request(an_authn_request())
+
+    assert facts.acs_url == OUR_SP.acs_url
+
+
+def test_being_asked_to_make_somebody_log_in_again_is_noticed() -> None:
+    assert read_authn_request(an_authn_request(force_authn=True)).force_authn is True
+    assert read_authn_request(an_authn_request()).force_authn is False
+
+
+def test_the_post_binding_carries_the_same_request_undeflated() -> None:
+    """Both bindings are offered in our metadata, and they encode differently. A
+    reader that only handles one makes the other look like a corrupt request."""
+    xml = build_authn_request(
+        sp=OUR_SP,
+        idp_sso_url="https://iam.test/idp/sso",
+        request_id="_id-posted",
+        issued_at=WHEN,
+    )
+    posted = base64.b64encode(xml.encode("utf-8")).decode("ascii")
+
+    facts = read_authn_request(posted, deflated=False)
+
+    assert facts.request_id == "_id-posted"
+    assert facts.issuer == OUR_SP.entity_id
+
+
+def test_an_unsigned_request_is_read_rather_than_refused() -> None:
+    """Normal, and a real asymmetry with everything else in this module.
+
+    Most applications do not sign their requests, and none of the providers this
+    system talks to require it. The request carries no claims, so there is nothing
+    in it a signature would protect — everything deciding who somebody is comes from
+    our own session.
+    """
+    facts = read_authn_request(an_authn_request())
+
+    assert facts.was_signed is False
+    assert facts.signature_verified is False
+
+
+def test_a_signature_is_never_reported_as_checked_when_there_was_no_certificate() -> None:
+    """The failure that would matter: an application registers no certificate, sends
+    a signed request, and the facts come back saying the signature was verified.
+
+    Nothing checked it, and anybody can send a request naming that application. So a
+    missing certificate has to mean "not checked", never "fine".
+    """
+    xml = build_authn_request(
+        sp=OUR_SP,
+        idp_sso_url="https://iam.test/idp/sso",
+        request_id="_id-claims-a-signature",
+        issued_at=WHEN,
+    ).replace(
+        "</samlp:AuthnRequest>",
+        '<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
+        "<ds:SignatureValue>not a real signature</ds:SignatureValue>"
+        "</ds:Signature></samlp:AuthnRequest>",
+    )
+
+    facts = read_authn_request(deflate_and_encode(xml))
+
+    assert facts.was_signed is True
+    assert facts.signature_verified is False
+
+
+def test_a_request_with_no_id_is_refused() -> None:
+    """The id is what the assertion quotes back. Without one there is nothing to
+    answer, and an application cannot tell our reply from a replayed one."""
+    xml = build_authn_request(
+        sp=OUR_SP,
+        idp_sso_url="https://iam.test/idp/sso",
+        request_id="_id-to-be-removed",
+        issued_at=WHEN,
+    ).replace(' ID="_id-to-be-removed"', "")
+
+    with pytest.raises(MalformedResponse, match="no ID"):
+        read_authn_request(deflate_and_encode(xml))
+
+
+def test_a_request_with_no_issuer_is_refused() -> None:
+    """The issuer is the only thing here we look anything up by. Without it there is
+    no way to tell which application sent this, so no registered address to answer
+    to — and the address in the request is exactly the one we will not use."""
+    xml = build_authn_request(
+        sp=OUR_SP,
+        idp_sso_url="https://iam.test/idp/sso",
+        request_id="_id-without-an-issuer",
+        issued_at=WHEN,
+    ).replace(f"<saml:Issuer>{OUR_SP.entity_id}</saml:Issuer>", "")
+
+    with pytest.raises(MalformedResponse, match="no issuer"):
+        read_authn_request(deflate_and_encode(xml))
+
+
+def test_something_that_is_not_a_request_at_all_is_refused() -> None:
+    with pytest.raises(MalformedResponse):
+        read_authn_request("not base64 and not deflated either")

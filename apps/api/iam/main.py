@@ -27,6 +27,7 @@ from iam.routers import (
     groups,
     health,
     identity_providers,
+    idp,
     login_inspector,
     me,
     provisioning,
@@ -133,6 +134,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # part of the site rather than the JSON API, and Caddy proxies /saml/* on its
     # own rule.
     app.include_router(saml.router)
+
+    # The other direction: applications ask us to sign people in. Outside /api for
+    # the same reason as /saml — an application posts here from somebody's browser.
+    app.include_router(idp.router)
 
     # SCIM lives outside /api too, and for the same reason: a provider posts here
     # directly, so it is part of the site rather than the console's own JSON API.

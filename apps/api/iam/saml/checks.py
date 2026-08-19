@@ -129,6 +129,44 @@ class LogoutResponseFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthnRequestFacts:
+    """An application asking us to sign somebody in.
+
+    The other direction from AssertionFacts: this arrives from a service provider
+    rather than from an identity provider, because in P5 we are the one being asked.
+
+    ``acs_url`` is read but deliberately not trusted — see the note on it. Reading a
+    value and acting on it are different things, and the reader's job is only the
+    first.
+    """
+
+    request_id: str
+    issuer: str
+    """The application's entity id. The only field here we look anything up by."""
+
+    destination: str | None = None
+    acs_url: str | None = None
+    """AssertionConsumerServiceURL, as the request asked for it.
+
+    Recorded so a mismatch can be logged, and never used as the address to post to.
+    Anybody can send an AuthnRequest naming any application and any return address;
+    honouring it would mean posting a signed assertion for a real person to a
+    server the attacker chose. The registered acs_url is the only one used."""
+
+    name_id_policy: str | None = None
+    force_authn: bool = False
+    """The application asking us to make them sign in again regardless of an
+    existing session. Read, and not yet acted on."""
+
+    relay_state: str | None = None
+    """Opaque to us. Handed back unchanged so the application can resume whatever
+    it was doing."""
+
+    signature_verified: bool = False
+    was_signed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Expectations:
     """What we're comparing the login against."""
 

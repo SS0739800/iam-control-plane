@@ -983,6 +983,34 @@
         "title": "Body_assertion_consumer_service_saml_acs_post",
         "type": "object"
       },
+      "Body_sso_post_idp_sso_post": {
+        "properties": {
+          "relay_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relay State"
+          },
+          "saml_request": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saml Request"
+          }
+        },
+        "title": "Body_sso_post_idp_sso_post",
+        "type": "object"
+      },
       "ChainVerification": {
         "description": "What the tamper check found.",
         "properties": {
@@ -5903,6 +5931,200 @@
         "summary": "Give this person a console role",
         "tags": [
           "access"
+        ]
+      }
+    },
+    "/idp/metadata": {
+      "get": {
+        "description": "Hand this to whoever is setting up an application.\n\nNot behind a login, the same as the SP metadata and for the same reason: it\ncontains nothing secret, and requiring a session to fetch the document you need\nin order to set up signing in would be an awkward loop.",
+        "operationId": "metadata_idp_metadata_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/samlmetadata+xml": {}
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Our details, for registering an application against this system",
+        "tags": [
+          "identity provider"
+        ]
+      }
+    },
+    "/idp/sso": {
+      "get": {
+        "description": "The redirect binding, and the one most applications use.\n\nAlso handles a login we start ourselves: with ``?app=slug`` and no SAMLRequest,\nsomebody clicking an application in the console gets signed straight in. That is\nwhat an application calls IdP-initiated, and it is legal \u2014 the assertion simply\ncarries no InResponseTo.",
+        "operationId": "sso_redirect_idp_sso_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "SAMLRequest",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Samlrequest"
+            }
+          },
+          {
+            "in": "query",
+            "name": "RelayState",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relaystate"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App"
+            }
+          },
+          {
+            "description": "Ours, not SAML's. Set to 'post' only on the way back from logging in, to say the request came in by POST and so is not deflated.",
+            "in": "query",
+            "name": "binding",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ours, not SAML's. Set to 'post' only on the way back from logging in, to say the request came in by POST and so is not deflated.",
+              "title": "Binding"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign somebody in to an application",
+        "tags": [
+          "identity provider"
+        ]
+      },
+      "post": {
+        "description": "The POST binding. Same decisions, different envelope.\n\nOffered because our metadata says we offer it, and an application that reads\nmetadata and then finds only one binding working has been lied to.",
+        "operationId": "sso_post_idp_sso_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sso_post_idp_sso_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign somebody in to an application (POST binding)",
+        "tags": [
+          "identity provider"
+        ]
+      }
+    },
+    "/idp/sso/{app_slug}": {
+      "get": {
+        "description": "A tidy link for a login we start ourselves.\n\nExists so the console can offer \"open this application\" without anybody\nconstructing a query string, and so a bookmark to an application is a normal\nlooking URL.",
+        "operationId": "sso_for_app_idp_sso__app_slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_slug",
+            "required": true,
+            "schema": {
+              "title": "App Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign in to an application by name",
+        "tags": [
+          "identity provider"
         ]
       }
     },

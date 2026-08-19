@@ -31,11 +31,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.db import build_engine, build_sessionmaker
 from iam.main import create_app
+from iam.routers.idp import _assertion_signer, _authn_request_reader
 from iam.routers.saml import (
     _logout_request_reader,
     _logout_response_reader,
     _response_reader,
 )
+from tests.idp_harness import (
+    AppScenario,
+    StubAuthnReader,
+    StubSigner,
+    new_app_scenario,
+)
+from tests.idp_harness import clean_up as clean_up_app
 from tests.saml_harness import (
     ConsoleUsers,
     Scenario,
@@ -143,6 +151,44 @@ def saml_client(
     app.dependency_overrides[_response_reader] = lambda: saml_reader
     app.dependency_overrides[_logout_request_reader] = lambda: saml_logout_reader
     app.dependency_overrides[_logout_response_reader] = lambda: saml_logout_response_reader
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def app_scenario() -> Iterator[AppScenario]:
+    """Unique names for one identity-provider test, and the cleanup afterwards."""
+    made = new_app_scenario()
+    yield made
+    clean_up_app(made)
+
+
+@pytest.fixture
+def authn_reader() -> StubAuthnReader:
+    """Stands in for reading an application's login request. See tests/idp_harness.py."""
+    return StubAuthnReader()
+
+
+@pytest.fixture
+def assertion_signer() -> StubSigner:
+    """Stands in for xmlsec signing the response we send back."""
+    return StubSigner()
+
+
+@pytest.fixture
+def idp_client(
+    authn_reader: StubAuthnReader,
+    assertion_signer: StubSigner,
+) -> Iterator[TestClient]:
+    """A client whose /idp endpoints read and sign through the stubs.
+
+    The same two seams as saml_client, in the other direction: everything the
+    endpoint decides is the real code, and only the two steps that need xmlsec are
+    replaced.
+    """
+    app = create_app(build_settings(database_url()))
+    app.dependency_overrides[_authn_request_reader] = lambda: authn_reader
+    app.dependency_overrides[_assertion_signer] = lambda: assertion_signer
     with TestClient(app) as test_client:
         yield test_client
 

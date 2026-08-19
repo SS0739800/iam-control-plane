@@ -30,6 +30,7 @@ from onelogin.saml2.utils import OneLogin_Saml2_Utils
 
 from iam.saml.checks import (
     AssertionFacts,
+    AuthnRequestFacts,
     LogoutRequestFacts,
     LogoutResponseFacts,
     MalformedResponse,
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "ASSERTION_SIGNATURE_XPATH",
+    "AUTHN_REQUEST_SIGNATURE_XPATH",
     "MAX_RESPONSE_BYTES",
     "RESPONSE_SIGNATURE_XPATH",
     "SAFE_PARSER",
@@ -47,6 +49,7 @@ __all__ = [
     "decoded_xml_for_display",
     "inflate_and_decode",
     "parse",
+    "read_authn_request",
     "read_logout_request",
     "read_logout_response",
     "read_response",
@@ -306,6 +309,7 @@ def read_response(raw_response: str, idp_signing_cert: str) -> AssertionFacts:
 
 
 LOGOUT_REQUEST_SIGNATURE_XPATH = "/samlp:LogoutRequest/ds:Signature"
+AUTHN_REQUEST_SIGNATURE_XPATH = "/samlp:AuthnRequest/ds:Signature"
 LOGOUT_RESPONSE_SIGNATURE_XPATH = "/samlp:LogoutResponse/ds:Signature"
 
 
@@ -369,6 +373,67 @@ def read_logout_request(
         was_signed=was_signed,
         signature_verified=(
             _verify(xml, idp_signing_cert, LOGOUT_REQUEST_SIGNATURE_XPATH) if was_signed else False
+        ),
+    )
+
+
+def read_authn_request(
+    raw: str, sp_signing_cert: str | None = None, *, deflated: bool = True
+) -> AuthnRequestFacts:
+    """Read an application asking us to sign somebody in.
+
+    The one message here that arrives from a service provider rather than an
+    identity provider, because P5 is the direction where we are the one being asked.
+
+    The certificate is optional, and that is a real asymmetry with the rest of this
+    module rather than an oversight. An unsigned AuthnRequest is normal — most
+    applications do not sign them, and none of the three providers this system talks
+    to require it — because the request carries no claims. It only says "somebody at
+    this application would like to sign in", and everything that decides *who* they
+    are comes from our own session, not from the request.
+
+    What that means is that anybody can send one. So nothing in the returned facts
+    may be trusted as an instruction: the issuer is looked up rather than believed,
+    and acs_url is recorded rather than used. See the note on AuthnRequestFacts.
+
+    Args:
+        raw: The encoded request.
+        sp_signing_cert: The application's certificate, when it has registered one.
+            Absent means the signature is not checked, and ``signature_verified``
+            stays false rather than being quietly reported as true.
+        deflated: True for the redirect binding, false for POST.
+
+    Raises:
+        MalformedResponse: There was no readable request.
+    """
+    xml = inflate_and_decode(raw) if deflated else decode_response(raw)
+    root = parse(xml)
+
+    request_id = root.get("ID")
+    if not request_id:
+        raise MalformedResponse("authn request has no ID")
+
+    issuer = _text(_first(root, "./saml:Issuer"))
+    if not issuer:
+        raise MalformedResponse(
+            "authn request has no issuer, so there is no way to tell which " "application sent it"
+        )
+
+    was_signed = _signature_over(root)
+    policy = _first(root, "./samlp:NameIDPolicy")
+
+    return AuthnRequestFacts(
+        request_id=request_id,
+        issuer=issuer,
+        destination=root.get("Destination"),
+        acs_url=root.get("AssertionConsumerServiceURL"),
+        name_id_policy=policy.get("Format") if policy is not None else None,
+        force_authn=root.get("ForceAuthn", "").lower() == "true",
+        was_signed=was_signed,
+        signature_verified=(
+            _verify(xml, sp_signing_cert, AUTHN_REQUEST_SIGNATURE_XPATH)
+            if was_signed and sp_signing_cert
+            else False
         ),
     )
 

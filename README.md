@@ -62,6 +62,41 @@ so there is no path from "the provider let them in" to "they can change things
 here". Granting a role is a deliberate admin action on the user's page, and it is
 recorded as a grant with a reason, an author and an optional end date.
 
+### Being the identity provider (P5)
+
+The direction where applications take our word. `/idp/*` is the outbound half:
+applications register against our metadata, send people here to be signed in, and
+get back an assertion we signed.
+
+| Endpoint             | What                                                     |
+| -------------------- | -------------------------------------------------------- |
+| `/idp/metadata`      | The document you hand somebody registering an application |
+| `/idp/sso`           | Where an application sends people to be signed in         |
+| `/idp/sso/{slug}`    | A login we start ourselves, for a link in the console     |
+
+Three things have to be true before anything is signed, and each is a different
+refusal: the application is registered and switched on, somebody is signed in, and
+that person has an assignment giving them access. The third is where P4 stops being
+a report and becomes enforcement — an assertion is only ever issued to somebody a
+row says may have it, and the refusal is written to the audit log with the reason.
+
+**The address in the request is never used.** An AuthnRequest names where to send
+the answer, and honouring it is the worst mistake available on this endpoint:
+anybody can send a request naming a real application and their own return address,
+and posting there would hand them a genuine signed assertion for whoever happened to
+be logged in. The registered `acs_url` is the only one an assertion goes to. The
+request's copy is read, logged when it disagrees, and dropped.
+
+Refusals after the first step come back as SAML rather than as an error page, so
+somebody halfway through signing in lands back at the application with something it
+can explain instead of stranded on our domain. The one exception is a request we
+cannot read or from an application we do not know — there is no trusted address to
+post anything to, so those are plain HTTP errors.
+
+The signing key is the most dangerous secret here. It never goes in the database,
+production refuses to start without one, and outside production a throwaway pair is
+generated in memory with a warning. See [`iam/saml/keys.py`](apps/api/iam/saml/keys.py).
+
 ### Lifecycle and entitlements (P4)
 
 Who has what, why, and what happens when that changes.
@@ -109,7 +144,7 @@ CI is configured but has not run yet — it executes on the first push to a remo
 | P2    | SAML SP — inbound SSO                             | ✅ done         |
 | P3    | SCIM 2.0 server — inbound provisioning            | ✅ done         |
 | P4    | Lifecycle + entitlements *(MVP line)*             | ✅ done         |
-| P5    | SAML IdP — outbound SSO                           | next            |
+| P5    | SAML IdP — outbound SSO                           | in progress     |
 | P6    | SCIM client — outbound provisioning               | planned         |
 | P7    | Production deploy                                 | planned         |
 | P8    | Entra ID integration sprint                       | planned         |

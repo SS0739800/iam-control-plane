@@ -20,6 +20,7 @@ import datetime as dt
 from xml.etree import ElementTree
 
 import pytest
+from fastapi.testclient import TestClient
 
 from iam.saml.idp import (
     ASSERTION_LIFETIME,
@@ -342,3 +343,27 @@ def test_an_id_never_starts_with_a_digit(_: int) -> None:
 def test_ids_and_session_indexes_are_unique() -> None:
     assert len({new_id() for _ in range(200)}) == 200
     assert len({new_session_index() for _ in range(200)}) == 200
+
+
+# ---------------------------------------------------- handing the document out
+
+
+def test_the_metadata_endpoint_needs_no_session(client: TestClient) -> None:
+    """Not behind a login, on purpose.
+
+    It holds nothing secret, and needing a session to fetch the document you need in
+    order to set sessions up at all is a loop somebody has to break by hand.
+
+    No database either, which is why this test lives beside the builder rather than
+    with the endpoint tests: the client here points at a Postgres that is not there.
+    """
+    response = client.get("/idp/metadata")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/samlmetadata+xml")
+    assert parsed(response.text).find(".//ds:X509Certificate", NS) is not None
+
+
+def test_the_metadata_never_carries_the_private_key(client: TestClient) -> None:
+    """The one mistake in publishing a keypair that cannot be taken back."""
+    assert "PRIVATE KEY" not in client.get("/idp/metadata").text

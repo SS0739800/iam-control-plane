@@ -46,23 +46,17 @@ from lxml import etree
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 
+from iam.saml.idp import SigningFailed
 from iam.saml.reader import SAFE_PARSER
 
 logger = logging.getLogger(__name__)
 
+# SigningFailed is raised here and defined in idp.py, which needs no xmlsec, so
+# the endpoint that catches it stays importable on a laptop. Re-exported so this
+# module still reads as the one place signing goes wrong.
 __all__ = ["SigningFailed", "sign_assertion"]
 
 ASSERTION_TAG = f"{{{OneLogin_Saml2_Constants.NS_SAML}}}Assertion"
-
-
-class SigningFailed(Exception):
-    """The document could not be signed, and the message says why.
-
-    Raised rather than returning an unsigned document, and that distinction
-    matters: an unsigned assertion looks almost identical and is rejected by the
-    receiver with a signature error, which sends whoever is debugging it to the
-    wrong end of the connection entirely.
-    """
 
 
 def sign_assertion(response_xml: str, *, private_key_pem: str, certificate_pem: str) -> str:

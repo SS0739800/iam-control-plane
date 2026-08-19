@@ -73,6 +73,22 @@ clocks. A minute costs nothing against a five minute lifetime.
 """
 
 
+class SigningFailed(Exception):
+    """The document could not be signed, and the message says why.
+
+    Raised rather than returning an unsigned document, and that distinction
+    matters: an unsigned assertion looks almost identical and is rejected by the
+    receiver with a signature error, which sends whoever is debugging it to the
+    wrong end of the connection entirely.
+
+    Defined here rather than in signer.py, where it is raised, because signer.py
+    needs xmlsec. The endpoint that catches this has to be importable on a laptop,
+    and an `except` clause that cannot be imported is not much of a safety net.
+    signer.py re-exports it, so `from iam.saml.signer import SigningFailed` still
+    reads the way it should at the place that raises it.
+    """
+
+
 def new_id() -> str:
     """An XML id for a response or an assertion.
 
