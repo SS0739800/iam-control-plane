@@ -142,10 +142,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Signature verification is the one part of this codebase where being wrong
-      # means accepting forged logins, and it is the only part that needs xmlsec.
-      # The api job cannot run these — no xmlsec there — so without this step
-      # reader.py has no coverage anywhere in CI.
+      # Signatures are the one part of this codebase where being wrong means
+      # accepting forged logins — or issuing them — and the only part that needs
+      # xmlsec. The api job cannot run these, so without this step both the reader
+      # and the signer have no coverage anywhere in CI.
+      #
+      # Both files, not just the reader. P5 made us the thing being trusted, and a
+      # signer that quietly signs the wrong element still produces logins that work.
       #
       # pytest is installed here rather than baked into the image, so the runtime
       # image stays free of test tooling.
@@ -153,7 +156,7 @@ jobs:
         run: |
           docker run --rm -u root -v "$PWD/apps/api:/srv" -w /srv iam-api:ci sh -c '
             pip install --quiet pytest==8.3.4 pytest-asyncio==0.25.0 httpx==0.28.1 &&
-            python -m pytest tests/test_saml_reader.py -q
+            python -m pytest tests/test_saml_reader.py tests/test_saml_signer.py -q
           '
 
       - name: Build web bundle image
