@@ -47,9 +47,14 @@ class UnusableAssertion(Exception):
 
 CLAIM_USER_NAME = (
     "http://schemas.goauthentik.io/2021/02/saml/username",
+    # Entra's reliable sign-in name. Its /claims/name holds the same thing most of
+    # the time and something else the rest of the time, which is why that one is
+    # only trusted for a display name.
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn",
     "urn:oid:0.9.2342.19200300.100.1.1",  # uid
     "userName",
     "username",
+    "login",  # Okta's own name for it in their SAML app templates
     "uid",
 )
 
@@ -131,9 +136,23 @@ class ProvisionOutcome:
 
 
 def _first_claim(attributes: dict[str, list[str]], names: tuple[str, ...]) -> str | None:
-    """First non-empty value among these claim names, in the order given."""
+    """First non-empty value among these claim names, in the order given.
+
+    Matched without regard to case, which matters more than it looks. Provider
+    consoles let somebody type the attribute name by hand, so the same claim
+    arrives as ``firstName`` from one tenant and ``FirstName`` from the next. An
+    exact lookup finds neither unless both are listed, and the failure is a login
+    that succeeds with a blank name — or, for the username, one refused with "the
+    login carries no email address or username" while the assertion visibly
+    contains one.
+
+    Folding the case is one line and covers every casing anybody invents. Listing
+    them all would be a guessing game that is never finished.
+    """
+    folded = {name.casefold(): values for name, values in attributes.items()}
+
     for name in names:
-        for value in attributes.get(name, ()):
+        for value in folded.get(name.casefold(), ()):
             stripped = value.strip()
             if stripped:
                 return stripped

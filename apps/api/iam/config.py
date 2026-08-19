@@ -33,6 +33,16 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # ------------------------------------------------- signing logins we issue
+    # The keypair we sign assertions with, as PEM. Deliberately not in the
+    # database: this key can mint a login for anybody, so it must not be in
+    # something a dump or a backup carries around. See iam/saml/keys.py.
+    #
+    # No default. Production refuses to start without one; outside production a
+    # throwaway pair is generated in memory and warned about loudly.
+    saml_idp_private_key: str | None = None
+    saml_idp_certificate: str | None = None
+
     # ---------------------------------------------------------------- email
     # Mailpit in compose, which accepts anything and delivers nowhere. That is the
     # right default for a system that emails people about access: a misconfigured

@@ -12,7 +12,8 @@ import os
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TypeVar
+from functools import lru_cache
+from typing import TYPE_CHECKING, TypeVar
 
 import pytest
 from sqlalchemy import delete, select
@@ -27,6 +28,9 @@ from iam.models.user import User
 from iam.scim.constants import SCIM_MEDIA_TYPE
 from iam.tokens import hash_token, new_token
 
+if TYPE_CHECKING:
+    from iam.saml.keys import Keypair
+
 T = TypeVar("T")
 
 # Port 1 on localhost. Nothing is listening there, and it fails straight away
@@ -34,6 +38,22 @@ T = TypeVar("T")
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://nobody:nobody@127.0.0.1:1/absent"
 
 TEST_DATABASE_ENV_VAR = "IAM_TEST_DATABASE_URL"
+
+
+@lru_cache(maxsize=1)
+def signing_keypair() -> Keypair:
+    """A throwaway signing keypair, for tests that build a production app.
+
+    Production refuses to start without one, which is the point — but a test about
+    authentication should not have to care, so this exists to satisfy the guard
+    without making every such test generate its own RSA key.
+
+    Cached: keygen costs about a tenth of a second, and a test suite that builds
+    several production apps would otherwise pay it each time.
+    """
+    from iam.saml.keys import generate
+
+    return generate(common_name="http://localhost:8080")
 
 
 def build_settings(database_url: str = UNREACHABLE_DATABASE_URL) -> Settings:

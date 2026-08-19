@@ -58,6 +58,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             'python -c "import secrets; print(secrets.token_urlsafe(48))"'
         )
 
+    # Load the signing keypair now rather than on the first login. Outside
+    # production this generates a throwaway pair and warns; in production a missing
+    # or mismatched pair raises, and refusing to boot is much better than starting
+    # and failing every login with a signature error nobody can trace back to here.
+    #
+    # See iam/saml/keys.py for why the key is not in the database.
+    from iam.saml.keys import UnusableKeypair, for_settings
+
+    try:
+        keypair = for_settings(resolved)
+    except UnusableKeypair as exc:
+        raise RuntimeError(f"Cannot sign logins: {exc}") from exc
+
     @asynccontextmanager
     async def lifespan(instance: FastAPI) -> AsyncIterator[None]:
         # This doesn't actually connect yet, so the app still starts when Postgres
@@ -96,6 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.state.settings = resolved
+    app.state.saml_keypair = keypair
 
     # No CORS middleware here, on purpose. The frontend is served from this same
     # address, so a cross-origin request means something is misconfigured and it

@@ -20,6 +20,7 @@ from iam.main import create_app
 from iam.models.enums import PlatformRole
 from iam.security import Actor, Permission, permissions_for, require
 from iam.security.actor import NOT_SIGNED_IN
+from tests.support import signing_keypair
 
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://nobody:nobody@127.0.0.1:1/absent"
 
@@ -143,11 +144,16 @@ def test_production_ignores_the_development_header() -> None:
     A 401 here also proves the header was ignored rather than tried: the database
     is unreachable, so a code path that looked the user up would fail differently.
     """
+    # A production app refuses to start without a signing keypair, so this supplies
+    # one. Nothing here is about signing — it just has to get past the guard.
+    keypair = signing_keypair()
     settings = Settings(
         app_env="production",
         session_secret="a-real-secret-value-for-this-test",
         database_url=UNREACHABLE_DATABASE_URL,
         dev_actor_user_name="admin@demo.local",
+        saml_idp_private_key=keypair.private_key_pem,
+        saml_idp_certificate=keypair.certificate_pem,
     )
 
     with TestClient(create_app(settings)) as client:

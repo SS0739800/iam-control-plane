@@ -19,6 +19,13 @@ python-json-logger==3.2.1
 # installed. Pure Python, so it goes in the cross-platform file.
 python-multipart==0.0.20
 
+# Reading and generating the keypair we sign assertions with (P5). Ships wheels
+# for Windows, macOS and Linux, so it stays in the cross-platform file — which is
+# the point: it means key handling is testable on a laptop and in CI, and only the
+# XML signing itself needs the container. python3-saml pulls this in anyway; it is
+# listed here so the version is pinned rather than inherited.
+cryptography==44.0.0
+
 # IANA timezone database for zoneinfo. Neither Windows nor python:*-slim ships
 # one, so ZoneInfo("UTC") raises without this — which surfaced as Alembic
 # failing to write a migration file.
