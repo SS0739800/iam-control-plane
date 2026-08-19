@@ -18,13 +18,17 @@ import {
   Td,
   Th,
 } from '../components/ui'
-import { fetchApplication, fetchApplications } from '../lib/api'
+import { ApplicationSamlPanels } from '../components/ApplicationSamlPanels'
+import { RegisterApplication } from '../components/RegisterApplication'
+import { fetchApplication, fetchApplications, fetchMe } from '../lib/api'
 
 const PAGE_SIZE = 25
 
 export function ApplicationsPage() {
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
+  const canWrite = me.data?.permissions.includes('apps:write') ?? false
 
   const apps = useQuery({
     queryKey: ['applications', search, offset],
@@ -33,9 +37,10 @@ export function ApplicationsPage() {
   })
 
   return (
-    <Panel
-      title="Applications"
-      action={
+    <div className="flex flex-col gap-6">
+      <Panel
+        title="Applications"
+        action={
         <input
           type="search"
           value={search}
@@ -95,12 +100,18 @@ export function ApplicationsPage() {
           />
         </>
       )}
-    </Panel>
+      </Panel>
+
+      {canWrite ? <RegisterApplication /> : null}
+    </div>
   )
 }
 
 export function ApplicationDetailPage() {
   const { appId = '' } = useParams()
+  // The API enforces this; asking only decides whether to draw the controls.
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
+  const canWrite = me.data?.permissions.includes('apps:write') ?? false
   const app = useQuery({ queryKey: ['application', appId], queryFn: () => fetchApplication(appId) })
 
   if (app.isPending) return <Loading />
@@ -126,68 +137,8 @@ export function ApplicationDetailPage() {
         </dl>
       </Panel>
 
-      {isSaml ? (
-        <Panel title="SAML settings">
-          <p className="pb-3 text-sm text-slate-500 dark:text-slate-400">
-            Shown so a mistyped value is easy to spot. Nothing reads these until P5, when this
-            platform starts signing people in.
-          </p>
-          <dl>
-            <Row label="Entity ID">
-              <Mono>{data.entity_id ?? '—'}</Mono>
-            </Row>
-            <Row label="Login response URL">
-              <Mono>{data.acs_url ?? '—'}</Mono>
-            </Row>
-            <Row label="Logout URL">
-              <Mono>{data.slo_url ?? '—'}</Mono>
-            </Row>
-            <Row label="Name ID format">
-              <Mono>{data.nameid_format ?? '—'}</Mono>
-            </Row>
-            <Row label="Certificate">
-              {data.signing_cert ? 'on file' : 'not set'}
-            </Row>
-          </dl>
-        </Panel>
-      ) : null}
+      {isSaml ? <ApplicationSamlPanels app={data} canWrite={canWrite} /> : null}
 
-      <Panel title={`Access via groups (${data.assigned_groups.length})`}>
-        {data.assigned_groups.length === 0 ? (
-          <Empty>No groups grant access to this application.</Empty>
-        ) : (
-          <ul className="flex flex-col">
-            {data.assigned_groups.map((group) => (
-              <li
-                key={group.id}
-                className="border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-              >
-                <LinkCell to={`/groups/${group.id}`}>{group.name}</LinkCell>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      <Panel title={`Access given directly (${data.assigned_users.length})`}>
-        {data.assigned_users.length === 0 ? (
-          <Empty>Nobody has been given this directly. All access comes from groups.</Empty>
-        ) : (
-          <ul className="flex flex-col">
-            {data.assigned_users.map((user) => (
-              <li
-                key={user.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-              >
-                <LinkCell to={`/users/${user.id}`}>{user.display_name}</LinkCell>
-                <Pill tone={user.active ? 'ok' : 'muted'}>
-                  {user.active ? 'active' : 'deactivated'}
-                </Pill>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
     </div>
   )
 }

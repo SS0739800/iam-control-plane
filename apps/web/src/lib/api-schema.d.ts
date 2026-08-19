@@ -384,7 +384,29 @@ export interface paths {
         /** List applications */
         get: operations["list_applications_api_applications_get"];
         put?: never;
-        post?: never;
+        /**
+         * Register an application from its metadata, or update one
+         * @description Read an application's metadata and store what it says.
+         *
+         *     ``apps:write``, reused rather than given a permission of its own. Registering an
+         *     application is managing an application, and the audience is already the narrowest
+         *     one — admin. Inventing a separate permission would suggest it was a different
+         *     kind of power and then let the two drift apart. The opposite call was made for
+         *     role grants, where ``users:write`` was genuinely *not* an equivalent power.
+         *
+         *     The document is pasted in, never fetched from a URL. Same reasoning as
+         *     registering an identity provider, and it applies here for the same reason: our
+         *     server can reach things the person pasting cannot. See
+         *     docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         *
+         *     Registering the same slug again replaces the details, which is how a certificate
+         *     or an address change is handled — paste the new metadata and the row updates.
+         *
+         *     Raises:
+         *         HTTPException: 400 if the metadata can't be read or is missing something.
+         *             409 if another slug has already claimed the same entity id.
+         */
+        post: operations["register_application_api_applications_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -403,6 +425,66 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{app_id}/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Give a group access to an application
+         * @description Grant through a group, which is how access should usually be given.
+         *
+         *     Needs groups:write as well as apps:write. Giving one person access affects one
+         *     person; giving a group access affects everybody in it now and everybody added to
+         *     it later, including by an access rule nobody re-reads.
+         */
+        put: operations["assign_group_api_applications__app_id__groups__group_id__put"];
+        post?: never;
+        /**
+         * Take a group's access to an application away
+         * @description Safe to call twice.
+         */
+        delete: operations["unassign_group_api_applications__app_id__groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{app_id}/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Give one person access to an application
+         * @description Safe to call twice. Assigning somebody who already has it does nothing.
+         *
+         *     This is what /idp/sso reads before it will sign an assertion, so an assignment
+         *     here is the difference between a login working and being refused.
+         */
+        put: operations["assign_user_api_applications__app_id__users__user_id__put"];
+        post?: never;
+        /**
+         * Take away one person's access to an application
+         * @description Safe to call twice.
+         *
+         *     Deleted rather than marked, unlike a role grant. An assignment carries no reason
+         *     or expiry of its own, so there is nothing in the row worth keeping — the audit
+         *     entry holds who removed it and when, which is the part somebody asks about.
+         *     That asymmetry is a known one; see the note in models/application.py.
+         */
+        delete: operations["unassign_user_api_applications__app_id__users__user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -939,6 +1021,118 @@ export interface paths {
          *         HTTPException: 409 if they are the last admin.
          */
         delete: operations["delete_role_grant_api_users__user_id__role_grants_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/idp/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Our details, for registering an application against this system
+         * @description Hand this to whoever is setting up an application.
+         *
+         *     Not behind a login, the same as the SP metadata and for the same reason: it
+         *     contains nothing secret, and requiring a session to fetch the document you need
+         *     in order to set up signing in would be an awkward loop.
+         */
+        get: operations["metadata_idp_metadata_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/idp/slo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An application telling us somebody signed out
+         * @description The redirect binding, which is what our metadata advertises.
+         *
+         *     This address was in the metadata before it was in the code, which is worth
+         *     naming plainly: we published a document promising an endpoint that answered 404.
+         *
+         *     It could not simply be written, either. The reason is in
+         *     iam/models/idp_session.py — the SessionIndex we put in every assertion was
+         *     generated fresh and never stored, so a logout request quoting one had nothing to
+         *     be matched against.
+         */
+        get: operations["slo_redirect_idp_slo_get"];
+        put?: never;
+        /**
+         * An application telling us somebody signed out (POST binding)
+         * @description The POST binding. Same decisions, different envelope.
+         */
+        post: operations["slo_post_idp_slo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/idp/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sign somebody in to an application
+         * @description The redirect binding, and the one most applications use.
+         *
+         *     Also handles a login we start ourselves: with ``?app=slug`` and no SAMLRequest,
+         *     somebody clicking an application in the console gets signed straight in. That is
+         *     what an application calls IdP-initiated, and it is legal — the assertion simply
+         *     carries no InResponseTo.
+         */
+        get: operations["sso_redirect_idp_sso_get"];
+        put?: never;
+        /**
+         * Sign somebody in to an application (POST binding)
+         * @description The POST binding. Same decisions, different envelope.
+         *
+         *     Offered because our metadata says we offer it, and an application that reads
+         *     metadata and then finds only one binding working has been lied to.
+         */
+        post: operations["sso_post_idp_sso_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/idp/sso/{app_slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sign in to an application by name
+         * @description A tidy link for a login we start ourselves.
+         *
+         *     Exists so the console can offer "open this application" without anybody
+         *     constructing a query string, and so a bookmark to an application is a normal
+         *     looking URL.
+         */
+        get: operations["sso_for_app_idp_sso__app_slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1660,9 +1854,10 @@ export interface components {
          * ApplicationDetail
          * @description Everything on the app page, including its SAML settings.
          *
-         *     Nothing uses the SAML fields until P5. They're here because the console shows
-         *     them, and a mistyped entity id is much easier to spot on a page than by
-         *     reading the database.
+         *     The SAML fields are what iam/routers/idp.py reads to answer a login, so they are
+         *     shown rather than hidden: a mistyped entity id is much easier to spot on a page
+         *     than by reading the database, and it is the difference between an application
+         *     working and every login for it being refused as an unknown issuer.
          */
         ApplicationDetail: {
             /** Acs Url */
@@ -1707,6 +1902,40 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * ApplicationRegistration
+         * @description Register an application, or update one that already exists.
+         *
+         *     The metadata document carries the entity id, the addresses and the certificate,
+         *     so none of those are fields here. Letting somebody type them separately is how an
+         *     assertion ends up posted to an address the application never published — see
+         *     docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         */
+        ApplicationRegistration: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @description Turn an application off to stop issuing logins for it without losing its settings or who had access.
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Metadata Xml
+             * @description The application's SAML metadata document, pasted in whole.
+             */
+            metadata_xml: string;
+            /**
+             * Name
+             * @description What to call it in the console.
+             */
+            name: string;
+            /**
+             * Slug
+             * @description Short name used in links, e.g. /idp/sso/expenses. Lowercase, digits and dashes, because it goes in a URL.
+             */
+            slug: string;
         };
         /** ApplicationSummary */
         ApplicationSummary: {
@@ -1771,6 +2000,20 @@ export interface components {
             relay_state?: string | null;
             /** Saml Response */
             saml_response: string;
+        };
+        /** Body_slo_post_idp_slo_post */
+        Body_slo_post_idp_slo_post: {
+            /** Relay State */
+            relay_state?: string | null;
+            /** Saml Request */
+            saml_request?: string | null;
+        };
+        /** Body_sso_post_idp_sso_post */
+        Body_sso_post_idp_sso_post: {
+            /** Relay State */
+            relay_state?: string | null;
+            /** Saml Request */
+            saml_request?: string | null;
         };
         /**
          * ChainVerification
@@ -3583,6 +3826,39 @@ export interface operations {
             };
         };
     };
+    register_application_api_applications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationRegistration"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_application_api_applications__app_id__get: {
         parameters: {
             query?: never;
@@ -3602,6 +3878,132 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApplicationDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_group_api_applications__app_id__groups__group_id__put: {
+        parameters: {
+            query?: {
+                /** @description What role this gives them in the app */
+                role?: string | null;
+            };
+            header?: never;
+            path: {
+                app_id: string;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unassign_group_api_applications__app_id__groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_user_api_applications__app_id__users__user_id__put: {
+        parameters: {
+            query?: {
+                /** @description What role this gives them in the app */
+                role?: string | null;
+            };
+            header?: never;
+            path: {
+                app_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unassign_user_api_applications__app_id__users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4446,6 +4848,190 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metadata_idp_metadata_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/samlmetadata+xml": unknown;
+                };
+            };
+        };
+    };
+    slo_redirect_idp_slo_get: {
+        parameters: {
+            query?: {
+                SAMLRequest?: string | null;
+                RelayState?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    slo_post_idp_slo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["Body_slo_post_idp_slo_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sso_redirect_idp_sso_get: {
+        parameters: {
+            query?: {
+                SAMLRequest?: string | null;
+                RelayState?: string | null;
+                app?: string | null;
+                /** @description Ours, not SAML's. Set to 'post' only on the way back from logging in, to say the request came in by POST and so is not deflated. */
+                binding?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sso_post_idp_sso_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["Body_sso_post_idp_sso_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sso_for_app_idp_sso__app_slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

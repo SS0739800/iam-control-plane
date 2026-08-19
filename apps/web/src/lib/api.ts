@@ -111,6 +111,19 @@ function messageFrom(error: unknown, status: number): string {
   return `Request failed with status ${status}`
 }
 
+/**
+ * Throw if the request failed, and return nothing.
+ *
+ * For endpoints that answer 204. unwrap cannot be used on those: a 204 has no body,
+ * so `data` is undefined on success as well as on failure, and unwrap would treat
+ * every success as an error.
+ */
+function unwrapEmpty(result: { error?: unknown; response: Response }): void {
+  if (!result.response.ok) {
+    throw new ApiError(result.response.status, messageFrom(result.error, result.response.status))
+  }
+}
+
 /** Return the data, or throw so react-query can show an error state. */
 function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
   if (result.data === undefined) {
@@ -410,4 +423,64 @@ export async function withdrawAccessRequest(requestId: string): Promise<AccessRe
 
 export async function fetchAccessReview(): Promise<AccessReview> {
   return unwrap(await client.GET('/api/access-review'))
+}
+
+// ------------------------------------------------------- registering apps
+
+/**
+ * Register an application by pasting its metadata. Never a form of addresses —
+ * a mistyped ACS URL is a signed assertion posted somewhere it should not go.
+ */
+export async function registerApplication(body: {
+  slug: string
+  name: string
+  description?: string | null
+  metadata_xml: string
+  enabled?: boolean
+}): Promise<ApplicationDetail> {
+  // enabled is spelled out because the generated type has it required — the default
+  // lives on the server, and openapi-typescript reports the post-default shape.
+  return unwrap(
+    await client.POST('/api/applications', { body: { ...body, enabled: body.enabled ?? true } }),
+  )
+}
+
+export async function grantAppAccessToUser(
+  appId: string,
+  userId: string,
+  role?: string,
+): Promise<void> {
+  await unwrapEmpty(
+    await client.PUT('/api/applications/{app_id}/users/{user_id}', {
+      params: { path: { app_id: appId, user_id: userId }, query: role ? { role } : {} },
+    }),
+  )
+}
+
+export async function revokeAppAccessFromUser(appId: string, userId: string): Promise<void> {
+  await unwrapEmpty(
+    await client.DELETE('/api/applications/{app_id}/users/{user_id}', {
+      params: { path: { app_id: appId, user_id: userId } },
+    }),
+  )
+}
+
+export async function grantAppAccessToGroup(
+  appId: string,
+  groupId: string,
+  role?: string,
+): Promise<void> {
+  await unwrapEmpty(
+    await client.PUT('/api/applications/{app_id}/groups/{group_id}', {
+      params: { path: { app_id: appId, group_id: groupId }, query: role ? { role } : {} },
+    }),
+  )
+}
+
+export async function revokeAppAccessFromGroup(appId: string, groupId: string): Promise<void> {
+  await unwrapEmpty(
+    await client.DELETE('/api/applications/{app_id}/groups/{group_id}', {
+      params: { path: { app_id: appId, group_id: groupId } },
+    }),
+  )
 }
