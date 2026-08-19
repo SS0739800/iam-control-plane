@@ -1,8 +1,13 @@
 """The apps we connect to, and who has access to them.
 
-An app here is something that either trusts us to log people in (P5) or gets
-accounts pushed to it by us (P6). The SAML columns exist now because the app page
-displays them, even though nothing actually uses them until P5.
+An app here is something that either trusts us to log people in or gets accounts
+pushed to it by us (P6).
+
+The SAML columns are load-bearing now. entity_id is what an AuthnRequest is matched
+against, acs_url is where a signed assertion is posted, and slo_url is where a
+logout confirmation goes — all in iam/routers/idp.py. They are filled in by reading
+the application's own metadata rather than typed, because a mistyped acs_url is a
+login delivered to the wrong address.
 """
 
 from __future__ import annotations
@@ -51,7 +56,7 @@ class Application(UUIDPrimaryKey, Timestamps, Base):
         default=AppStatus.ACTIVE,
     )
 
-    # ------------------------------------------------------- SAML (used in P5)
+    # ---------------------------------------------- SAML, read by iam/routers/idp.py
     entity_id: Mapped[str | None] = mapped_column(
         String(500),
         unique=True,

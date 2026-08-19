@@ -20,6 +20,7 @@ from iam.saml.metadata import (
     UnreadableMetadata,
     certificate_fingerprint,
     read_idp_metadata,
+    read_sp_metadata,
 )
 
 ENTITY_ID = "https://authentik.demo.local/application/saml/iam/sso/binding/redirect/"
@@ -329,3 +330,214 @@ def test_a_document_with_no_entity_id_is_refused() -> None:
 def test_a_document_with_no_sign_in_address_is_refused() -> None:
     with pytest.raises(UnreadableMetadata, match="sign-in address"):
         read_idp_metadata(authentik_metadata(sso=""))
+
+
+# ==================================================== an application's metadata
+
+SP_ENTITY_ID = "https://expenses.demo.local/saml/metadata"
+ACS_POST = "https://expenses.demo.local/saml/acs"
+ACS_REDIRECT = "https://expenses.demo.local/saml/acs-redirect"
+SP_SLO = "https://expenses.demo.local/saml/slo"
+
+
+def application_metadata(
+    *,
+    entity_id: str | None = SP_ENTITY_ID,
+    keys: str = "",
+    acs: str | None = None,
+    slo: bool = True,
+    want_assertions_signed: str = "true",
+    descriptor: str = "SPSSODescriptor",
+) -> str:
+    """Metadata shaped the way an application publishes it.
+
+    The default carries no certificate, because that is the common case: most
+    applications never sign anything they send us.
+    """
+    entity_attribute = f' entityID="{entity_id}"' if entity_id is not None else ""
+    acs_block = (
+        acs
+        if acs is not None
+        else (
+            "    <md:AssertionConsumerService"
+            ' Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"'
+            f' Location="{ACS_POST}" index="0" isDefault="true"/>\n'
+        )
+    )
+    slo_block = (
+        "    <md:SingleLogoutService"
+        ' Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"'
+        f' Location="{SP_SLO}"/>\n'
+        if slo
+        else ""
+    )
+
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"'
+        f"{entity_attribute}>\n"
+        f"  <md:{descriptor}"
+        f' AuthnRequestsSigned="false"'
+        f' WantAssertionsSigned="{want_assertions_signed}"'
+        ' protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">\n'
+        f"{keys}"
+        f"{slo_block}"
+        f"{acs_block}"
+        f"  </md:{descriptor}>\n"
+        "</md:EntityDescriptor>\n"
+    )
+
+
+def test_reads_what_registering_an_application_needs() -> None:
+    read = read_sp_metadata(application_metadata())
+
+    assert read.entity_id == SP_ENTITY_ID
+    assert read.acs_url == ACS_POST
+    assert read.slo_url == SP_SLO
+
+
+def test_the_assertion_consumer_prefers_the_post_binding() -> None:
+    """The one place the binding preference flips, and it matters.
+
+    An assertion is delivered as a form POST — it is far too long for a query
+    string. Taking the redirect address would send every login somewhere that
+    cannot read it.
+    """
+    both = (
+        "    <md:AssertionConsumerService"
+        ' Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"'
+        f' Location="{ACS_REDIRECT}" index="1"/>\n'
+        "    <md:AssertionConsumerService"
+        ' Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"'
+        f' Location="{ACS_POST}" index="0" isDefault="true"/>\n'
+    )
+
+    assert read_sp_metadata(application_metadata(acs=both)).acs_url == ACS_POST
+
+
+def test_a_redirect_only_consumer_is_still_taken() -> None:
+    """Unusual, and refusing it outright would be worse than registering it and
+    letting the login fail with something specific."""
+    only_redirect = (
+        "    <md:AssertionConsumerService"
+        ' Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"'
+        f' Location="{ACS_REDIRECT}" index="0"/>\n'
+    )
+
+    assert read_sp_metadata(application_metadata(acs=only_redirect)).acs_url == ACS_REDIRECT
+
+
+def test_an_application_with_no_certificate_is_fine() -> None:
+    """The asymmetry with a provider, and the common case.
+
+    A provider's certificate is compulsory: checking a signature against it is the
+    whole basis of trusting a login. An application's is only needed if it signs what
+    it sends us, and most do not.
+    """
+    read = read_sp_metadata(application_metadata(keys=""))
+
+    assert read.signing_cert is None
+    assert read.entity_id == SP_ENTITY_ID
+
+
+def test_an_application_certificate_is_read_when_there_is_one() -> None:
+    read = read_sp_metadata(application_metadata(keys=key_descriptor(CERT_BODY)))
+
+    assert read.signing_cert is not None
+    assert CERT_BODY in read.signing_cert.replace("\n", "")
+
+
+def test_an_application_with_no_logout_address_is_fine() -> None:
+    read = read_sp_metadata(application_metadata(slo=False))
+
+    assert read.slo_url is None
+    assert read.acs_url == ACS_POST
+
+
+def test_want_assertions_signed_is_read() -> None:
+    assert read_sp_metadata(application_metadata()).want_assertions_signed is True
+    assert (
+        read_sp_metadata(
+            application_metadata(want_assertions_signed="false")
+        ).want_assertions_signed
+        is False
+    )
+
+
+def test_an_application_asking_for_less_still_gets_a_signed_assertion() -> None:
+    """The flag is read for completeness and does not change what we do.
+
+    We sign the assertion either way, because signing only the response wrapper
+    leaves the claims swappable. An application asking for less gets more.
+    """
+    read = read_sp_metadata(application_metadata(want_assertions_signed="false"))
+
+    assert read.want_assertions_signed is False
+    # Nothing in the parsed result can switch signing off — there is no such field.
+    assert not hasattr(read, "sign_assertion")
+
+
+def test_provider_metadata_pasted_here_says_so() -> None:
+    """The mirror of the message on the other side. Pasting the wrong side's document
+    in is an easy mistake and a confusing one to debug as a generic failure."""
+    with pytest.raises(UnreadableMetadata, match="describes an identity provider"):
+        read_sp_metadata(authentik_metadata())
+
+
+def test_a_document_with_no_sp_descriptor_is_refused() -> None:
+    with pytest.raises(UnreadableMetadata, match="SPSSODescriptor"):
+        read_sp_metadata("<something-else/>")
+
+
+def test_an_application_with_no_consumer_address_is_refused() -> None:
+    """Nowhere to send a login, so there is nothing to register."""
+    with pytest.raises(UnreadableMetadata, match="assertion consumer"):
+        read_sp_metadata(application_metadata(acs=""))
+
+
+def test_an_application_with_no_entity_id_is_refused() -> None:
+    """The entity id is how an AuthnRequest is matched to a registered application,
+    so without one there is nothing to look up."""
+    with pytest.raises(UnreadableMetadata, match="entityID"):
+        read_sp_metadata(application_metadata(entity_id=None))
+
+
+def test_application_metadata_wrapped_in_an_entities_descriptor() -> None:
+    inner = application_metadata().split("\n", 1)[1]
+    wrapped = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata">\n'
+        f"{inner}"
+        "</md:EntitiesDescriptor>\n"
+    )
+
+    assert read_sp_metadata(wrapped).entity_id == SP_ENTITY_ID
+
+
+def test_a_doctype_is_refused_here_too() -> None:
+    """Same rule as the provider side: a DOCTYPE is what an entity expansion attack
+    needs, and real metadata never has one."""
+    with pytest.raises(UnreadableMetadata, match="DOCTYPE"):
+        read_sp_metadata(
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE x [<!ENTITY a "b">]>\n'
+            '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"/>'
+        )
+
+
+def test_our_own_service_provider_metadata_is_readable() -> None:
+    """The tightest available check that this reader is real.
+
+    sp.py publishes our metadata as a service provider, written in P2 against the
+    spec. If this reader can read that, the two agree — and if it cannot, an
+    application publishing normal metadata probably cannot be registered either.
+    """
+    from iam.saml.sp import ServiceProvider
+
+    ours = ServiceProvider.from_base_url("http://localhost:8080")
+
+    read = read_sp_metadata(ours.metadata_xml())
+
+    assert read.entity_id == ours.entity_id
+    assert read.acs_url == ours.acs_url
+    assert read.slo_url == ours.slo_url

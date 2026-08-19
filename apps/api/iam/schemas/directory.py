@@ -127,9 +127,10 @@ class ApplicationSummary(BaseModel):
 class ApplicationDetail(ApplicationSummary):
     """Everything on the app page, including its SAML settings.
 
-    Nothing uses the SAML fields until P5. They're here because the console shows
-    them, and a mistyped entity id is much easier to spot on a page than by
-    reading the database.
+    The SAML fields are what iam/routers/idp.py reads to answer a login, so they are
+    shown rather than hidden: a mistyped entity id is much easier to spot on a page
+    than by reading the database, and it is the difference between an application
+    working and every login for it being refused as an unknown issuer.
     """
 
     entity_id: str | None
@@ -146,3 +147,36 @@ class ApplicationDetail(ApplicationSummary):
 
     assigned_groups: list[GroupRef]
     assigned_users: list[UserRef]
+
+
+class ApplicationRegistration(BaseModel):
+    """Register an application, or update one that already exists.
+
+    The metadata document carries the entity id, the addresses and the certificate,
+    so none of those are fields here. Letting somebody type them separately is how an
+    assertion ends up posted to an address the application never published — see
+    docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+    """
+
+    slug: str = Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        description=(
+            "Short name used in links, e.g. /idp/sso/expenses. Lowercase, digits "
+            "and dashes, because it goes in a URL."
+        ),
+    )
+    name: str = Field(min_length=1, max_length=255, description="What to call it in the console.")
+    description: str | None = Field(default=None, max_length=500)
+    metadata_xml: str = Field(
+        min_length=1,
+        description="The application's SAML metadata document, pasted in whole.",
+    )
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Turn an application off to stop issuing logins for it without losing "
+            "its settings or who had access."
+        ),
+    )
