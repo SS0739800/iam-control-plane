@@ -199,17 +199,27 @@ def _entity_id(root: ElementTree.Element, descriptor: ElementTree.Element) -> st
 
 
 def _service_url(
-    descriptor: ElementTree.Element, element_name: str, *, required: bool, label: str
+    descriptor: ElementTree.Element,
+    element_name: str,
+    *,
+    required: bool,
+    label: str,
+    prefer: tuple[str, ...] = (REDIRECT_BINDING, POST_BINDING),
 ) -> str | None:
-    """The address for one service, preferring the redirect binding.
+    """The address for one service, in order of binding preference.
 
-    Redirect first because that's what we send people over: the login request goes
-    in a query string. A provider that only offers POST is unusual but valid, so
-    it's taken rather than refused.
+    Redirect first by default, because that's what we send people over: a login
+    request goes in a query string. A provider that only offers POST is unusual but
+    valid, so it's taken rather than refused.
+
+    The preference is a parameter because it genuinely flips. An application's
+    assertion consumer must be the POST address — an assertion is far too long for a
+    query string — and taking its redirect address instead would send every login
+    somewhere that cannot read it.
     """
     services = descriptor.findall(f"./md:{element_name}", NS)
 
-    for binding in (REDIRECT_BINDING, POST_BINDING):
+    for binding in prefer:
         for service in services:
             if service.get("Binding") == binding:
                 location = (service.get("Location") or "").strip()
@@ -279,3 +289,114 @@ def read_idp_metadata(xml: str) -> IdpMetadata:
         slo_url=_service_url(descriptor, "SingleLogoutService", required=False, label="sign-out"),
         signing_cert=_signing_cert(descriptor),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SpMetadata:
+    """What we take from an application's metadata, ready to store.
+
+    The mirror of IdpMetadata, and the field names match the applications columns so
+    registering is a copy rather than a translation.
+    """
+
+    entity_id: str
+    acs_url: str
+    slo_url: str | None = None
+    signing_cert: str | None = None
+    """The application's own certificate, when it publishes one.
+
+    Optional, and that asymmetry with IdpMetadata is deliberate. A provider's
+    certificate is compulsory because everything about trusting a login reduces to
+    checking a signature against it. An application's is only needed if it signs the
+    requests it sends us, and most do not — so a missing one is normal here, and
+    demanding it would refuse perfectly ordinary metadata.
+    """
+
+    want_assertions_signed: bool = True
+    """Whether the application asks for the assertion itself to be signed.
+
+    Read for completeness. We sign the assertion either way, because signing only
+    the response wrapper leaves the claims swappable — see signer.py — so an
+    application asking for less than that gets more than it asked for.
+    """
+
+
+def _sp_descriptor(root: ElementTree.Element) -> ElementTree.Element:
+    """Find the part of the document describing the application.
+
+    The mirror of _descriptor. Same shapes, same order, and the same courtesy in
+    reverse: a document that only describes an identity provider says so rather
+    than failing generically, because pasting the wrong side's metadata in is an
+    easy mistake and a confusing one to debug.
+    """
+    if root.tag == f"{{{NS['md']}}}SPSSODescriptor":
+        return root
+
+    found = root.find("./md:SPSSODescriptor", NS)
+    if found is not None:
+        return found
+
+    nested = root.find("./md:EntityDescriptor/md:SPSSODescriptor", NS)
+    if nested is not None:
+        return nested
+
+    if root.find("./md:IDPSSODescriptor", NS) is not None:
+        raise UnreadableMetadata(
+            "this describes an identity provider, not an application. It looks like "
+            "the metadata for the other side of the connection — register it under "
+            "identity providers instead."
+        )
+
+    raise UnreadableMetadata(
+        "the document has no SPSSODescriptor, so it isn't an application that can " "receive logins"
+    )
+
+
+def read_sp_metadata(xml: str) -> SpMetadata:
+    """Read an application's metadata document.
+
+    Same rules as read_idp_metadata: pasted in, never fetched (ADR 0006), parsed
+    with the standard library, and refused outright if it carries a DOCTYPE.
+
+    Raises:
+        UnreadableMetadata: The document is missing something we can't do without,
+            and the message says which.
+    """
+    root = _parse(xml)
+    descriptor = _sp_descriptor(root)
+
+    acs_url = _service_url(
+        descriptor,
+        "AssertionConsumerService",
+        required=True,
+        label="assertion consumer",
+        # POST, not redirect, and this is the one place the preference has to flip.
+        # An assertion is delivered as a form POST — it is far too long for a query
+        # string — so the redirect-binding address, if the application publishes
+        # one, is not where a login can be sent.
+        prefer=(POST_BINDING, REDIRECT_BINDING),
+    )
+
+    return SpMetadata(
+        entity_id=_entity_id(root, descriptor),
+        acs_url=acs_url or "",
+        slo_url=_service_url(descriptor, "SingleLogoutService", required=False, label="sign-out"),
+        # Optional here, unlike the provider side, so the strict reader is not used.
+        signing_cert=_optional_signing_cert(descriptor),
+        want_assertions_signed=(
+            (descriptor.get("WantAssertionsSigned") or "").strip().lower() != "false"
+        ),
+    )
+
+
+def _optional_signing_cert(descriptor: ElementTree.Element) -> str | None:
+    """An application's signing certificate, if it publishes one.
+
+    Returns None rather than raising, which is the whole difference from
+    _signing_cert. Most applications never sign anything they send us, so refusing
+    metadata without a certificate would refuse the common case.
+    """
+    try:
+        return _signing_cert(descriptor)
+    except UnreadableMetadata:
+        return None
