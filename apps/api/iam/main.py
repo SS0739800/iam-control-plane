@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from iam import __version__
 from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
+from iam.frontend import SinglePageApp, resolve_bundle
 from iam.logging_setup import configure_logging
 from iam.routers import (
     access,
@@ -151,6 +152,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # {"detail": ...} learns nothing it can act on. Registered here so no handler
     # builds the envelope itself and the shape cannot drift between endpoints.
     app.add_exception_handler(ScimError, scim_error_handler)
+
+    # ---------------------------------------------------------- the frontend
+    # Mounted last, so it can claim "/" without shadowing anything. Every router
+    # above carries a prefix, so an API request never reaches this — but mounting
+    # order is the kind of thing that gets rearranged by somebody tidying up, and
+    # the failure would be every API route returning index.html.
+    #
+    # html=True is what makes deep links work: /users and /groups are React routes
+    # with no file behind them, and without it they 404 and only the home page
+    # loads. See docs/adr/0008-one-server-serves-both-halves-in-production.md.
+    if resolved.static_dir:
+        bundle = resolve_bundle(resolved.static_dir)
+        app.mount("/", SinglePageApp(directory=bundle), name="frontend")
+        logger.info("api.serving_frontend", extra={"static_dir": str(bundle)})
 
     # SAML login works now, but the development stand-in is still behind it for
     # requests that arrive without a session cookie. Say so on startup rather than

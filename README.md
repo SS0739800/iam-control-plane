@@ -97,6 +97,49 @@ The signing key is the most dangerous secret here. It never goes in the database
 production refuses to start without one, and outside production a throwaway pair is
 generated in memory with a warning. See [`iam/saml/keys.py`](apps/api/iam/saml/keys.py).
 
+### Deploying it (P7)
+
+Three Fly apps and a Supabase database. The full runbook is
+[docs/deploy.md](docs/deploy.md); the shape is:
+
+| App             | What                                        |
+| --------------- | ------------------------------------------- |
+| `iam-console`   | The API and the frontend, one process       |
+| `iam-hrms`      | The downstream we provision into            |
+| `iam-authentik` | The identity provider, server and worker    |
+
+**The console is one app serving both halves.** In production FastAPI serves the
+built bundle itself, so the origin is single because there is only one server
+rather than because a proxy was configured to look that way. Caddy stays for local
+development, where it is doing real work in front of the Vite dev server. See
+[ADR 0008](docs/adr/0008-one-server-serves-both-halves-in-production.md).
+
+That decision has one honest cost, and it is written down rather than discovered:
+`/users` is a React route with no file behind it, and locally the Vite dev server
+invents `index.html` for paths it does not recognise — so deep links work in
+development whether or not anybody made them work in production. The first
+implementation used `StaticFiles(html=True)` and broke exactly there: that flag
+serves `index.html` for a *directory*, and on a real miss looks for `404.html`.
+`iam/frontend.py` does it properly, and the tests check both that a deep link
+resolves and that `/api/nonsense` is still a 404 rather than a web page.
+
+**Vercel was considered and does not work** for the API half. `xmlsec` has to be
+compiled against the system `libxml2`, which needs a Dockerfile
+([ADR 0004](docs/adr/0004-build-xmlsec-from-source.md)); a serverless Python runtime
+cannot do it at all. The frontend would have been fine there, but once a Docker host
+exists for the API, authentik and the HRMS, serving 417 KB of static files from it is
+free.
+
+**Read [ADR 0002](docs/adr/0002-supabase-is-postgres-only.md) before touching
+Supabase.** The Data API has to be turned off *before the first table exists*. The
+`anon` key is public by design, and with the Data API on and RLS off, anyone holding
+the project URL can read the user table and the audit log.
+
+Two limitations that are stated rather than hidden: migrations are run by hand, and
+provisioning syncs run inside the request that asks for them, because there is no
+background worker. A first sync against the seeded directory takes about forty
+seconds.
+
 ### Provisioning outward, and the HRMS (P6)
 
 The half that writes to other systems. **Provisioning out** in the console
@@ -196,7 +239,7 @@ CI is configured but has not run yet — it executes on the first push to a remo
 | P4    | Lifecycle + entitlements *(MVP line)*             | ✅ done         |
 | P5    | SAML IdP — outbound SSO                           | ✅ done         |
 | P6    | SCIM client — outbound provisioning               | ✅ done         |
-| P7    | Production deploy                                 | planned         |
+| P7    | Production deploy                                 | ready to deploy |
 | P8    | Entra ID integration sprint                       | planned         |
 
 ---
@@ -435,6 +478,9 @@ apps/
   hrms/                 the downstream we provision into — shares no code with
                         the platform, on purpose
 docs/adr/               architecture decision records
+docs/deploy.md          the production runbook
+Dockerfile              the production console: API + built frontend, one image
+fly.toml                the console app
 infra/db/init/          first-boot Postgres bootstrap
 infra/authentik/        the SAML application, declared as a blueprint
 Caddyfile               single-origin route table

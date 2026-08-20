@@ -116,6 +116,13 @@ class Settings(BaseSettings):
     db_pooler_mode: PoolerMode = "direct"
     db_echo: bool = False
 
+    # ------------------------------------------------------- the built frontend
+    # Where the compiled SPA lives, for the production shape where this process
+    # serves it as well as the API. Unset means no mount at all, which is what
+    # local development and every test run does — there Caddy proxies the Vite dev
+    # server instead. See docs/adr/0008-one-server-serves-both-halves-in-production.md.
+    static_dir: str | None = None
+
     # ---------------------------------------------------------- properties
     @property
     def migration_url(self) -> str:

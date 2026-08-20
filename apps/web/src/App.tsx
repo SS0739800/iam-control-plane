@@ -93,7 +93,7 @@ export default function App() {
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10">
       <header className="flex flex-col gap-3 border-b-2 border-slate-900 pb-4 dark:border-slate-100">
         <p className="font-mono text-xs tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
-          Phase 6 · provisioning both ways
+          Phase 7 · ready to deploy
         </p>
         <h1 className="text-2xl font-bold tracking-tight">IAM Control Plane</h1>
 

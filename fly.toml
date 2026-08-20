@@ -1,0 +1,64 @@
+# The console: the API and the built frontend, one app, one process.
+# See docs/adr/0008-one-server-serves-both-halves-in-production.md.
+#
+#   fly deploy                       builds ./Dockerfile and releases it
+#   fly secrets list                 what is set (names only, never values)
+#   fly logs
+#
+# Everything secret is a fly secret, never a value in this file. This file is in
+# git; secrets are not. See docs/deploy.md for the full runbook.
+
+app = "iam-console"
+primary_region = "ewr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Not secret, and safe to read in a pull request. APP_ENV is also baked into the
+  # image, deliberately doubled up: a forgotten value here cannot leave a production
+  # machine running with the development actor enabled.
+  APP_ENV = "production"
+  LOG_LEVEL = "INFO"
+  STATIC_DIR = "/srv/static"
+
+  # Supabase's pooler, in transaction mode. This is the setting that breaks things
+  # only sometimes and only under load if it is wrong — asyncpg keeps prepared
+  # statements the pooler cannot honour. iam/db.py switches to NullPool and turns
+  # both statement caches off when it sees this.
+  DB_POOLER_MODE = "transaction"
+
+  # The address of the HRMS we provision into, on Fly's private network. Not a
+  # secret: it is a hostname reachable only from inside the organisation. The token
+  # that goes with it is a secret and is stored encrypted in the database anyway.
+  #
+  # This is a private address over plain HTTP, which ADR 0007 refuses in production
+  # unless the concession below is set. It is set on purpose: the traffic never
+  # leaves Fly's internal network, and requiring a public HTTPS round trip to reach
+  # a machine two hops away would be worse, not better.
+  ALLOW_PRIVATE_PROVISIONING_TARGETS = "true"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+
+  # Kept warm. A portfolio link that takes fifty seconds to answer the first time is
+  # a portfolio link nobody waits for.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  # The API, not the static files. A machine happily serving the bundle with a dead
+  # database is not healthy, and /api/health/ready is the one that says so.
+  path = "/api/health/ready"
+  interval = "15s"
+  timeout = "5s"
+  grace_period = "20s"
+
+[[vm]]
+  # xmlsec and SQLAlchemy are not free, and a first provisioning sync pushes the
+  # whole entitled directory inside one request. 512MB is enough; 256 is not.
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

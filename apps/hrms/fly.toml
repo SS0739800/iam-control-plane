@@ -1,0 +1,46 @@
+# The downstream system the console provisions into.
+#
+#   cd apps/hrms && fly deploy
+#
+# Its own app on purpose. The HRMS exists to be a genuinely separate system — that
+# is the whole reason it shares no code with the platform — and folding it into the
+# console image would undo the thing it demonstrates.
+#
+# The token is a secret:
+#   fly secrets set HRMS_SCIM_TOKEN=$(openssl rand -hex 32) -a iam-hrms
+# and the same value goes into the console when the target is registered.
+
+app = "iam-hrms"
+primary_region = "ewr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  HRMS_DATABASE = "/data/hrms.sqlite3"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  path = "/health"
+  interval = "15s"
+  timeout = "5s"
+  grace_period = "10s"
+
+[mounts]
+  # SQLite in a file, so provisioned employees survive a deploy. Without this every
+  # release empties the HRMS, and somebody demonstrating the leaver flow would find
+  # the joiner had vanished.
+  source = "hrms_data"
+  destination = "/data"
+
+[[vm]]
+  # A small FastAPI app with no compiled dependencies and one table.
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

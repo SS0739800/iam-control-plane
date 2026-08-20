@@ -1,0 +1,83 @@
+# authentik: the identity provider, as one app with two process groups.
+#
+#   cd infra/authentik && fly deploy
+#
+# Server and worker run the same image with different commands, which is exactly
+# what Fly process groups are for. Splitting them into two apps would mean building
+# and releasing the same image twice and keeping their secrets in step by hand.
+#
+# The heaviest part of this deploy. If the bill matters, this is the first thing to
+# cut: a hosted developer tenant does the same job with nothing to run. Keeping it is
+# what proves the console federates with more than one provider at once.
+
+app = "iam-authentik"
+primary_region = "ewr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  # The web front end and the API the login flow is driven through.
+  server = "server"
+  # Applies blueprints, sends email, runs scheduled tasks. No public port: nothing
+  # should be able to reach it from outside, and it does not listen anyway.
+  worker = "worker"
+
+[env]
+  # Read by blueprints/iam-console.yaml, so the addresses inside the SAML
+  # application come from one place rather than being written out twice and
+  # drifting. This is the single most common deploy mistake: leave it as localhost
+  # and authentik builds assertions whose Destination does not match where they are
+  # actually posted, and every login is refused.
+  IAM_BASE_URL = "https://iam-console.fly.dev"
+  AUTHENTIK_BASE_URL = "https://iam-authentik.fly.dev"
+
+  # Where authentik pushes accounts. Server to server with no browser in it, so it
+  # uses the private network rather than the public hostname.
+  IAM_SCIM_URL = "http://iam-console.internal:8000/scim/v2"
+
+  AUTHENTIK_POSTGRESQL__PORT = "5432"
+  AUTHENTIK_ERROR_REPORTING__ENABLED = "false"
+
+  # Its own database, and it means it. authentik runs its own migrations, so
+  # pointing this at ours would have it rewriting our schema.
+  AUTHENTIK_POSTGRESQL__NAME = "authentik"
+
+[http_service]
+  internal_port = 9000
+  force_https = true
+  # Only the server answers requests. Without this, Fly would route traffic to
+  # worker machines too and half of it would hit something that is not listening.
+  processes = ["server"]
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  # authentik's own readiness endpoint. It reports healthy only once migrations have
+  # run, which on a first boot takes a couple of minutes — hence the long grace.
+  path = "/-/health/ready/"
+  interval = "15s"
+  timeout = "10s"
+  grace_period = "180s"
+
+[[vm]]
+  # authentik is Django plus a lot of it. 512MB is where the server starts getting
+  # killed under a login flow.
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["server"]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["worker"]
+
+[mounts]
+  # Uploaded icons and backgrounds. Small, but losing it on every deploy makes the
+  # login page flicker between styled and unstyled.
+  source = "authentik_media"
+  destination = "/media"
+  processes = ["server"]

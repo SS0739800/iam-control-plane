@@ -180,3 +180,47 @@ jobs:
           load: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The image that actually gets deployed. The three builds above each prove a
+      # piece of it; this proves the assembled thing, which is where the interesting
+      # failure lives — a frontend bundle that did not get copied in. The Dockerfile
+      # asserts that one itself, so a broken deploy fails here rather than on Fly.
+      - name: Build the production console image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: GIT_SHA=${{ github.sha }}
+          push: false
+          load: true
+          tags: iam-console:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Start it and check the two things that are only true of the assembled image:
+      # the frontend is served, and a deep link works. Neither is testable from the
+      # API job, because there is no built bundle there.
+      #
+      # No database, so /api/health/ready would fail — /api/health is the one that
+      # answers without touching Postgres.
+      - name: Check the console image serves both halves
+        run: |
+          docker run -d --name console-ci -p 8000:8000 \
+            -e APP_ENV=ci \
+            -e SESSION_SECRET=ci-secret-not-the-placeholder \
+            iam-console:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:8000/api/health >/dev/null && break
+            sleep 1
+          done
+          echo "--- the API"
+          curl -sf http://localhost:8000/api/health
+          echo "--- the frontend"
+          curl -sf http://localhost:8000/ | grep -q '<div id="root">' \
+            || (echo "the bundle is not being served" && docker logs console-ci && exit 1)
+          echo "--- a deep link"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/users)" = 200 \
+            || (echo "deep links 404 — the SPA fallback is broken" && exit 1)
+          echo "--- an unknown API path is still a 404"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/nonsense)" = 404 \
+            || (echo "the frontend is shadowing the API" && exit 1)
+          docker rm -f console-ci

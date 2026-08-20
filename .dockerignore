@@ -1,0 +1,18 @@
+# The console image needs apps/web and apps/api and nothing else. Keeping the
+# context small matters here: node_modules alone is hundreds of megabytes, and it
+# would be copied in only to be replaced by `npm ci` in the build.
+.git
+.github
+.venv
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.env
+*.sqlite3
+docs
+infra/authentik
