@@ -43,6 +43,27 @@ class Settings(BaseSettings):
     saml_idp_private_key: str | None = None
     saml_idp_certificate: str | None = None
 
+    # ------------------------------------------------- outbound provisioning
+    scim_encryption_key: str | None = None
+    """Encrypts the bearer tokens we send to downstream systems.
+
+    A Fernet key. Left unset, one is derived from SESSION_SECRET, which is fine on a
+    laptop and means rotating the session secret makes stored tokens unreadable. Set
+    it explicitly anywhere that matters so the two rotate independently. Generate one
+    with:
+
+        python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+    See iam/secrets.py for why these are encrypted rather than hashed or kept in the
+    environment like the signing key."""
+
+    allow_private_provisioning_targets: bool = False
+    """Allow a downstream on a private or loopback address in production.
+
+    Off by default and deliberately long to type. Locally it is ignored — a target at
+    http://hrms:8000 is the point of compose. Link-local is refused whatever this
+    says, because that is where cloud metadata services live. See ADR 0007."""
+
     # ---------------------------------------------------------------- email
     # Mailpit in compose, which accepts anything and delivers nowhere. That is the
     # right default for a system that emails people about access: a misconfigured
