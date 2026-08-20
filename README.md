@@ -135,6 +135,13 @@ Supabase.** The Data API has to be turned off *before the first table exists*. T
 `anon` key is public by design, and with the Data API on and RLS off, anyone holding
 the project URL can read the user table and the audit log.
 
+**Nobody is an admin on a fresh deployment**, which is the correct default and also a
+chicken-and-egg problem: there is no root account, so there is nobody who can grant
+the first admin. `scripts/grant_first_admin.py` closes that one gap and refuses to run
+a second time, because a bootstrap that keeps working is a backdoor. It grants through
+the same code path the console uses, so the grant and the cached role agree and
+`find_drift` stays quiet.
+
 Two limitations that are stated rather than hidden: migrations are run by hand, and
 provisioning syncs run inside the request that asks for them, because there is no
 background worker. A first sync against the seeded directory takes about forty
@@ -466,8 +473,8 @@ apps/
       saml/             the SAML machinery — see the note below
       security/         permissions, and working out who's calling
     alembic/            migrations
-    scripts/            seed data, schema export, the end-to-end login and
-                        provisioning checks
+    scripts/            seed data, schema export, the first-admin bootstrap,
+                        the end-to-end login and provisioning checks
     tests/
       fixtures/         a real authentik assertion and the cert that signed it
     requirements*.txt

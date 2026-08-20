@@ -299,16 +299,34 @@ Then paste its metadata into `/api/identity-providers` the same way.
 
 **Nobody is an admin yet.** A person created by logging in starts as an employee with
 no console permissions — deliberately, so there is no path from "the provider let
-them in" to "they can change things here". The first admin has to be granted by hand:
+them in" to "they can change things here". Which leaves a gap on day one: nobody
+exists who can grant anything, including the first admin.
+
+**Log in through the identity provider once first.** The person has to exist before
+they can be granted anything, and they are created by that first login. Then:
 
 ```bash
-fly ssh console -a iam-console -C "python -m scripts.seed --help"
+fly ssh console -a iam-console -C "python -m scripts.grant_first_admin you@example.com"
 ```
 
-or a single UPDATE in the Supabase SQL editor, followed by using the console
-properly. Note that `users.platform_role` is a *cache* of the person's role grants
-and `iam/access/roles.py` is the only thing meant to write it, so a raw UPDATE is a
-bootstrap step and not a habit.
+That goes through the same `grant_role` the console uses, so the grant and the cached
+`users.platform_role` agree and `find_drift` stays quiet. It records an audit entry
+with `actor_type: system` and `bootstrap: true`, because this is the one admin grant
+on the whole log that no person is accountable for and it should be obvious which one
+it is.
+
+**It refuses to run twice.** Once any live admin grant exists, it stops and names who
+holds it. A bootstrap that keeps working is a backdoor, and every admin after the
+first is a decision somebody should make in the console. If it refuses unexpectedly,
+somebody already has admin on that database and the interesting question is who.
+
+Do **not** use `scripts/seed.py` for this. It populates a development directory with
+1,284 fictional people, and its `--reset` flag empties every table first.
+
+Do **not** set `users.platform_role` by hand either. It is a *cache* of the person's
+role grants, and `iam/access/roles.py` is the only thing meant to write it — a raw
+UPDATE produces somebody the console calls an admin with no grant behind them, which
+is exactly what `find_drift` exists to report.
 
 **Supabase will keep warning that RLS is disabled.** That warning is aimed at people
 exposing their database to browsers. We are not, because the Data API is off. Do not
