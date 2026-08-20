@@ -410,7 +410,6 @@ async def _target_summary(
         application_slug=target.application.slug,
         base_url=target.base_url,
         enabled=target.enabled,
-        push_groups=target.push_groups,
         address_concession=target.address_concession,
         last_sync_at=target.last_sync_at,
         last_sync_ok=target.last_sync_ok,
@@ -510,7 +509,6 @@ async def create_target(
         base_url=payload.base_url.strip(),
         token_encrypted=encrypt(payload.token, settings),
         enabled=payload.enabled,
-        push_groups=payload.push_groups,
         address_concession=concession,
     )
     session.add(target)
@@ -533,7 +531,6 @@ async def create_target(
                 "application": application.slug,
                 "base_url": target.base_url,
                 "enabled": target.enabled,
-                "push_groups": target.push_groups,
                 # Recorded because a relaxed rule should be findable later, not just
                 # visible on a page somebody may never open.
                 "address_concession": concession,
@@ -581,8 +578,6 @@ async def update_target(
 
     if payload.enabled is not None:
         target.enabled = payload.enabled
-    if payload.push_groups is not None:
-        target.push_groups = payload.push_groups
 
     await append_event(
         session,

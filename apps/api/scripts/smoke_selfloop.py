@@ -116,9 +116,7 @@ def grant_access(client: httpx.Client, app_id: str) -> None:
     Without this the login is refused, and that refusal is itself worth seeing: it
     is P4's entitlements deciding a P5 question.
     """
-    users = client.get(
-        f"{CONSOLE}/api/users", params={"q": ACTOR}, headers={"X-Dev-Actor": ACTOR}
-    )
+    users = client.get(f"{CONSOLE}/api/users", params={"q": ACTOR}, headers={"X-Dev-Actor": ACTOR})
     users.raise_for_status()
     items = users.json()["items"]
     if not items:

@@ -97,6 +97,56 @@ The signing key is the most dangerous secret here. It never goes in the database
 production refuses to start without one, and outside production a throwaway pair is
 generated in memory with a warning. See [`iam/saml/keys.py`](apps/api/iam/saml/keys.py).
 
+### Provisioning outward, and the HRMS (P6)
+
+The half that writes to other systems. **Provisioning out** in the console
+registers a downstream, checks it answers, and pushes accounts to it. Who gets
+pushed is whoever has access to the application behind it — there is no second
+list to keep in step.
+
+The downstream that proves it is `apps/hrms`: a small HRMS in its own container,
+with its own storage and its own bearer token, that **shares no code with the
+platform**. That separation is the whole value of it. Two halves of a protocol
+that import the same constants agree by construction rather than by conformance,
+and the interesting bugs live exactly where two independent readings of a
+specification differ. Its staff directory is at **http://localhost:8090** and
+everybody on it was put there by us.
+
+| What                       | Where                                            |
+| -------------------------- | ------------------------------------------------ |
+| The console screen         | **Provisioning out**                             |
+| The downstream itself       | http://localhost:8090                            |
+| Its SCIM root, from the api | `http://hrms:8000/scim/v2`                      |
+| The whole loop, end to end  | `python -m scripts.smoke_provisioning`           |
+
+Four things worth knowing:
+
+**A leaver is switched off, not deleted.** We send `PATCH active: false`, never
+`DELETE`. The system at the other end usually has reasons to keep the record —
+payroll history, an audit trail, a rehire — and a rehire gets their old account
+back rather than a second one.
+
+**An account that already exists is adopted, not fought.** A 409 on create means
+somebody already works there, so we go and find their account and link to it.
+Without that, onboarding any system with staff already in it fails forever.
+
+**The token we send is encrypted, not hashed.** Inbound tokens are hashed, so
+there is nothing to give back. This one has to be sent, so it is encrypted at
+rest — and precisely because we *could* return it, no endpoint and no screen ever
+does. Rotating means sending a new one. See
+[`iam/secrets.py`](apps/api/iam/secrets.py).
+
+**Orphans are the number that matters.** An orphan is somebody we tried to remove
+from a downstream and could not, so they still have access there and nobody would
+know. Everything else on that screen can be read from a log; that one means
+somebody has to go and do something, which is why it is the only figure coloured
+red.
+
+The honest limitation: there is no background worker, so a sync runs inside the
+request that asked for it. A first run against the seeded directory pushes about
+1,200 accounts and takes roughly forty seconds. A queue nothing drains would be
+worse than saying so.
+
 ### Lifecycle and entitlements (P4)
 
 Who has what, why, and what happens when that changes.
@@ -144,8 +194,8 @@ CI is configured but has not run yet — it executes on the first push to a remo
 | P2    | SAML SP — inbound SSO                             | ✅ done         |
 | P3    | SCIM 2.0 server — inbound provisioning            | ✅ done         |
 | P4    | Lifecycle + entitlements *(MVP line)*             | ✅ done         |
-| P5    | SAML IdP — outbound SSO                           | in progress     |
-| P6    | SCIM client — outbound provisioning               | planned         |
+| P5    | SAML IdP — outbound SSO                           | ✅ done         |
+| P6    | SCIM client — outbound provisioning               | ✅ done         |
 | P7    | Production deploy                                 | planned         |
 | P8    | Entra ID integration sprint                       | planned         |
 
@@ -172,6 +222,7 @@ which is the whole point of P0.
 | http://localhost:8080/api/health     | Liveness probe                        |
 | http://localhost:8080/api/docs       | OpenAPI browser                       |
 | http://localhost:8025                | Mailpit — catches all outbound email  |
+| http://localhost:8090                | The demo HRMS we provision into       |
 | http://localhost:9000                | authentik (only with `--profile idp`) |
 
 ---
@@ -372,7 +423,8 @@ apps/
       saml/             the SAML machinery — see the note below
       security/         permissions, and working out who's calling
     alembic/            migrations
-    scripts/            seed data, schema export, the end-to-end login check
+    scripts/            seed data, schema export, the end-to-end login and
+                        provisioning checks
     tests/
       fixtures/         a real authentik assertion and the cert that signed it
     requirements*.txt
@@ -380,6 +432,8 @@ apps/
   web/                  Vite + React 19 + TypeScript SPA
     src/
       lib/api.ts        typed client, generated from openapi.json
+  hrms/                 the downstream we provision into — shares no code with
+                        the platform, on purpose
 docs/adr/               architecture decision records
 infra/db/init/          first-boot Postgres bootstrap
 infra/authentik/        the SAML application, declared as a blueprint

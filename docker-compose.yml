@@ -167,7 +167,32 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ------------------------------------------- the downstream system (P6 onward)
+  # An HRMS the platform provisions into. Separate image, separate storage, and no
+  # shared code — that separation is the whole value of it, because two halves of a
+  # protocol that share a constant agree by construction rather than by conformance.
+  #
+  # Reachable from the api container as http://hrms:8000, which is a private address
+  # over plain HTTP. ADR 0007 allows both outside production and refuses both in it.
+  hrms:
+    build:
+      context: ./apps/hrms
+    environment:
+      # The token the platform must present. Register a provisioning target with the
+      # same value; there is no default that works.
+      HRMS_SCIM_TOKEN: ${HRMS_SCIM_TOKEN:-dev-only-hrms-scim-token}
+      HRMS_DATABASE: /data/hrms.sqlite3
+    volumes:
+      - hrmsdata:/data
+    ports:
+      # Its own port rather than a Caddy route. It is a different system and giving it
+      # a path under our hostname would blur exactly the line this service exists to
+      # draw.
+      - '8090:8000'
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  hrmsdata:
   caddy_data:
   caddy_config:

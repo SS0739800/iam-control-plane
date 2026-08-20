@@ -29,7 +29,6 @@ class ProvisioningTargetSummary(BaseModel):
 
     base_url: str
     enabled: bool
-    push_groups: bool
 
     address_concession: str | None = Field(
         description=(
@@ -65,6 +64,12 @@ class ProvisioningTargetSummary(BaseModel):
 class ProvisioningTargetCreate(BaseModel):
     """Register a downstream system."""
 
+    # Extras are refused rather than ignored, which matters more here than it looks.
+    # push_groups used to live on this model and did nothing; a client still sending it
+    # would otherwise get a 200 and reasonably believe groups were flowing. A 422
+    # naming the field it does not know is the honest answer.
+    model_config = ConfigDict(extra="forbid")
+
     application_id: uuid.UUID = Field(
         description=(
             "Which application this provisions. Who gets pushed is whoever has access "
@@ -83,14 +88,6 @@ class ProvisioningTargetCreate(BaseModel):
         ),
     )
     enabled: bool = True
-    push_groups: bool = Field(
-        default=False,
-        description=(
-            "Send group membership as well as accounts. Off by default: plenty of "
-            "downstreams have no concept of a group, and sending one is an error per "
-            "person per sync."
-        ),
-    )
 
 
 class ProvisioningTargetUpdate(BaseModel):
@@ -106,7 +103,6 @@ class ProvisioningTargetUpdate(BaseModel):
         "the current one.",
     )
     enabled: bool | None = None
-    push_groups: bool | None = None
 
 
 class ProvisioningLinkOut(BaseModel):

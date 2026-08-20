@@ -89,16 +89,6 @@ class ProvisioningTarget(UUIDPrimaryKey, Timestamps, Base):
         "turning it back on does not recreate every account.",
     )
 
-    push_groups: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default=text("false"),
-        comment="Whether to push group membership as well as accounts. Off by "
-        "default: plenty of downstreams have no concept of a group, and sending "
-        "them one is an error per person per sync.",
-    )
-
     address_concession: Mapped[str | None] = mapped_column(
         String(255),
         comment="A rule from ADR 0007 that was relaxed to allow this address — a "

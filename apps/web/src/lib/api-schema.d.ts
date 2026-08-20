@@ -843,6 +843,147 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/provisioning/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The systems we push accounts into
+         * @description Every target, switched off ones included.
+         *
+         *     A disabled target is exactly what somebody is looking for when they are working
+         *     out why a downstream stopped receiving people.
+         */
+        get: operations["list_targets_api_provisioning_targets_get"];
+        put?: never;
+        /**
+         * Register a system to push accounts into
+         * @description Register a downstream, after checking we are willing to talk to it.
+         *
+         *     The address is checked here rather than on every push. That is the trade ADR 0007
+         *     describes: a hostname that later resolves somewhere private is not caught, and
+         *     resolving before every request would be slower, still racy, and would feel like it
+         *     had solved that. The row being reviewable is the actual control.
+         *
+         *     Raises:
+         *         HTTPException: 400 for an address we refuse, 404 for a missing application,
+         *             409 if that application already has a target.
+         */
+        post: operations["create_target_api_provisioning_targets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/provisioning/targets/{target_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop provisioning into a system
+         * @description Remove a target and forget which account belonged to whom.
+         *
+         *     It does not deactivate anybody downstream, and that is deliberate rather than
+         *     lazy: deleting a target is what somebody does when a system is being
+         *     decommissioned or was registered by mistake, and silently switching off a few
+         *     hundred accounts on the way out would be a much bigger action than the button
+         *     suggests. Disable the target and run one more sync to deprovision people, then
+         *     delete it.
+         *
+         *     The audit entry says how many links were forgotten, because that is the number
+         *     somebody will want afterwards.
+         */
+        delete: operations["delete_target_api_provisioning_targets__target_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a target, or rotate its token
+         * @description Edit a target. Sending a token replaces it; there is no way to read the old one.
+         */
+        patch: operations["update_target_api_provisioning_targets__target_id__patch"];
+        trace?: never;
+    };
+    "/api/provisioning/targets/{target_id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who has an account in this system, and who does not
+         * @description The links, newest problems first.
+         *
+         *     Ordered so failures and orphans come before the accounts that are working, because
+         *     a list of two hundred working accounts is not what anybody opens this for.
+         */
+        get: operations["target_accounts_api_provisioning_targets__target_id__accounts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/provisioning/targets/{target_id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a target answers and accepts our token
+         * @description Read the target's ServiceProviderConfig, which describes nobody.
+         *
+         *     The right thing to call after registering one: it proves the address and the token
+         *     before the first person depends on them, and changes nothing either way.
+         */
+        post: operations["probe_target_api_provisioning_targets__target_id__probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/provisioning/targets/{target_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Push accounts to a target now
+         * @description Reconcile the target's accounts with who is entitled to them.
+         *
+         *     Runs in the request, which is honest about there being no background worker: the
+         *     response is the result rather than a job id that never gets polled. It means a
+         *     large first sync takes a while, and the alternative — a queue nothing drains —
+         *     would be worse.
+         */
+        post: operations["sync_target_api_provisioning_targets__target_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/saml/logins": {
         parameters: {
             query?: never;
@@ -2396,6 +2537,17 @@ export interface components {
          */
         IdentitySource: "scim" | "jit" | "manual" | "seed";
         /**
+         * LinkState
+         * @description Where one person's downstream account has got to.
+         *
+         *     The states a push can leave behind, and they are not the same as "did the last
+         *     request work". A link can be FAILED with an account that exists — created fine,
+         *     then an update broke — and telling that apart from FAILED with nothing out there
+         *     is the difference between retrying an update and creating a duplicate.
+         * @enum {string}
+         */
+        LinkState: "pending" | "active" | "failed" | "deprovisioned" | "orphaned";
+        /**
          * Liveness
          * @description Is the app running. Doesn't check anything outside the process.
          */
@@ -2724,6 +2876,19 @@ export interface components {
          */
         PlatformRole: "admin" | "helpdesk" | "auditor" | "employee";
         /**
+         * ProbeResult
+         * @description Whether a target answers and accepts our token, without changing anything.
+         */
+        ProbeResult: {
+            /**
+             * Detail
+             * @description What the target said, or why we could not reach it.
+             */
+            detail: string;
+            /** Reachable */
+            reachable: boolean;
+        };
+        /**
          * ProvisioningActivity
          * @description One thing a provisioning system did to the directory.
          */
@@ -2756,6 +2921,38 @@ export interface components {
             target: string | null;
         };
         /**
+         * ProvisioningLinkOut
+         * @description One person, as an account in one downstream.
+         */
+        ProvisioningLinkOut: {
+            /**
+             * Active
+             * @description Whether they are active in *our* directory.
+             */
+            active: boolean;
+            /** Attempts */
+            attempts: number;
+            /** Display Name */
+            display_name: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Pushed At */
+            last_pushed_at: string | null;
+            /**
+             * Remote Id
+             * @description The id the downstream gave their account. Null means no account exists there yet.
+             */
+            remote_id: string | null;
+            state: components["schemas"]["LinkState"];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** User Name */
+            user_name: string;
+        };
+        /**
          * ProvisioningOverview
          * @description What provisioning has actually done to this directory.
          *
@@ -2783,6 +2980,118 @@ export interface components {
              * @description People the provider created or now manages.
              */
             users_from_scim: number;
+        };
+        /**
+         * ProvisioningTargetCreate
+         * @description Register a downstream system.
+         */
+        ProvisioningTargetCreate: {
+            /**
+             * Application Id
+             * Format: uuid
+             * @description Which application this provisions. Who gets pushed is whoever has access to it — there is no separate list to keep in step.
+             */
+            application_id: string;
+            /**
+             * Base Url
+             * @description Its SCIM root, e.g. https://example.test/scim/v2.
+             */
+            base_url: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Token
+             * @description The bearer token it issued us. Stored encrypted and never returned by any endpoint.
+             */
+            token: string;
+        };
+        /**
+         * ProvisioningTargetSummary
+         * @description A downstream system, and how the last push to it went.
+         */
+        ProvisioningTargetSummary: {
+            /**
+             * Accounts Active
+             * @description People with a live account downstream.
+             */
+            accounts_active: number;
+            /** Accounts Deprovisioned */
+            accounts_deprovisioned: number;
+            /**
+             * Accounts Failed
+             * @description Pushes that did not work.
+             */
+            accounts_failed: number;
+            /**
+             * Accounts Orphaned
+             * @description People we tried to remove and could not. They still have access downstream, which is the number on this page that most needs acting on.
+             */
+            accounts_orphaned: number;
+            /**
+             * Accounts Pending
+             * @description People who should have an account and do not yet.
+             */
+            accounts_pending: number;
+            /**
+             * Address Concession
+             * @description A rule from ADR 0007 that was relaxed to allow this address — a private address, or plain HTTP. Shown so it reads as a decision somebody made rather than something nobody noticed.
+             */
+            address_concession: string | null;
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Application Name */
+            application_name: string;
+            /** Application Slug */
+            application_slug: string;
+            /** Base Url */
+            base_url: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Sync At */
+            last_sync_at: string | null;
+            /**
+             * Last Sync Ok
+             * @description Null means never attempted. The useful question is the negative one: a target that last succeeded three weeks ago is one nobody is watching.
+             */
+            last_sync_ok: boolean | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ProvisioningTargetUpdate
+         * @description Change a target. Anything left out stays as it is.
+         */
+        ProvisioningTargetUpdate: {
+            /** Base Url */
+            base_url?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /**
+             * Token
+             * @description A replacement token. Send this to rotate; there is no way to read the current one.
+             */
+            token?: string | null;
         };
         /**
          * Readiness
@@ -3137,6 +3446,47 @@ export interface components {
              * @description True when this came from a real login. False means the development stand-in identified the request, which never happens in production.
              */
             via_saml_session: boolean;
+        };
+        /**
+         * SyncResult
+         * @description What one run did.
+         */
+        SyncResult: {
+            /**
+             * Adopted
+             * @description Accounts that already existed downstream and were linked rather than created. Onboarding rather than provisioning.
+             */
+            adopted: number;
+            /**
+             * Correlation Id
+             * Format: uuid
+             * @description Every audit entry this run wrote carries it, so the whole cascade can be read back as one story.
+             */
+            correlation_id: string;
+            /** Created */
+            created: number;
+            /** Deactivated */
+            deactivated: number;
+            /** Failed */
+            failed: number;
+            /** Ok */
+            ok: boolean;
+            /** Reactivated */
+            reactivated: number;
+            /**
+             * Skipped Exhausted
+             * @description Links that have failed too many times to keep retrying automatically. A forced sync picks them up.
+             */
+            skipped_exhausted: number;
+            /**
+             * Stopped Early
+             * @description Why the run gave up, if it did. Usually a rejected token, which would fail identically for everybody remaining.
+             */
+            stopped_early: string | null;
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
         };
         /**
          * UserDetail
@@ -4494,6 +4844,223 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProvisioningOverview"];
+                };
+            };
+        };
+    };
+    list_targets_api_provisioning_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningTargetSummary"][];
+                };
+            };
+        };
+    };
+    create_target_api_provisioning_targets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisioningTargetCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningTargetSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_target_api_provisioning_targets__target_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_target_api_provisioning_targets__target_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProvisioningTargetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningTargetSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    target_accounts_api_provisioning_targets__target_id__accounts_get: {
+        parameters: {
+            query?: {
+                /** @description Only this state. 'orphaned' is the one worth looking at. */
+                state?: components["schemas"]["LinkState"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningLinkOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_target_api_provisioning_targets__target_id__probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_target_api_provisioning_targets__target_id__sync_post: {
+        parameters: {
+            query?: {
+                /** @description Push everybody regardless of whether they look unchanged, and retry links that have run out of attempts. */
+                force?: boolean;
+            };
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

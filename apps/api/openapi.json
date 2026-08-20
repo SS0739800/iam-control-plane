@@ -2712,6 +2712,7 @@
         "type": "object"
       },
       "ProvisioningTargetCreate": {
+        "additionalProperties": false,
         "description": "Register a downstream system.",
         "properties": {
           "application_id": {
@@ -2730,12 +2731,6 @@
           "enabled": {
             "default": true,
             "title": "Enabled",
-            "type": "boolean"
-          },
-          "push_groups": {
-            "default": false,
-            "description": "Send group membership as well as accounts. Off by default: plenty of downstreams have no concept of a group, and sending one is an error per person per sync.",
-            "title": "Push Groups",
             "type": "boolean"
           },
           "token": {
@@ -2858,10 +2853,6 @@
             "description": "Null means never attempted. The useful question is the negative one: a target that last succeeded three weeks ago is one nobody is watching.",
             "title": "Last Sync Ok"
           },
-          "push_groups": {
-            "title": "Push Groups",
-            "type": "boolean"
-          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -2875,7 +2866,6 @@
           "application_slug",
           "base_url",
           "enabled",
-          "push_groups",
           "address_concession",
           "last_sync_at",
           "last_sync_ok",
@@ -2918,17 +2908,6 @@
               }
             ],
             "title": "Enabled"
-          },
-          "push_groups": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Push Groups"
           },
           "token": {
             "anyOf": [

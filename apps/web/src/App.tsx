@@ -22,7 +22,10 @@ const NAV = [
   { to: '/access-rules', label: 'Access rules', end: false },
   { to: '/access-requests', label: 'Requests', end: false },
   { to: '/access-review', label: 'Review', end: false },
-  { to: '/provisioning', label: 'Provisioning', end: false },
+  // Two entries rather than one, because the two directions are not variations on
+  // a theme: one manages who may write to us, the other manages where we write.
+  { to: '/provisioning', label: 'Provisioning in', end: false },
+  { to: '/provisioning-out', label: 'Provisioning out', end: false },
   { to: '/audit', label: 'Audit log', end: false },
 ]
 
@@ -90,7 +93,7 @@ export default function App() {
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10">
       <header className="flex flex-col gap-3 border-b-2 border-slate-900 pb-4 dark:border-slate-100">
         <p className="font-mono text-xs tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
-          Phase 4 · lifecycle and entitlements
+          Phase 6 · provisioning both ways
         </p>
         <h1 className="text-2xl font-bold tracking-tight">IAM Control Plane</h1>
 

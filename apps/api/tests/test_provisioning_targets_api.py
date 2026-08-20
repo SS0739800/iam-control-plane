@@ -452,3 +452,30 @@ def test_listing_accounts_for_a_target_with_none(
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_a_field_we_do_not_know_is_refused_rather_than_ignored(
+    db_client: TestClient, console: ConsoleUsers, application: uuid.UUID
+) -> None:
+    """push_groups was a real version of this mistake.
+
+    It sat on the model, was settable, and was read by nothing — so switching it on
+    returned a 200 and did precisely nothing. A missing feature is visible. A switch
+    that takes a value and discards it is not, and somebody walks away believing group
+    membership is being pushed downstream.
+    """
+    refused = db_client.post(
+        TARGETS,
+        json={
+            "application_id": str(application),
+            "base_url": "https://downstream.test/scim/v2",
+            "token": "a-downstream-token",
+            "push_groups": True,
+        },
+        headers=console.as_admin,
+    )
+
+    assert refused.status_code == 422, refused.text[:300]
+    # Named, not just refused. "unexpected field" without saying which one sends
+    # somebody diffing payloads by hand.
+    assert "push_groups" in refused.text

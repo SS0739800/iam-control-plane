@@ -159,6 +159,18 @@ jobs:
             python -m pytest tests/test_saml_reader.py tests/test_saml_signer.py -q
           '
 
+      # Seconds, not minutes — no compiled dependencies. Worth having anyway: the
+      # interop tests import apps/hrms/main.py directly, so a broken Dockerfile is
+      # the one way this service can rot without a test noticing.
+      - name: Build the demo HRMS image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/hrms
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Build web bundle image
         uses: docker/build-push-action@v6
         with:

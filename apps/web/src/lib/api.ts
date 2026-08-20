@@ -77,6 +77,12 @@ export type RuleOperator = AccessRule['operator']
 export type ScimClientIssued = Schema<'ScimClientIssued'>
 export type ProvisioningOverview = Schema<'ProvisioningOverview'>
 export type ProvisioningActivity = Schema<'ProvisioningActivity'>
+export type ProvisioningTarget = Schema<'ProvisioningTargetSummary'>
+export type ProvisioningTargetCreate = Schema<'ProvisioningTargetCreate'>
+export type ProvisioningLink = Schema<'ProvisioningLinkOut'>
+export type LinkState = ProvisioningLink['state']
+export type SyncResult = Schema<'SyncResult'>
+export type ProbeResult = Schema<'ProbeResult'>
 
 export type PlatformRole = UserSummary['platform_role']
 
@@ -290,6 +296,80 @@ export async function revokeScimClient(clientId: string, reason: string): Promis
     await client.POST('/api/provisioning/clients/{client_id}/revoke', {
       params: { path: { client_id: clientId } },
       body: { reason },
+    }),
+  )
+}
+
+// ------------------------------------------------- provisioning the other way
+
+export async function fetchProvisioningTargets(): Promise<ProvisioningTarget[]> {
+  return unwrap(await client.GET('/api/provisioning/targets'))
+}
+
+/**
+ * Register a downstream system. The token goes one way only: nothing reads it back,
+ * so whoever calls this is the last thing that ever sees the value it was given.
+ */
+export async function createProvisioningTarget(
+  body: ProvisioningTargetCreate,
+): Promise<ProvisioningTarget> {
+  return unwrap(await client.POST('/api/provisioning/targets', { body }))
+}
+
+export async function updateProvisioningTarget(
+  targetId: string,
+  body: { base_url?: string; token?: string; enabled?: boolean },
+): Promise<ProvisioningTarget> {
+  return unwrap(
+    await client.PATCH('/api/provisioning/targets/{target_id}', {
+      params: { path: { target_id: targetId } },
+      body,
+    }),
+  )
+}
+
+export async function deleteProvisioningTarget(targetId: string): Promise<void> {
+  await unwrap(
+    await client.DELETE('/api/provisioning/targets/{target_id}', {
+      params: { path: { target_id: targetId } },
+    }),
+  )
+}
+
+/** Ask whether a target answers and accepts our token. Changes nothing. */
+export async function probeProvisioningTarget(targetId: string): Promise<ProbeResult> {
+  return unwrap(
+    await client.POST('/api/provisioning/targets/{target_id}/probe', {
+      params: { path: { target_id: targetId } },
+    }),
+  )
+}
+
+/**
+ * Push everything that needs pushing, now.
+ *
+ * Slow on purpose rather than by accident: there is no background worker, so this
+ * runs inside the request. A first sync against a large directory can take a while,
+ * which is why the button that calls it says so.
+ */
+export async function syncProvisioningTarget(
+  targetId: string,
+  force = false,
+): Promise<SyncResult> {
+  return unwrap(
+    await client.POST('/api/provisioning/targets/{target_id}/sync', {
+      params: { path: { target_id: targetId }, query: { force } },
+    }),
+  )
+}
+
+export async function fetchProvisioningAccounts(
+  targetId: string,
+  state?: LinkState,
+): Promise<ProvisioningLink[]> {
+  return unwrap(
+    await client.GET('/api/provisioning/targets/{target_id}/accounts', {
+      params: { path: { target_id: targetId }, query: state ? { state } : {} },
     }),
   )
 }

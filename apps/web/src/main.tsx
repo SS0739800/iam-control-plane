@@ -14,6 +14,7 @@ import AccessRequestsPage from './pages/AccessRequests'
 import AccessReviewPage from './pages/AccessReview'
 import AccessRulesPage from './pages/AccessRules'
 import ProvisioningPage from './pages/Provisioning'
+import ProvisioningOutPage from './pages/ProvisioningOut'
 import { UserDetailPage, UsersPage } from './pages/Users'
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
       { path: 'access-requests', element: <AccessRequestsPage /> },
       { path: 'access-review', element: <AccessReviewPage /> },
       { path: 'provisioning', element: <ProvisioningPage /> },
+      { path: 'provisioning-out', element: <ProvisioningOutPage /> },
       { path: 'audit', element: <AuditPage /> },
       // Anything else falls back to the dashboard rather than a blank screen.
       { path: '*', element: <Dashboard /> },
