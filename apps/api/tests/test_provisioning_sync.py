@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import iam.provisioning.sync as sync_module
@@ -45,8 +45,6 @@ from tests import scim_stub
 from tests.support import build_settings, database_url
 
 pytestmark = pytest.mark.integration
-
-NOW = dt.datetime(2026, 8, 20, 12, 0, tzinfo=dt.UTC)
 
 
 @pytest.fixture
@@ -90,6 +88,22 @@ async def rig() -> AsyncIterator[dict[str, Any]]:
         base_url=row.scim_root, token=downstream.token, client=http
     )
 
+    # The clock the pushes are stamped with, read from the database rather than typed
+    # in. users.updated_at comes from the database via func.now(); the timestamp it
+    # gets compared against is whatever the caller hands reconcile(). A hard-coded
+    # literal makes the staleness check ask "is this person's real modification time
+    # later than a date somebody typed", which is true for everybody once the wall
+    # clock passes it.
+    #
+    # This was a literal — noon on the day it was written — so the suite went red at
+    # noon that day, and the failure reads like a broken staleness check rather than a
+    # broken fixture. Taking the clock from the same place updated_at comes from says
+    # what these tests actually mean: we pushed them after they last changed.
+    async with sessionmaker() as session:
+        stamped = await session.scalar(select(func.now()))
+        assert isinstance(stamped, dt.datetime)
+        now = stamped + dt.timedelta(seconds=1)
+
     yield {
         "app_id": app_id,
         "target_id": target_id,
@@ -97,6 +111,7 @@ async def rig() -> AsyncIterator[dict[str, Any]]:
         "sessionmaker": sessionmaker,
         "settings": settings,
         "downstream": downstream,
+        "now": now,
     }
 
     sync_module._client_for = original
@@ -168,7 +183,7 @@ async def sync(rig: dict[str, Any], *, force: bool = False) -> Any:
         target = await session.get(ProvisioningTarget, rig["target_id"])
         assert target is not None
         await session.refresh(target, ["application"])
-        return await reconcile(session, target, rig["settings"], now=NOW, force=force)
+        return await reconcile(session, target, rig["settings"], now=rig["now"], force=force)
 
 
 async def links(rig: dict[str, Any]) -> list[ProvisioningLink]:
@@ -566,7 +581,7 @@ async def test_pushing_one_person_immediately(rig: dict[str, Any]) -> None:
         person = await session.get(User, person_id)
         assert target is not None and person is not None
         await session.refresh(target, ["application"])
-        assert await push_one(session, target, person, rig["settings"], now=NOW) is True
+        assert await push_one(session, target, person, rig["settings"], now=rig["now"]) is True
 
     stored = await links(rig)
     assert len(stored) == 1
@@ -588,7 +603,7 @@ async def test_pushing_a_deactivated_person_switches_them_off(
         person.active = False
         await session.flush()
         await session.refresh(target, ["application"])
-        assert await push_one(session, target, person, rig["settings"], now=NOW) is True
+        assert await push_one(session, target, person, rig["settings"], now=rig["now"]) is True
 
     assert rig["downstream"].is_active(user_name_for(rig, "instantleaver")) is False
     stored = await links(rig)

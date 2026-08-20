@@ -213,6 +213,14 @@ def _needs_push(link: ProvisioningLink, person: User) -> bool:
     touched without a real change gets pushed again, which is the safe direction:
     the cost is one request, and the alternative direction is somebody's details
     silently never arriving.
+
+    Worth knowing: the two timestamps come from different clocks. ``updated_at`` is
+    stamped by Postgres through ``func.now()``, while ``last_pushed_at`` is whatever
+    the caller handed reconcile(). If the API's clock runs behind the database's,
+    everybody looks stale on every pass and a full sync re-pushes the whole directory
+    — around 1,200 requests and forty seconds against the seeded data. Still correct,
+    per the paragraph above, just wasteful. A fixed literal here is worse than
+    wasteful, which the test fixture found out the hard way.
     """
     if link.state is not LinkState.ACTIVE:
         return True
