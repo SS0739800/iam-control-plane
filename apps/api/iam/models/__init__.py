@@ -26,6 +26,7 @@ from iam.models.enums import (
 )
 from iam.models.group import Group, GroupMember
 from iam.models.idp_session import IdpSession
+from iam.models.provisioning import ProvisioningLink, ProvisioningTarget
 from iam.models.requests import AccessRequest
 from iam.models.rules import ATTRIBUTES, AccessRule
 from iam.models.saml import (
@@ -57,9 +58,12 @@ __all__ = [
     "IdentityProvider",
     "IdentitySource",
     "IdpSession",
+    "LinkState",
     "MembershipSource",
     "PlatformRole",
     "PrincipalType",
+    "ProvisioningLink",
+    "ProvisioningTarget",
     "RequestState",
     "RevokedGrantReason",
     "RoleGrant",

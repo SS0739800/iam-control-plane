@@ -188,6 +188,36 @@ class RequestState(StrEnum):
     """Overtaken by events — usually the requester left, or already has it."""
 
 
+class LinkState(StrEnum):
+    """Where one person's downstream account has got to.
+
+    The states a push can leave behind, and they are not the same as "did the last
+    request work". A link can be FAILED with an account that exists — created fine,
+    then an update broke — and telling that apart from FAILED with nothing out there
+    is the difference between retrying an update and creating a duplicate.
+    """
+
+    PENDING = "pending"
+    """Should exist downstream and does not yet. What a new assignment starts as."""
+
+    ACTIVE = "active"
+    """Exists and matches what we last sent."""
+
+    FAILED = "failed"
+    """The last attempt did not work. remote_id says whether an account is out there."""
+
+    DEPROVISIONED = "deprovisioned"
+    """Deactivated downstream on purpose. Kept rather than deleted, so a rehire
+    revives the account instead of creating a second one."""
+
+    ORPHANED = "orphaned"
+    """We were told to remove it and could not — the target refused, or is gone.
+
+    Its own state rather than FAILED, because the consequence is different and worse:
+    somebody still has access to a downstream system after we believe we removed it.
+    That is the one an access review has to surface."""
+
+
 class AppProtocol(StrEnum):
     """How an application integrates with this control plane."""
 

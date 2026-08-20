@@ -30,3 +30,8 @@ cryptography==44.0.0
 # one, so ZoneInfo("UTC") raises without this — which surfaced as Alembic
 # failing to write a migration file.
 tzdata==2026.3
+
+# Outbound SCIM. Only the provisioning client uses it, and it was already a
+# dev dependency for the test client — this promotes it to runtime because P6
+# actually makes requests with it.
+httpx==0.28.1

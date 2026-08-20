@@ -159,3 +159,23 @@ def run_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
             await engine.dispose()
 
     return asyncio.run(main())
+
+
+async def with_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
+    """The same as run_db, awaited instead of run.
+
+    Exists because run_db calls asyncio.run, which cannot be called from inside a
+    running loop — so using it from an async test fails with a closed-transport error
+    that points at asyncio internals rather than at the real mistake. That has now
+    caught me twice.
+
+    Use run_db from a sync test driving the app over HTTP, and this from an async one.
+    """
+    engine = build_engine(build_settings(database_url()))
+    try:
+        async with build_sessionmaker(engine)() as session:
+            result = await work(session)
+            await session.commit()
+            return result
+    finally:
+        await engine.dispose()
