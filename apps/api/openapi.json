@@ -1841,6 +1841,18 @@
         "title": "IdentitySource",
         "type": "string"
       },
+      "LinkState": {
+        "description": "Where one person's downstream account has got to.\n\nThe states a push can leave behind, and they are not the same as \"did the last\nrequest work\". A link can be FAILED with an account that exists \u2014 created fine,\nthen an update broke \u2014 and telling that apart from FAILED with nothing out there\nis the difference between retrying an update and creating a duplicate.",
+        "enum": [
+          "pending",
+          "active",
+          "failed",
+          "deprovisioned",
+          "orphaned"
+        ],
+        "title": "LinkState",
+        "type": "string"
+      },
       "Liveness": {
         "description": "Is the app running. Doesn't check anything outside the process.",
         "properties": {
@@ -2489,6 +2501,26 @@
         "title": "PlatformRole",
         "type": "string"
       },
+      "ProbeResult": {
+        "description": "Whether a target answers and accepts our token, without changing anything.",
+        "properties": {
+          "detail": {
+            "description": "What the target said, or why we could not reach it.",
+            "title": "Detail",
+            "type": "string"
+          },
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reachable",
+          "detail"
+        ],
+        "title": "ProbeResult",
+        "type": "object"
+      },
       "ProvisioningActivity": {
         "description": "One thing a provisioning system did to the directory.",
         "properties": {
@@ -2557,6 +2589,84 @@
         "title": "ProvisioningActivity",
         "type": "object"
       },
+      "ProvisioningLinkOut": {
+        "description": "One person, as an account in one downstream.",
+        "properties": {
+          "active": {
+            "description": "Whether they are active in *our* directory.",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_pushed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pushed At"
+          },
+          "remote_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The id the downstream gave their account. Null means no account exists there yet.",
+            "title": "Remote Id"
+          },
+          "state": {
+            "$ref": "#/components/schemas/LinkState"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "user_name": {
+            "title": "User Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "display_name",
+          "active",
+          "remote_id",
+          "state",
+          "last_pushed_at",
+          "last_error",
+          "attempts"
+        ],
+        "title": "ProvisioningLinkOut",
+        "type": "object"
+      },
       "ProvisioningOverview": {
         "description": "What provisioning has actually done to this directory.\n\nCounts rather than a list, because the answer people want from this screen is\n\"is the sync working and what does it own\", not a directory listing they can\nalready get from the Users page.",
         "properties": {
@@ -2599,6 +2709,242 @@
           "active_clients"
         ],
         "title": "ProvisioningOverview",
+        "type": "object"
+      },
+      "ProvisioningTargetCreate": {
+        "description": "Register a downstream system.",
+        "properties": {
+          "application_id": {
+            "description": "Which application this provisions. Who gets pushed is whoever has access to it \u2014 there is no separate list to keep in step.",
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "base_url": {
+            "description": "Its SCIM root, e.g. https://example.test/scim/v2.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Base Url",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "push_groups": {
+            "default": false,
+            "description": "Send group membership as well as accounts. Off by default: plenty of downstreams have no concept of a group, and sending one is an error per person per sync.",
+            "title": "Push Groups",
+            "type": "boolean"
+          },
+          "token": {
+            "description": "The bearer token it issued us. Stored encrypted and never returned by any endpoint.",
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "application_id",
+          "base_url",
+          "token"
+        ],
+        "title": "ProvisioningTargetCreate",
+        "type": "object"
+      },
+      "ProvisioningTargetSummary": {
+        "description": "A downstream system, and how the last push to it went.",
+        "properties": {
+          "accounts_active": {
+            "description": "People with a live account downstream.",
+            "title": "Accounts Active",
+            "type": "integer"
+          },
+          "accounts_deprovisioned": {
+            "title": "Accounts Deprovisioned",
+            "type": "integer"
+          },
+          "accounts_failed": {
+            "description": "Pushes that did not work.",
+            "title": "Accounts Failed",
+            "type": "integer"
+          },
+          "accounts_orphaned": {
+            "description": "People we tried to remove and could not. They still have access downstream, which is the number on this page that most needs acting on.",
+            "title": "Accounts Orphaned",
+            "type": "integer"
+          },
+          "accounts_pending": {
+            "description": "People who should have an account and do not yet.",
+            "title": "Accounts Pending",
+            "type": "integer"
+          },
+          "address_concession": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A rule from ADR 0007 that was relaxed to allow this address \u2014 a private address, or plain HTTP. Shown so it reads as a decision somebody made rather than something nobody noticed.",
+            "title": "Address Concession"
+          },
+          "application_id": {
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "application_name": {
+            "title": "Application Name",
+            "type": "string"
+          },
+          "application_slug": {
+            "title": "Application Slug",
+            "type": "string"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "last_sync_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null means never attempted. The useful question is the negative one: a target that last succeeded three weeks ago is one nobody is watching.",
+            "title": "Last Sync Ok"
+          },
+          "push_groups": {
+            "title": "Push Groups",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "application_id",
+          "application_name",
+          "application_slug",
+          "base_url",
+          "enabled",
+          "push_groups",
+          "address_concession",
+          "last_sync_at",
+          "last_sync_ok",
+          "last_error",
+          "created_at",
+          "updated_at",
+          "accounts_active",
+          "accounts_pending",
+          "accounts_failed",
+          "accounts_orphaned",
+          "accounts_deprovisioned"
+        ],
+        "title": "ProvisioningTargetSummary",
+        "type": "object"
+      },
+      "ProvisioningTargetUpdate": {
+        "additionalProperties": false,
+        "description": "Change a target. Anything left out stays as it is.",
+        "properties": {
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "push_groups": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Push Groups"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A replacement token. Send this to rotate; there is no way to read the current one.",
+            "title": "Token"
+          }
+        },
+        "title": "ProvisioningTargetUpdate",
         "type": "object"
       },
       "Readiness": {
@@ -3349,6 +3695,82 @@
           "via_saml_session"
         ],
         "title": "SignedInUser",
+        "type": "object"
+      },
+      "SyncResult": {
+        "description": "What one run did.",
+        "properties": {
+          "adopted": {
+            "description": "Accounts that already existed downstream and were linked rather than created. Onboarding rather than provisioning.",
+            "title": "Adopted",
+            "type": "integer"
+          },
+          "correlation_id": {
+            "description": "Every audit entry this run wrote carries it, so the whole cascade can be read back as one story.",
+            "format": "uuid",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "deactivated": {
+            "title": "Deactivated",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reactivated": {
+            "title": "Reactivated",
+            "type": "integer"
+          },
+          "skipped_exhausted": {
+            "description": "Links that have failed too many times to keep retrying automatically. A forced sync picks them up.",
+            "title": "Skipped Exhausted",
+            "type": "integer"
+          },
+          "stopped_early": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the run gave up, if it did. Usually a rejected token, which would fail identically for everybody remaining.",
+            "title": "Stopped Early"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "correlation_id",
+          "created",
+          "adopted",
+          "updated",
+          "deactivated",
+          "reactivated",
+          "unchanged",
+          "failed",
+          "skipped_exhausted",
+          "stopped_early",
+          "ok"
+        ],
+        "title": "SyncResult",
         "type": "object"
       },
       "UserDetail": {
@@ -5613,6 +6035,339 @@
           }
         },
         "summary": "What provisioning has done to this directory",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/targets": {
+      "get": {
+        "description": "Every target, switched off ones included.\n\nA disabled target is exactly what somebody is looking for when they are working\nout why a downstream stopped receiving people.",
+        "operationId": "list_targets_api_provisioning_targets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisioningTargetSummary"
+                  },
+                  "title": "Response List Targets Api Provisioning Targets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The systems we push accounts into",
+        "tags": [
+          "provisioning"
+        ]
+      },
+      "post": {
+        "description": "Register a downstream, after checking we are willing to talk to it.\n\nThe address is checked here rather than on every push. That is the trade ADR 0007\ndescribes: a hostname that later resolves somewhere private is not caught, and\nresolving before every request would be slower, still racy, and would feel like it\nhad solved that. The row being reviewable is the actual control.\n\nRaises:\n    HTTPException: 400 for an address we refuse, 404 for a missing application,\n        409 if that application already has a target.",
+        "operationId": "create_target_api_provisioning_targets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisioningTargetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisioningTargetSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register a system to push accounts into",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/targets/{target_id}": {
+      "delete": {
+        "description": "Remove a target and forget which account belonged to whom.\n\nIt does not deactivate anybody downstream, and that is deliberate rather than\nlazy: deleting a target is what somebody does when a system is being\ndecommissioned or was registered by mistake, and silently switching off a few\nhundred accounts on the way out would be a much bigger action than the button\nsuggests. Disable the target and run one more sync to deprovision people, then\ndelete it.\n\nThe audit entry says how many links were forgotten, because that is the number\nsomebody will want afterwards.",
+        "operationId": "delete_target_api_provisioning_targets__target_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Target Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop provisioning into a system",
+        "tags": [
+          "provisioning"
+        ]
+      },
+      "patch": {
+        "description": "Edit a target. Sending a token replaces it; there is no way to read the old one.",
+        "operationId": "update_target_api_provisioning_targets__target_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Target Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisioningTargetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisioningTargetSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change a target, or rotate its token",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/targets/{target_id}/accounts": {
+      "get": {
+        "description": "The links, newest problems first.\n\nOrdered so failures and orphans come before the accounts that are working, because\na list of two hundred working accounts is not what anybody opens this for.",
+        "operationId": "target_accounts_api_provisioning_targets__target_id__accounts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only this state. 'orphaned' is the one worth looking at.",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/LinkState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this state. 'orphaned' is the one worth looking at.",
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProvisioningLinkOut"
+                  },
+                  "title": "Response Target Accounts Api Provisioning Targets  Target Id  Accounts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Who has an account in this system, and who does not",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/targets/{target_id}/probe": {
+      "post": {
+        "description": "Read the target's ServiceProviderConfig, which describes nobody.\n\nThe right thing to call after registering one: it proves the address and the token\nbefore the first person depends on them, and changes nothing either way.",
+        "operationId": "probe_target_api_provisioning_targets__target_id__probe_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Target Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check a target answers and accepts our token",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/api/provisioning/targets/{target_id}/sync": {
+      "post": {
+        "description": "Reconcile the target's accounts with who is entitled to them.\n\nRuns in the request, which is honest about there being no background worker: the\nresponse is the result rather than a job id that never gets polled. It means a\nlarge first sync takes a while, and the alternative \u2014 a queue nothing drains \u2014\nwould be worse.",
+        "operationId": "sync_target_api_provisioning_targets__target_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Target Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Push everybody regardless of whether they look unchanged, and retry links that have run out of attempts.",
+            "in": "query",
+            "name": "force",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Push everybody regardless of whether they look unchanged, and retry links that have run out of attempts.",
+              "title": "Force",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Push accounts to a target now",
         "tags": [
           "provisioning"
         ]

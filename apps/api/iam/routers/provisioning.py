@@ -22,16 +22,21 @@ import logging
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import case, func, select
+from sqlalchemy.orm import selectinload
 
 from iam.audit import AuditDraft, append_event
-from iam.deps import SessionDep
+from iam.config import Settings
+from iam.deps import SessionDep, SettingsDep
+from iam.models.application import Application
 from iam.models.audit import AuditEvent
-from iam.models.enums import ActorType, AuditOutcome, IdentitySource
+from iam.models.enums import ActorType, AuditOutcome, IdentitySource, LinkState
 from iam.models.group import Group
+from iam.models.provisioning import ProvisioningLink, ProvisioningTarget
 from iam.models.scim import ScimClient
 from iam.models.user import User
+from iam.provisioning import OutboundScim, PushFailed, UnusableTarget, check, reconcile
 from iam.schemas.provisioning import (
     ProvisioningActivity,
     ProvisioningOverview,
@@ -40,6 +45,15 @@ from iam.schemas.provisioning import (
     ScimClientRevoke,
     ScimClientSummary,
 )
+from iam.schemas.targets import (
+    ProbeResult,
+    ProvisioningLinkOut,
+    ProvisioningTargetCreate,
+    ProvisioningTargetSummary,
+    ProvisioningTargetUpdate,
+    SyncResult,
+)
+from iam.secrets import CannotDecrypt, decrypt, encrypt
 from iam.security import Actor, Permission, require
 from iam.tokens import hash_token, new_token
 
@@ -324,3 +338,492 @@ def _describe(detail: dict[str, Any]) -> str | None:
         return str(reason)
 
     return None
+
+
+# ==================================================== the systems we push into
+#
+# Guarded by apps:write, reused rather than invented. A provisioning target is
+# configuration belonging to one application — it is unique per application and
+# cascade-deleted with it — so registering one is the same act as registering that
+# application's SAML wiring, which is also apps:write. Both are admin-only.
+#
+# Worth contrasting with idp:write, which is about which outside systems we *believe*
+# about identity. This is the other direction: which outside systems *receive* our
+# identity data. Similar gravity, and it lands on apps:write because the thing being
+# configured is an application rather than a trust relationship of its own.
+#
+# Nothing here returns the token. It is stored encrypted rather than hashed, so we
+# could — and that is exactly why there is no field for it.
+#
+# There is no hook on granting access. Somebody clicking "give this person access"
+# should not wait on a downstream, and should not have their grant fail because
+# somebody else's server is down. So access changes are recorded and the accounts
+# follow on the next sync, which is either the button below or a scheduled call. This
+# system has no background worker, and pretending otherwise by blocking a request for
+# fifteen seconds would be worse than being honest about it.
+
+
+async def _target_or_404(session: SessionDep, target_id: uuid.UUID) -> ProvisioningTarget:
+    """One target, with its application already loaded.
+
+    Eager-loaded rather than fetched and refreshed. The summary reads
+    ``target.application.name``, and a lazy load there is a MissingGreenlet under
+    async — the error names greenlets rather than the relationship, which makes it a
+    slow one to place.
+    """
+    target = await session.scalar(
+        select(ProvisioningTarget)
+        .where(ProvisioningTarget.id == target_id)
+        .options(selectinload(ProvisioningTarget.application))
+    )
+    if target is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=f"No provisioning target with id {target_id}."
+        )
+    return target
+
+
+async def _counts(session: SessionDep, target_id: uuid.UUID) -> dict[str, int]:
+    """How many links are in each state, for the summary."""
+    rows = await session.execute(
+        select(ProvisioningLink.state, func.count())
+        .where(ProvisioningLink.target_id == target_id)
+        .group_by(ProvisioningLink.state)
+    )
+    by_state = dict(rows.tuples().all())
+    return {
+        "accounts_active": by_state.get(LinkState.ACTIVE, 0),
+        "accounts_pending": by_state.get(LinkState.PENDING, 0),
+        "accounts_failed": by_state.get(LinkState.FAILED, 0),
+        "accounts_orphaned": by_state.get(LinkState.ORPHANED, 0),
+        "accounts_deprovisioned": by_state.get(LinkState.DEPROVISIONED, 0),
+    }
+
+
+async def _target_summary(
+    session: SessionDep, target: ProvisioningTarget
+) -> ProvisioningTargetSummary:
+    return ProvisioningTargetSummary(
+        id=target.id,
+        application_id=target.application_id,
+        application_name=target.application.name,
+        application_slug=target.application.slug,
+        base_url=target.base_url,
+        enabled=target.enabled,
+        push_groups=target.push_groups,
+        address_concession=target.address_concession,
+        last_sync_at=target.last_sync_at,
+        last_sync_ok=target.last_sync_ok,
+        last_error=target.last_error,
+        created_at=target.created_at,
+        updated_at=target.updated_at,
+        **await _counts(session, target.id),
+    )
+
+
+def _check_address(url: str, settings: Settings) -> str | None:
+    """Apply ADR 0007, and return whatever rule had to be relaxed.
+
+    Raises:
+        HTTPException: 400 if the address is one we refuse.
+    """
+    try:
+        decision = check(
+            url,
+            is_production=settings.is_production,
+            allow_private=settings.allow_private_provisioning_targets,
+        )
+    except UnusableTarget as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return decision.concession
+
+
+@router.get(
+    "/targets",
+    response_model=list[ProvisioningTargetSummary],
+    summary="The systems we push accounts into",
+    dependencies=[Depends(require(Permission.APPS_READ))],
+)
+async def list_targets(session: SessionDep) -> list[ProvisioningTargetSummary]:
+    """Every target, switched off ones included.
+
+    A disabled target is exactly what somebody is looking for when they are working
+    out why a downstream stopped receiving people.
+    """
+    rows = await session.scalars(
+        select(ProvisioningTarget)
+        .options(selectinload(ProvisioningTarget.application))
+        .order_by(ProvisioningTarget.base_url)
+    )
+    return [await _target_summary(session, target) for target in rows.all()]
+
+
+@router.post(
+    "/targets",
+    response_model=ProvisioningTargetSummary,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a system to push accounts into",
+)
+async def create_target(
+    payload: ProvisioningTargetCreate,
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+) -> ProvisioningTargetSummary:
+    """Register a downstream, after checking we are willing to talk to it.
+
+    The address is checked here rather than on every push. That is the trade ADR 0007
+    describes: a hostname that later resolves somewhere private is not caught, and
+    resolving before every request would be slower, still racy, and would feel like it
+    had solved that. The row being reviewable is the actual control.
+
+    Raises:
+        HTTPException: 400 for an address we refuse, 404 for a missing application,
+            409 if that application already has a target.
+    """
+    application = await session.get(Application, payload.application_id)
+    if application is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail=f"No application with id {payload.application_id}.",
+        )
+
+    existing = await session.scalar(
+        select(ProvisioningTarget).where(
+            ProvisioningTarget.application_id == payload.application_id
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                f"{application.name} already has a provisioning target. Two would race "
+                "each other writing the same accounts — update that one instead."
+            ),
+        )
+
+    concession = _check_address(payload.base_url, settings)
+
+    target = ProvisioningTarget(
+        application_id=payload.application_id,
+        base_url=payload.base_url.strip(),
+        token_encrypted=encrypt(payload.token, settings),
+        enabled=payload.enabled,
+        push_groups=payload.push_groups,
+        address_concession=concession,
+    )
+    session.add(target)
+    await session.flush()
+
+    await append_event(
+        session,
+        AuditDraft(
+            action="provisioning_target.registered",
+            actor_type=ActorType.USER,
+            actor_id=actor.user_id,
+            actor_label=actor.audit_label,
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provisioning_target",
+            target_id=str(target.id),
+            target_label=target.base_url,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            detail={
+                "application": application.slug,
+                "base_url": target.base_url,
+                "enabled": target.enabled,
+                "push_groups": target.push_groups,
+                # Recorded because a relaxed rule should be findable later, not just
+                # visible on a page somebody may never open.
+                "address_concession": concession,
+            },
+        ),
+    )
+    await session.commit()
+
+    logger.info(
+        "provisioning_target.registered",
+        extra={"base_url": target.base_url, "by": actor.user_name},
+    )
+
+    return await _target_summary(session, target)
+
+
+@router.patch(
+    "/targets/{target_id}",
+    response_model=ProvisioningTargetSummary,
+    summary="Change a target, or rotate its token",
+)
+async def update_target(
+    target_id: uuid.UUID,
+    payload: ProvisioningTargetUpdate,
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+) -> ProvisioningTargetSummary:
+    """Edit a target. Sending a token replaces it; there is no way to read the old one."""
+    target = await _target_or_404(session, target_id)
+    changes = payload.model_dump(exclude_unset=True)
+
+    if not changes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.")
+
+    if payload.base_url is not None:
+        target.address_concession = _check_address(payload.base_url, settings)
+        target.base_url = payload.base_url.strip()
+
+    if payload.token is not None:
+        target.token_encrypted = encrypt(payload.token, settings)
+        # A new token means the old failure is probably stale, so it stops being shown.
+        target.last_error = None
+
+    if payload.enabled is not None:
+        target.enabled = payload.enabled
+    if payload.push_groups is not None:
+        target.push_groups = payload.push_groups
+
+    await append_event(
+        session,
+        AuditDraft(
+            action="provisioning_target.updated",
+            actor_type=ActorType.USER,
+            actor_id=actor.user_id,
+            actor_label=actor.audit_label,
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provisioning_target",
+            target_id=str(target.id),
+            target_label=target.base_url,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            detail={
+                # The token itself is never recorded, only that it changed — which is
+                # the reviewable fact.
+                "token_rotated": payload.token is not None,
+                "changed": sorted(key for key in changes if key != "token"),
+                "base_url": target.base_url,
+                "enabled": target.enabled,
+            },
+        ),
+    )
+    await session.commit()
+
+    # Re-fetched rather than reused. updated_at has a server-side onupdate, so the
+    # UPDATE leaves that column expired, and reading it would lazy load — which under
+    # async is a MissingGreenlet naming greenlets rather than the column. The same
+    # bug bit iam/routers/users.py, so this is the third time the pattern has come up:
+    # after an UPDATE, re-read through a query that eager loads what the response
+    # needs.
+    return await _target_summary(session, await _target_or_404(session, target_id))
+
+
+@router.delete(
+    "/targets/{target_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="Stop provisioning into a system",
+)
+async def delete_target(
+    target_id: uuid.UUID,
+    request: Request,
+    session: SessionDep,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+) -> None:
+    """Remove a target and forget which account belonged to whom.
+
+    It does not deactivate anybody downstream, and that is deliberate rather than
+    lazy: deleting a target is what somebody does when a system is being
+    decommissioned or was registered by mistake, and silently switching off a few
+    hundred accounts on the way out would be a much bigger action than the button
+    suggests. Disable the target and run one more sync to deprovision people, then
+    delete it.
+
+    The audit entry says how many links were forgotten, because that is the number
+    somebody will want afterwards.
+    """
+    target = await _target_or_404(session, target_id)
+
+    counts = await _counts(session, target_id)
+    still_live = counts["accounts_active"]
+
+    await append_event(
+        session,
+        AuditDraft(
+            action="provisioning_target.deleted",
+            actor_type=ActorType.USER,
+            actor_id=actor.user_id,
+            actor_label=actor.audit_label,
+            outcome=AuditOutcome.SUCCESS,
+            target_type="provisioning_target",
+            target_id=str(target.id),
+            target_label=target.base_url,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            detail={
+                "application": target.application.slug,
+                "links_forgotten": sum(counts.values()),
+                # The part worth flagging: these accounts still exist out there.
+                "accounts_left_active_downstream": still_live,
+                "note": (
+                    "Deleting a target does not deactivate anybody. Accounts left "
+                    "active downstream stay active."
+                ),
+            },
+        ),
+    )
+
+    await session.delete(target)
+    await session.commit()
+
+    logger.warning(
+        "provisioning_target.deleted",
+        extra={
+            "base_url": target.base_url,
+            "by": actor.user_name,
+            "accounts_left_active_downstream": still_live,
+        },
+    )
+
+
+@router.post(
+    "/targets/{target_id}/probe",
+    response_model=ProbeResult,
+    summary="Check a target answers and accepts our token",
+)
+async def probe_target(
+    target_id: uuid.UUID,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+) -> ProbeResult:
+    """Read the target's ServiceProviderConfig, which describes nobody.
+
+    The right thing to call after registering one: it proves the address and the token
+    before the first person depends on them, and changes nothing either way.
+    """
+    target = await _target_or_404(session, target_id)
+
+    try:
+        client = OutboundScim(
+            base_url=target.scim_root, token=decrypt(target.token_encrypted, settings)
+        )
+        detail = await client.probe()
+    except (PushFailed, CannotDecrypt) as exc:
+        return ProbeResult(reachable=False, detail=str(exc))
+
+    return ProbeResult(reachable=True, detail=detail)
+
+
+@router.post(
+    "/targets/{target_id}/sync",
+    response_model=SyncResult,
+    summary="Push accounts to a target now",
+)
+async def sync_target(
+    target_id: uuid.UUID,
+    session: SessionDep,
+    settings: SettingsDep,
+    actor: Annotated[Actor, Depends(require(Permission.APPS_WRITE))],
+    force: Annotated[
+        bool,
+        Query(
+            description=(
+                "Push everybody regardless of whether they look unchanged, and retry "
+                "links that have run out of attempts."
+            )
+        ),
+    ] = False,
+) -> SyncResult:
+    """Reconcile the target's accounts with who is entitled to them.
+
+    Runs in the request, which is honest about there being no background worker: the
+    response is the result rather than a job id that never gets polled. It means a
+    large first sync takes a while, and the alternative — a queue nothing drains —
+    would be worse.
+    """
+    target = await _target_or_404(session, target_id)
+
+    outcome = await reconcile(session, target, settings, now=dt.datetime.now(dt.UTC), force=force)
+
+    logger.info(
+        "provisioning.sync_requested",
+        extra={
+            "base_url": target.base_url,
+            "by": actor.user_name,
+            "correlation_id": str(outcome.correlation_id),
+        },
+    )
+
+    return SyncResult(
+        correlation_id=outcome.correlation_id,
+        created=outcome.created,
+        adopted=outcome.adopted,
+        updated=outcome.updated,
+        deactivated=outcome.deactivated,
+        reactivated=outcome.reactivated,
+        unchanged=outcome.unchanged,
+        failed=outcome.failed,
+        skipped_exhausted=outcome.skipped_exhausted,
+        stopped_early=outcome.stopped_early,
+        ok=outcome.ok,
+    )
+
+
+@router.get(
+    "/targets/{target_id}/accounts",
+    response_model=list[ProvisioningLinkOut],
+    summary="Who has an account in this system, and who does not",
+    dependencies=[Depends(require(Permission.APPS_READ))],
+)
+async def target_accounts(
+    target_id: uuid.UUID,
+    session: SessionDep,
+    state: Annotated[
+        LinkState | None,
+        Query(description="Only this state. 'orphaned' is the one worth looking at."),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[ProvisioningLinkOut]:
+    """The links, newest problems first.
+
+    Ordered so failures and orphans come before the accounts that are working, because
+    a list of two hundred working accounts is not what anybody opens this for.
+    """
+    await _target_or_404(session, target_id)
+
+    conditions = [ProvisioningLink.target_id == target_id]
+    if state is not None:
+        conditions.append(ProvisioningLink.state == state)
+
+    rows = await session.execute(
+        select(ProvisioningLink, User)
+        .join(User, User.id == ProvisioningLink.user_id)
+        .where(*conditions)
+        .order_by(
+            # Orphaned first: somebody still has access we meant to remove.
+            case(
+                (ProvisioningLink.state == LinkState.ORPHANED, 0),
+                (ProvisioningLink.state == LinkState.FAILED, 1),
+                (ProvisioningLink.state == LinkState.PENDING, 2),
+                else_=3,
+            ),
+            User.user_name,
+        )
+        .limit(limit)
+    )
+
+    return [
+        ProvisioningLinkOut(
+            user_id=person.id,
+            user_name=person.user_name,
+            display_name=person.display_name,
+            active=person.active,
+            remote_id=link.remote_id,
+            state=link.state,
+            last_pushed_at=link.last_pushed_at,
+            last_error=link.last_error,
+            attempts=link.attempts,
+        )
+        for link, person in rows.tuples().all()
+    ]
