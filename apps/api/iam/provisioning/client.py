@@ -91,6 +91,17 @@ class PushFailed(Exception):
         return self.status in (401, 403)
 
     @property
+    def is_conflict(self) -> bool:
+        """Something with this userName is already there.
+
+        Not a retryable failure and not a fatal one — it means the account exists and
+        we do not know its id, so the answer is to look it up and adopt it. This is
+        what onboarding a downstream that already has people looks like, and treating
+        it as an ordinary failure means every one of them fails forever.
+        """
+        return self.status == 409
+
+    @property
     def is_missing(self) -> bool:
         """The account we tried to update is not there.
 
