@@ -194,27 +194,17 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
   )
 }
 
-export function ApplicationSamlPanels({
-  app,
-  canWrite,
-}: {
-  app: ApplicationDetail
-  canWrite: boolean
-}) {
-  const queryClient = useQueryClient()
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['application', app.id] })
-  }
-
-  const removeUser = useMutation({
-    mutationFn: (userId: string) => revokeAppAccessFromUser(app.id, userId),
-    onSuccess: refresh,
-  })
-  const removeGroup = useMutation({
-    mutationFn: (groupId: string) => revokeAppAccessFromGroup(app.id, groupId),
-    onSuccess: refresh,
-  })
-
+/**
+ * How one application is wired to us as a SAML service provider.
+ *
+ * Genuinely protocol-specific, which is why it is the half that stayed behind the
+ * `protocol === 'saml2'` check. Who has access is not, and now lives in
+ * ApplicationAccessPanels below.
+ *
+ * Takes no `canWrite`: everything here is read-only. Changing how an application is
+ * wired means pasting new metadata, which is a different form on the list page.
+ */
+export function ApplicationSamlPanels({ app }: { app: ApplicationDetail }) {
   const { ready, missing } = readiness(app)
   const loginUrl = `${window.location.origin}/idp/sso/${app.slug}`
 
@@ -267,7 +257,55 @@ export function ApplicationSamlPanels({
           </div>
         ) : null}
       </Panel>
+    </>
+  )
+}
 
+
+/**
+ * Who has access to an application, and how to change it.
+ *
+ * Split out of ApplicationSamlPanels, where it lived until a deployment found the
+ * consequence: the whole component was rendered only for `protocol === 'saml2'`, so an
+ * application we merely provision into — the HRMS, which is scim2 and has no SSO at all
+ * — offered no way to give anybody access to it. Access is not a SAML concept and had
+ * no business being filed under one.
+ *
+ * Rendered for every application now. The SAML panel above it is the part that really
+ * is protocol-specific.
+ *
+ * Known limitation, pre-dating the split: the pickers below load 200 groups and 200
+ * people and put them in dropdowns. The seeded directory has 1,284 people, so most of
+ * them cannot be chosen. Fine in production, where the directory is small; wrong in
+ * general, and a search box is the fix.
+ */
+export function ApplicationAccessPanels({
+  app,
+  canWrite,
+}: {
+  app: ApplicationDetail
+  canWrite: boolean
+}) {
+  const queryClient = useQueryClient()
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['application', app.id] })
+    // The counts on the list page and the provisioning screen both move when access
+    // does, and a stale number there reads as a bug rather than as a cache.
+    void queryClient.invalidateQueries({ queryKey: ['applications'] })
+    void queryClient.invalidateQueries({ queryKey: ['provisioning-targets'] })
+  }
+
+  const removeUser = useMutation({
+    mutationFn: (userId: string) => revokeAppAccessFromUser(app.id, userId),
+    onSuccess: refresh,
+  })
+  const removeGroup = useMutation({
+    mutationFn: (groupId: string) => revokeAppAccessFromGroup(app.id, groupId),
+    onSuccess: refresh,
+  })
+
+  return (
+    <>
       <Panel title={`Access via groups (${app.assigned_groups.length})`}>
         {app.assigned_groups.length === 0 ? (
           <Empty>No groups grant access to this application.</Empty>

@@ -18,7 +18,10 @@ import {
   Td,
   Th,
 } from '../components/ui'
-import { ApplicationSamlPanels } from '../components/ApplicationSamlPanels'
+import {
+  ApplicationAccessPanels,
+  ApplicationSamlPanels,
+} from '../components/ApplicationSamlPanels'
 import { RegisterApplication } from '../components/RegisterApplication'
 import { fetchApplication, fetchApplications, fetchMe } from '../lib/api'
 
@@ -137,8 +140,12 @@ export function ApplicationDetailPage() {
         </dl>
       </Panel>
 
-      {isSaml ? <ApplicationSamlPanels app={data} canWrite={canWrite} /> : null}
+      {/* Access first, and for every application. It is the question somebody opens
+          this page to answer, and it is not a SAML concept — which is exactly the
+          mistake that left the HRMS with no way to grant anybody access. */}
+      <ApplicationAccessPanels app={data} canWrite={canWrite} />
 
+      {isSaml ? <ApplicationSamlPanels app={data} /> : null}
     </div>
   )
 }

@@ -22,7 +22,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
-import { ApplicationSamlPanels } from './ApplicationSamlPanels'
+import { ApplicationAccessPanels, ApplicationSamlPanels } from './ApplicationSamlPanels'
 
 const APP_ID = 'app-0000-0000-0000-000000000001'
 const GROUP_ID = 'grp-0000-0000-0000-000000000002'
@@ -132,20 +132,32 @@ function stubApi(): void {
   )
 }
 
-function renderPanels(app: unknown = WIRED, canWrite = true) {
+type App = Parameters<typeof ApplicationSamlPanels>[0]['app']
+
+function wrap(children: React.ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        {/* The component takes the already-fetched application, so no fetch is needed
-            for the panels themselves — only for the grant form's dropdowns. */}
-        <ApplicationSamlPanels
-          app={app as Parameters<typeof ApplicationSamlPanels>[0]['app']}
-          canWrite={canWrite}
-        />
-      </MemoryRouter>
+      <MemoryRouter>{children}</MemoryRouter>
     </QueryClientProvider>,
   )
+}
+
+/** The SAML wiring panel. Read-only, so it takes no canWrite. */
+function renderPanels(app: unknown = WIRED) {
+  // The component takes the already-fetched application, so no fetch is needed here.
+  return wrap(<ApplicationSamlPanels app={app as App} />)
+}
+
+/**
+ * The access panels, which used to be part of the component above.
+ *
+ * They were split out because rendering them behind `protocol === 'saml2'` meant an
+ * application we only provision into had no way to grant anybody access. These tests
+ * came with them unchanged — the behaviour did not move, only where it is shown.
+ */
+function renderAccess(app: unknown = WIRED, canWrite = true) {
+  return wrap(<ApplicationAccessPanels app={app as App} canWrite={canWrite} />)
 }
 
 /**
@@ -197,14 +209,14 @@ test('an application that is not wired up offers no sign-in link', () => {
 })
 
 test('somebody without apps:write gets no controls', () => {
-  renderPanels(WIRED, false)
+  renderAccess(WIRED, false)
 
   expect(screen.queryAllByRole('button', { name: 'Remove' })).toHaveLength(0)
   expect(screen.queryByRole('button', { name: 'Give access' })).not.toBeInTheDocument()
 })
 
 test('removing access asks first', () => {
-  renderPanels()
+  renderAccess()
 
   fireEvent.click(at(screen.getAllByRole('button', { name: 'Remove' }), 0, 'Remove button'))
 
@@ -214,7 +226,7 @@ test('removing access asks first', () => {
 })
 
 test('cancelling a removal does nothing', () => {
-  renderPanels()
+  renderAccess()
 
   fireEvent.click(at(screen.getAllByRole('button', { name: 'Remove' }), 0, 'Remove button'))
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -224,7 +236,7 @@ test('cancelling a removal does nothing', () => {
 })
 
 test('confirming a group removal sends it', async () => {
-  renderPanels()
+  renderAccess()
 
   fireEvent.click(at(screen.getAllByRole('button', { name: 'Remove' }), 0, 'Remove button'))
   fireEvent.click(screen.getByRole('button', { name: 'Yes, remove it' }))
@@ -234,13 +246,13 @@ test('confirming a group removal sends it', async () => {
 })
 
 test('granting to a group warns that it reaches more than one person', () => {
-  renderPanels()
+  renderAccess()
 
   expect(screen.getByText(/everybody in it now and everybody added to it later/)).toBeInTheDocument()
 })
 
 test('granting to one person drops that warning', () => {
-  renderPanels()
+  renderAccess()
 
   // The grant form's first select chooses between a group and one person.
   const kind = at(screen.getAllByRole('combobox'), 0, 'combobox')
@@ -252,7 +264,7 @@ test('granting to one person drops that warning', () => {
 })
 
 test('granting sends the chosen subject', async () => {
-  renderPanels()
+  renderAccess()
 
   await screen.findByRole('option', { name: 'Finance' })
   const subject = at(screen.getAllByRole('combobox'), 1, 'combobox')
@@ -264,7 +276,7 @@ test('granting sends the chosen subject', async () => {
 })
 
 test('a deactivated person with access is marked', () => {
-  renderPanels({
+  renderAccess({
     ...WIRED,
     assigned_users: [{ ...WIRED.assigned_users[0], active: false }],
   })
