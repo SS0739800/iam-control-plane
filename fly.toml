@@ -39,15 +39,17 @@ primary_region = "ewr"
   # switches to NullPool and turns both statement caches off when it sees this.
   DB_POOLER_MODE = "transaction"
 
-  # The address of the HRMS we provision into, on Fly's private network. Not a
-  # secret: it is a hostname reachable only from inside the organisation. The token
-  # that goes with it is a secret and is stored encrypted in the database anyway.
+  # Deliberately NOT setting ALLOW_PRIVATE_PROVISIONING_TARGETS.
   #
-  # This is a private address over plain HTTP, which ADR 0007 refuses in production
-  # unless the concession below is set. It is set on purpose: the traffic never
-  # leaves Fly's internal network, and requiring a public HTTPS round trip to reach
-  # a machine two hops away would be worse, not better.
-  ALLOW_PRIVATE_PROVISIONING_TARGETS = "true"
+  # It was here to allow http://iam-hrms.internal:8000, and it cannot: that flag
+  # relaxes only the private-address rule, while ADR 0007 refuses plain HTTP in
+  # production unconditionally, with no setting to override it. The HTTP check fires
+  # first and the flag never gets a say.
+  #
+  # So the HRMS is reached at its public https:// address instead. That is a round
+  # trip out to Fly's edge and back for traffic that could have stayed inside the
+  # network — the honest cost of a rule with no exceptions, and cheaper than an
+  # exception that would then exist for everybody.
 
 [http_service]
   internal_port = 8000
