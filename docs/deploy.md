@@ -1,6 +1,6 @@
 # Deploying
 
-Three Fly apps and a Supabase database.
+Three Fly apps and a Neon database.
 
 | App            | What                                             | Public |
 | -------------- | ------------------------------------------------ | ------ |
@@ -13,82 +13,152 @@ The console is one app serving both halves — see
 own app because it is meant to be a genuinely separate system. authentik is its own
 app because it is somebody else's software.
 
-Read [ADR 0002](adr/0002-supabase-is-postgres-only.md) before touching Supabase.
-There is one step there that has to happen **before the first table exists**.
+The database is Neon — see [ADR 0009](adr/0009-neon-hosts-postgres.md), which
+amends [ADR 0002](adr/0002-supabase-is-postgres-only.md). Supabase's free tier
+cannot fit this project: it manages one database per project, allows two projects,
+and this needs two databases.
 
 ---
 
 ## 0. Before anything
 
+**The command is `flyctl`, not `fly`.** The Windows installer places only
+`flyctl.exe` — there is no `fly.exe` alias, unlike on macOS and Linux where the
+installer creates both. Every command below uses `flyctl` for that reason.
+
+Also: `.flyin` goes on the user PATH at install time, so an already-open terminal
+will not find it. Open a new one.
+
 ```bash
 # flyctl, if it isn't there yet
 curl -L https://fly.io/install.sh | sh
-fly auth login
+flyctl auth login
 ```
 
 You need: a Fly account with a card on file (the free allowance still asks for one),
-and a Supabase project.
+and a Neon project.
 
 ---
 
-## 1. Supabase
+## 1. Neon
 
 **Do this first, before running any migration.**
 
-1. Create the project. Note the region — put the Fly apps near it, because every
-   request the console serves does at least one query and a cross-continent round
-   trip shows up immediately.
-2. **Settings → API → disable the Data API.** Not later. The `anon` key is public by
-   design, and with the Data API on and RLS off, anyone with the project URL and
-   that key can read the user table and the audit log. On a project about access
-   control that is the worst possible finding. ADR 0002 covers why RLS is not the
-   fix here.
-3. Verify it is really off, rather than trusting the toggle:
+1. Create the project. Note the region — put the Fly apps in the same one, because
+   every request the console serves does at least one query and a cross-continent
+   round trip shows up immediately.
 
-   ```bash
-   curl -s -o /dev/null -w '%{http_code}\n' \
-     -H "apikey: <anon-key>" \
-     "https://<project>.supabase.co/rest/v1/users"
-   # want: 404 (or anything that is not 200 with a body)
+2. Create **two databases** in it. Ours, and authentik's:
+
+   ```sql
+   -- in Neon's SQL editor
+   CREATE DATABASE iam;
+   CREATE DATABASE authentik;
    ```
 
-4. Collect two connection strings from **Settings → Database**. They are different
-   and both are needed:
+   Two, not one, because authentik runs its own migrations and would rewrite our
+   schema if pointed at ours. This is the same arrangement local uses — see
+   `infra/db/init/01-create-databases.sh`, which has done it this way since P0.
 
-   | Which                       | Port | Used for            |
-   | --------------------------- | ---- | ------------------- |
-   | Transaction pooler          | 6543 | the running app     |
-   | Direct connection           | 5432 | migrations only     |
+   Skip the `authentik` one if you are deferring section 4.
 
-   Migrations cannot run through the transaction pooler — schema changes and
-   transaction-mode pooling do not mix. That is why `ALEMBIC_DATABASE_URL` exists
+3. Collect **two connection strings** for the `iam` database, from the dashboard's
+   connection panel. They are different and both are needed:
+
+   | Which                            | Host             | Used for        |
+   | -------------------------------- | ---------------- | --------------- |
+   | Pooled (PgBouncer, transaction)  | `...-pooler...`  | the running app |
+   | Direct                           | no `-pooler`     | migrations only |
+
+   Migrations cannot run through transaction-mode pooling — schema changes and a
+   transaction pooler do not mix. That is why `ALEMBIC_DATABASE_URL` exists
    separately from `DATABASE_URL`.
 
-   Rewrite both to asyncpg form:
+   Change the scheme to `postgresql+asyncpg://` and otherwise paste them as given:
 
    ```
-   postgresql+asyncpg://postgres.<ref>:<password>@<host>:6543/postgres
-   postgresql+asyncpg://postgres.<ref>:<password>@<host>:5432/postgres
+   postgresql+asyncpg://<user>:<pw>@ep-xxx-pooler.<region>.aws.neon.tech/iam?sslmode=require
+   postgresql+asyncpg://<user>:<pw>@ep-xxx.<region>.aws.neon.tech/iam?sslmode=require
    ```
+
+   **Leave `?sslmode=require` alone.** asyncpg does not accept that spelling —
+   `connect()` takes `ssl` — and `iam/config.py` rewrites the key for you. Without
+   that rewrite the first query raises `TypeError: connect() got an unexpected
+   keyword argument 'sslmode'`, and because the readiness endpoint hides exception
+   messages (they can contain the connection string) production would only tell you
+   `{"detail": "TypeError"}`. See [ADR 0009](adr/0009-neon-hosts-postgres.md).
+
+4. **Check the Data API is off — before the first table exists.**
+
+   Neon's connection dialog has **Data API**, **Auth** and **Storage** tabs. Do not
+   assume they are inert. A REST endpoint over `users` and `audit_events`, reachable
+   with a public key, is the worst finding this project could have, and it does not
+   care which vendor is hosting.
+
+   Open the **Data API** tab. If it is enabled, disable it. Then verify with a
+   request rather than trusting the toggle — if the tab shows a base URL:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}
+' "<data-api-url>/users"
+   # want: anything that is not 200 with a body
+   ```
+
+   Leave **Auth** alone too. Sessions here are server-side rows keyed to a HttpOnly
+   cookie; this project *is* the identity system. See
+   [ADR 0002](adr/0002-supabase-is-postgres-only.md), which applies to Neon exactly
+   as it did to Supabase.
 
 ---
 
 ## 2. The console
 
 ```bash
-fly apps create iam-console
+flyctl apps create iam-console
 ```
+
+### The hostname
+
+`BASE_URL` is set in `fly.toml`, not as a secret, and it is the setting most likely
+to be forgotten because nothing breaks loudly when it is.
+
+It defaults to `http://localhost:8080`. A deployment that leaves it there serves
+metadata advertising localhost as its entity ID and reply URL — which an identity
+provider accepts without complaint and then cannot reach. The failure surfaces much
+later, as a login that goes out and never comes back.
+
+It also decides the links in approval emails and the login URLs the console shows.
+
+If the hostname changes, every identity provider registered against it has to be
+re-registered. Decide it once.
 
 ### Secrets
 
 Generate them rather than inventing them.
 
+The `$(openssl rand -hex 32)` below is bash. In PowerShell it does nothing useful —
+`openssl` may not be installed, and `$(...)` will not substitute the way you expect.
+Either run these from Git Bash, or generate the value first in PowerShell and paste
+it:
+
+```powershell
+# A cryptographically random 32-byte hex string. Not Get-Random, which is not
+# suitable for a secret that signs session cookies.
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+```
+
+Multi-line secrets — the SAML key below — are worse in PowerShell, because a
+here-string needs its closing `'@` at column zero and the value must survive
+unaltered. Use Git Bash for those, or `flyctl secrets import` and paste.
+
 ```bash
 # The session secret. Production refuses to start if this is still the placeholder.
-fly secrets set SESSION_SECRET="$(openssl rand -hex 32)" -a iam-console
+flyctl secrets set SESSION_SECRET="$(openssl rand -hex 32)" -a iam-console
 
 # Both database URLs from step 1.
-fly secrets set \
+flyctl secrets set \
   DATABASE_URL="postgresql+asyncpg://postgres.<ref>:<pw>@<host>:6543/postgres" \
   ALEMBIC_DATABASE_URL="postgresql+asyncpg://postgres.<ref>:<pw>@<host>:5432/postgres" \
   -a iam-console
@@ -108,11 +178,11 @@ That prints both values. Set them as secrets — note the quotes, because the va
 multi-line and without them only the first line survives:
 
 ```bash
-fly secrets set SAML_IDP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+flyctl secrets set SAML_IDP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
 ...
 -----END PRIVATE KEY-----" -a iam-console
 
-fly secrets set SAML_IDP_CERTIFICATE="-----BEGIN CERTIFICATE-----
+flyctl secrets set SAML_IDP_CERTIFICATE="-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----" -a iam-console
 ```
@@ -127,7 +197,7 @@ again.
 ### Deploy
 
 ```bash
-fly deploy                    # from the repository root; reads ./fly.toml
+flyctl deploy                    # from the repository root; reads ./fly.toml
 ```
 
 The build compiles `xmlsec` from source and takes several minutes the first time
@@ -141,13 +211,13 @@ The image does not migrate on boot, on purpose. Two machines starting at once wo
 run Alembic twice, and a migration is not something to race.
 
 ```bash
-fly ssh console -a iam-console -C "python -m alembic upgrade head"
+flyctl ssh console -a iam-console -C "python -m alembic upgrade head"
 ```
 
 ### Check it
 
 ```bash
-fly open -a iam-console
+flyctl open -a iam-console
 ```
 
 Then, and this is the list that matters rather than "the site loads":
@@ -179,10 +249,10 @@ not authentication, on a public URL.
 
 ```bash
 cd apps/hrms
-fly apps create iam-hrms
-fly volumes create hrms_data --size 1 -a iam-hrms
-fly secrets set HRMS_SCIM_TOKEN="$(openssl rand -hex 32)" -a iam-hrms
-fly deploy
+flyctl apps create iam-hrms
+flyctl volumes create hrms_data --size 1 -a iam-hrms
+flyctl secrets set HRMS_SCIM_TOKEN="$(openssl rand -hex 32)" -a iam-hrms
+flyctl deploy
 ```
 
 Keep that token. It goes into the console in the next step, and neither side will
@@ -222,13 +292,13 @@ needs a server, a worker, Redis, and its own database — separate from ours, be
 it owns its schema.
 
 ```bash
-fly apps create iam-authentik
-fly volumes create authentik_media --size 1 -a iam-authentik
+flyctl apps create iam-authentik
+flyctl volumes create authentik_media --size 1 -a iam-authentik
 
 # Redis. Upstash via Fly, or any Redis you already have.
-fly redis create                      # note the connection URL
+flyctl redis create                      # note the connection URL
 
-fly secrets set \
+flyctl secrets set \
   AUTHENTIK_SECRET_KEY="$(openssl rand -hex 50)" \
   AUTHENTIK_POSTGRESQL__HOST="<host>" \
   AUTHENTIK_POSTGRESQL__USER="<user>" \
@@ -238,7 +308,7 @@ fly secrets set \
   AUTHENTIK_BOOTSTRAP_PASSWORD="$(openssl rand -hex 24)" \
   -a iam-authentik
 
-cd infra/authentik && fly deploy
+cd infra/authentik && flyctl deploy
 ```
 
 `AUTHENTIK_POSTGRESQL__NAME` is already `authentik` in `fly.toml`, so it is not
@@ -254,14 +324,15 @@ authentik provisions *into* us over SCIM, and our SCIM server wants a bearer tok
 Issue one from the console — **Provisioning in → Issue token** — and hand it over:
 
 ```bash
-fly secrets set IAM_SCIM_TOKEN="<the token the console showed once>" -a iam-authentik
+flyctl secrets set IAM_SCIM_TOKEN="<the token the console showed once>" -a iam-authentik
 ```
 
 Only the hash is kept on our side, so the console cannot show it again. If it goes
 missing, issue another and revoke the first.
 
-Its database is a **second** Supabase project (or a second database in the same
-one). Do not point it at ours: it would run its own migrations against our schema.
+Its database is the **second database in the Neon project**, created in step 1.
+Do not point it at ours: it would run its own migrations against our schema. This is
+the same arrangement local uses — see `infra/db/init/01-create-databases.sh`.
 
 Once it is up, register it with the console the same way as locally — paste its
 metadata, never fetch it
@@ -306,7 +377,7 @@ exists who can grant anything, including the first admin.
 they can be granted anything, and they are created by that first login. Then:
 
 ```bash
-fly ssh console -a iam-console -C "python -m scripts.grant_first_admin you@example.com"
+flyctl ssh console -a iam-console -C "python -m scripts.grant_first_admin you@example.com"
 ```
 
 That goes through the same `grant_role` the console uses, so the grant and the cached
@@ -328,9 +399,10 @@ role grants, and `iam/access/roles.py` is the only thing meant to write it — a
 UPDATE produces somebody the console calls an admin with no grant behind them, which
 is exactly what `find_drift` exists to report.
 
-**Supabase will keep warning that RLS is disabled.** That warning is aimed at people
-exposing their database to browsers. We are not, because the Data API is off. Do not
-"fix" it by enabling RLS without reading ADR 0002 first.
+**RLS stays off, deliberately.** Authorization lives in the application layer,
+where the entitlement model is. On Neon nothing nags about this and there is no
+public REST surface over the tables to worry about — which is most of why ADR 0002's
+warnings are now moot rather than merely obeyed. Read ADR 0002 before changing it.
 
 **The audit chain can be verified from the console** at `/api/audit/verify`. Worth
 doing once after the first real login, because a chain that was going to break would
@@ -343,6 +415,6 @@ rather break in front of you than in front of somebody else.
 - **No background worker.** Provisioning syncs run inside the request that asks for
   them. A first sync against a large directory is a slow HTTP call. A queue nothing
   drains would be worse than saying so.
-- **No automated deploy.** `fly deploy` is run by hand. CI builds and tests the
+- **No automated deploy.** `flyctl deploy` is run by hand. CI builds and tests the
   image; it does not release it.
 - **Migrations are manual.** By design, see step 2.

@@ -57,10 +57,24 @@ def signing_keypair() -> Keypair:
 
 
 def build_settings(database_url: str = UNREACHABLE_DATABASE_URL) -> Settings:
-    """Settings for a test app. Values passed here beat whatever's in the shell."""
+    """Settings for a test app. Values passed here beat whatever's in the shell.
+
+    ``_env_file=None`` matters more than it looks. Settings reads .env by default, so
+    without this a field nobody passes explicitly is inherited from whatever the
+    developer happens to have configured. That bit: alembic_database_url was picked
+    up from the repo's .env, which meant migration_url pointed at the real compose
+    database while database_url pointed at the unreachable stand-in — so a test
+    reaching for the migration URL would quietly connect to a live database.
+
+    alembic_database_url is pinned to the same value for the same reason. The point
+    of this helper is that nothing it returns reaches a real server unless the caller
+    asked for one.
+    """
     return Settings(
+        _env_file=None,
         app_env="ci",
         database_url=database_url,
+        alembic_database_url=database_url,
         session_secret="test-secret-deliberately-not-the-placeholder",
         log_level="WARNING",
     )

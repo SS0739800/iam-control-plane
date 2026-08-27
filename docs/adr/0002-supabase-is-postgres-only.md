@@ -1,7 +1,19 @@
 # 2. Supabase is a Postgres host, nothing else
 
-- **Status:** accepted
+- **Status:** accepted, amended by [ADR 0009](0009-neon-hosts-postgres.md)
 - **Date:** 2026-08-10
+
+> **The vendor changed; nothing else did.** Postgres is hosted by Neon, not
+> Supabase, because Supabase's free tier manages one database per project and allows
+> two projects, and this deployment needs two. See
+> [ADR 0009](0009-neon-hosts-postgres.md).
+>
+> Every rule below still applies. Neon has a Data API, an auth service and storage of
+> its own, so this is the same set of features to leave switched off, under different
+> names — including verifying the Data API is off before the first table exists. The
+> move bought a quota, not a smaller attack surface.
+>
+> Read "Supabase" below as "the database host".
 
 ## Context
 

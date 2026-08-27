@@ -4,7 +4,8 @@ Two things differ from the generated template:
 
 1. The URL comes from application settings, not alembic.ini, so there is one
    source of truth. It uses ``migration_url`` rather than ``database_url``:
-   on Supabase, DDL must go through session-mode pooling, not transaction mode.
+   on a hosted Postgres, DDL must go through a direct or session-mode connection,
+   not transaction-mode pooling.
 2. ``target_metadata`` is wired to our declarative Base so autogenerate works.
 """
 

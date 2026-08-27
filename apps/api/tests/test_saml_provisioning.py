@@ -129,6 +129,67 @@ def test_a_login_with_no_attributes_at_all_is_refused() -> None:
         read_claims(facts(attributes={}))
 
 
+def test_an_email_name_id_is_enough_on_its_own() -> None:
+    """A provider sending only an emailAddress NameID is a normal setup, not a broken
+    one, and refusing it was wrong.
+
+    Found while registering a real Okta tenant: Okta's app-creation wizard offers no
+    attribute-statement fields at all — they are added afterwards, on a different
+    screen — so the default path through its console produces exactly this assertion.
+    """
+    claims = read_claims(facts(attributes={}, name_id="ada.bergman@demo.local"))
+
+    assert claims.user_name == "ada.bergman@demo.local"
+    assert claims.email == "ada.bergman@demo.local"
+
+
+def test_a_persistent_name_id_is_still_not_an_email() -> None:
+    """The guard on the fallback above, and the reason it checks shape rather than the
+    provider's declared format.
+
+    A persistent NameID is an opaque provider-specific string. Accepting it as an
+    email would look like a successful login and leave nonsense in the directory,
+    which is worse than a refusal that says what to fix.
+    """
+    with pytest.raises(UnusableAssertion, match="attributes"):
+        read_claims(facts(attributes={}, name_id="persistent-pseudonym-0001"))
+
+
+def test_a_declared_email_format_does_not_override_the_shape_check() -> None:
+    """Providers are inconsistent about NameID formats, so the format string is not
+    trusted — the same reason attribute names are folded for case."""
+    with pytest.raises(UnusableAssertion):
+        read_claims(
+            facts(
+                attributes={},
+                name_id="not-an-address",
+                name_id_format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+            )
+        )
+
+
+def test_an_email_attribute_beats_the_name_id() -> None:
+    """The fallback is a last resort. An attribute is the provider stating a fact
+    deliberately; a NameID that happens to look like an address is not."""
+    claims = read_claims(
+        facts(
+            attributes={"email": ["ada.bergman@demo.local"]},
+            name_id="someone.else@demo.local",
+        )
+    )
+
+    assert claims.email == "ada.bergman@demo.local"
+    assert claims.user_name == "ada.bergman@demo.local"
+
+
+def test_the_name_id_is_still_the_external_id_when_it_supplied_the_email() -> None:
+    """Both uses at once, which is fine: it is the provider's handle for this person
+    and also, in this configuration, their address."""
+    claims = read_claims(facts(attributes={}, name_id="ada.bergman@demo.local"))
+
+    assert claims.external_id == "ada.bergman@demo.local"
+
+
 def test_blank_claim_values_are_ignored() -> None:
     """A provider that sends the attribute but leaves it empty is the same as one
     that didn't send it, and must not produce a blank display name."""

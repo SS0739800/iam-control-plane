@@ -20,6 +20,57 @@ AppEnv = Literal["local", "ci", "production"]
 PLACEHOLDER_SECRET = "dev-only-not-a-real-secret-change-me"  # noqa: S105
 
 
+# Query parameters that libpq understands and asyncpg does not. SQLAlchemy hands
+# query parameters to the driver untranslated, so anything here reaches
+# asyncpg.connect() as a keyword argument it has never heard of — and connect() takes
+# no **kwargs, so that is a TypeError on the first query rather than a warning.
+#
+# Renamed where asyncpg has an equivalent, dropped where it has none.
+ASYNCPG_RENAMES = {"sslmode": "ssl"}
+ASYNCPG_UNSUPPORTED = ("channel_binding",)
+
+
+def for_asyncpg(url: str) -> str:
+    """Make a connection URL from a provider's dashboard usable by asyncpg.
+
+    Every managed Postgres hands out a libpq-style URL, because that is what psql and
+    psycopg want. Two of those parameters break asyncpg:
+
+    ``sslmode`` is a spelling difference. asyncpg calls it ``ssl`` and accepts the
+    same values ("require", "verify-full", and so on), so only the key changes.
+
+    ``channel_binding`` has no asyncpg equivalent and is dropped. That is a real, if
+    small, loss: it asks for SCRAM channel binding, which defends against an attacker
+    holding a valid certificate for the wrong host. asyncpg cannot honour the request
+    either way, so the choice is between connecting without it and not connecting —
+    and ``ssl=require`` still means the connection is encrypted.
+
+    Why this matters more than a spelling fix: the readiness endpoint deliberately
+    hides exception messages, because they can contain the connection string. So the
+    failure reaches production as ``{"detail": "TypeError"}`` and nothing else, for
+    what is really a copy-paste from a dashboard.
+
+    Anything not listed above is left alone. A parameter asyncpg cannot take will
+    still fail — but silently discarding query parameters we do not recognise would
+    be worse, because it would throw away somebody's deliberate intent without
+    saying so.
+    """
+    scheme, separator, query = url.partition("?")
+    if not separator:
+        return url
+
+    kept: list[str] = []
+    for parameter in query.split("&"):
+        key, has_value, value = parameter.partition("=")
+        if key in ASYNCPG_UNSUPPORTED:
+            continue
+        if key in ASYNCPG_RENAMES:
+            key = ASYNCPG_RENAMES[key]
+        kept.append(f"{key}={value}" if has_value else key)
+
+    return f"{scheme}?{'&'.join(kept)}" if kept else scheme
+
+
 class Settings(BaseSettings):
     """The app's settings. Get them with get_settings()."""
 
@@ -108,9 +159,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------- database
     database_url: str = "postgresql+asyncpg://iam:iam@localhost:5432/iam"
 
-    # On Supabase, migrations have to connect a different way than the app does,
-    # because schema changes and transaction-mode pooling don't mix. Locally both
-    # point at the same server, so this falls back to database_url.
+    # Migrations have to connect a different way than the app does on any hosted
+    # Postgres, because schema changes and transaction-mode pooling don't mix.
+    # Locally both point at the same server, so this falls back to database_url.
     alembic_database_url: str | None = None
 
     db_pooler_mode: PoolerMode = "direct"
@@ -125,9 +176,14 @@ class Settings(BaseSettings):
 
     # ---------------------------------------------------------- properties
     @property
+    def app_url(self) -> str:
+        """Connection URL the app should use, in a form asyncpg accepts."""
+        return for_asyncpg(self.database_url)
+
+    @property
     def migration_url(self) -> str:
-        """Connection URL Alembic should use."""
-        return self.alembic_database_url or self.database_url
+        """Connection URL Alembic should use, in a form asyncpg accepts."""
+        return for_asyncpg(self.alembic_database_url or self.database_url)
 
     @property
     def is_production(self) -> bool:

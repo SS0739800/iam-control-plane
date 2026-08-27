@@ -1,8 +1,8 @@
 """Sets up the database connection and hands sessions to requests.
 
 The pooler-mode branch below is the reason this file needs a comment at all. Get it
-wrong on Supabase and things break only sometimes, only under load, which is
-horrible to track down later.
+wrong on a pooled connection and things break only sometimes, only under load,
+which is horrible to track down later.
 """
 
 from __future__ import annotations
@@ -28,13 +28,13 @@ from iam.config import Settings
 def build_engine(settings: Settings) -> AsyncEngine:
     """Build the database connection, set up for however we're reaching Postgres.
 
-    Supabase's transaction mode (port 6543) shares a small number of real database
-    connections between many clients. asyncpg gives its prepared statements names
-    that only make sense on one connection, so a reused name can land on a
-    connection that's never seen it. You get an occasional
-    DuplicatePreparedStatementError under load and never once while testing
-    locally. Turning both caches off fixes it, and we mustn't pool on top of
-    something that's already pooling.
+    A pooler in transaction mode — Supabase on port 6543, Neon's `-pooler` host —
+    shares a small number of real database connections between many clients.
+    asyncpg gives its prepared statements names that only make sense on one
+    connection, so a reused name can land on a connection that's never seen it. You
+    get an occasional DuplicatePreparedStatementError under load and never once
+    while testing locally. Turning both caches off fixes it, and we mustn't pool on
+    top of something that's already pooling.
     """
     kwargs: dict[str, Any] = {"echo": settings.db_echo}
 
@@ -46,13 +46,13 @@ def build_engine(settings: Settings) -> AsyncEngine:
         }
     else:
         # Our own connection pool. Fine for local Postgres, a direct connection, or
-        # Supabase session mode.
+        # session-mode pooling.
         kwargs["pool_size"] = 5
         kwargs["max_overflow"] = 5
         kwargs["pool_pre_ping"] = True
         kwargs["pool_recycle"] = 1800
 
-    return create_async_engine(settings.database_url, **kwargs)
+    return create_async_engine(settings.app_url, **kwargs)
 
 
 def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

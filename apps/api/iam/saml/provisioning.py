@@ -190,6 +190,25 @@ def read_claims(facts: AssertionFacts) -> IdentityClaims:
     if email is None and user_name is not None and _looks_like_an_email(user_name):
         email = user_name
 
+    # Last resort: the NameID itself, when it is an email address.
+    #
+    # A provider sending an emailAddress NameID and no attribute statements at all
+    # is a normal, specification-compliant configuration, and refusing it was
+    # wrong. Okta's app-creation wizard does not even offer attribute statements —
+    # they have to be added afterwards, on a different screen — so the default path
+    # through a real provider's console produces exactly this assertion.
+    #
+    # Guarded on shape rather than on the declared format. A persistent NameID is
+    # an opaque provider-specific string, and putting that in the email column
+    # would be worse than refusing: it would look like a successful login and
+    # leave nonsense in the directory. The declared format is not trusted for the
+    # same reason the attribute names are folded — providers are inconsistent
+    # about it, and "does this look like an email" is checkable.
+    if not email and facts.name_id and _looks_like_an_email(facts.name_id):
+        email = facts.name_id.strip()
+        if not user_name:
+            user_name = email
+
     if not user_name or not email:
         raise UnusableAssertion(
             "the login carries no email address or username, so there is nobody to "

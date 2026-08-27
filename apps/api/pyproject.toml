@@ -42,6 +42,13 @@ exclude = ["^alembic/versions/", "^\\.venv/"]
 module = ["pythonjsonlogger.*"]
 ignore_missing_imports = true
 
+# asyncpg ships no py.typed marker. Only tests/test_connection_urls.py imports it
+# directly — to check its connect() signature, which is the thing that makes the
+# sslmode rewrite necessary — but the import has to typecheck somewhere.
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
 # These only exist inside the container: xmlsec has no Windows build, so a
 # developer's venv can't have them. Without this, mypy on Windows fails on
 # iam/saml/reader.py for reasons that have nothing to do with the code.

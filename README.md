@@ -99,7 +99,7 @@ generated in memory with a warning. See [`iam/saml/keys.py`](apps/api/iam/saml/k
 
 ### Deploying it (P7)
 
-Three Fly apps and a Supabase database. The full runbook is
+Three Fly apps and a Neon database. The full runbook is
 [docs/deploy.md](docs/deploy.md); the shape is:
 
 | App             | What                                        |
@@ -130,10 +130,24 @@ cannot do it at all. The frontend would have been fine there, but once a Docker 
 exists for the API, authentik and the HRMS, serving 417 KB of static files from it is
 free.
 
-**Read [ADR 0002](docs/adr/0002-supabase-is-postgres-only.md) before touching
-Supabase.** The Data API has to be turned off *before the first table exists*. The
-`anon` key is public by design, and with the Data API on and RLS off, anyone holding
-the project URL can read the user table and the audit log.
+**The database is Neon, not Supabase** — see
+[ADR 0009](docs/adr/0009-neon-hosts-postgres.md), which amends ADR 0002. Supabase's
+free tier cannot fit this project: it manages one database per project and allows
+two projects, and this needs two databases — ours and authentik's, because authentik
+runs its own migrations and would rewrite our schema. Local has always run two
+databases on one server, and Neon does the same. ADR 0002 anticipated the move and
+said it would be a connection-string change; it was.
+
+One trap worth knowing about, because it has an unhelpful failure mode. Neon hands
+out URLs ending `?sslmode=require&channel_binding=require` — both libpq spellings,
+neither of which asyncpg accepts, and SQLAlchemy forwards query parameters to the
+driver untranslated. So a pasted URL raises `TypeError: connect() got an unexpected
+keyword argument 'sslmode'` on the first query, and the readiness endpoint hides
+exception messages (they can contain the connection string), so production would
+report only `{"detail": "TypeError"}`. `iam/config.py` renames `sslmode` and drops
+`channel_binding`, which asyncpg cannot honour at all;
+`tests/test_connection_urls.py` checks both against SQLAlchemy's own dialect rather
+than against a string.
 
 **Nobody is an admin on a fresh deployment**, which is the correct default and also a
 chicken-and-egg problem: there is no root account, so there is nobody who can grant
@@ -517,11 +531,17 @@ tested against a real assertion inside the container, in the `images` CI job.
 
 Full records in [`docs/adr/`](docs/adr/). The short version:
 
-- **[Supabase is Postgres only](docs/adr/0002-supabase-is-postgres-only.md).** No
-  Supabase Auth, no RLS, and the Data API is disabled. This project *is* an
-  identity system; adopting a second one would mean two sources of truth about
-  who someone is. Disabling the Data API is also a real security fix — with RLS
-  off, PostgREST plus the public `anon` key exposes every table.
+- **[The database host is Postgres and nothing else](docs/adr/0002-supabase-is-postgres-only.md).**
+  No hosted auth service, no RLS. This project *is* an identity system; adopting a
+  second one would mean two sources of truth about who someone is. Written for
+  Supabase, where it also meant disabling the Data API — with RLS off, PostgREST
+  plus the public `anon` key exposes every table.
+- **[Neon hosts Postgres](docs/adr/0009-neon-hosts-postgres.md)**, amending the
+  above. Supabase's free tier cannot hold two databases and this needs two. The
+  schema was kept portable from P0 precisely so this would be a connection-string
+  change, and it was. It buys a quota, not a smaller attack surface: Neon has a Data
+  API and an auth service of its own, so every rule in ADR 0002 still applies and
+  the runbook still verifies the Data API is off.
 - **[One origin](docs/adr/0003-single-origin.md).** Caddy serves the SPA and the
   API from one hostname, so the session cookie stays first-party and there is no
   CORS layer at all. SAML request state lives in Postgres keyed by `RelayState`,

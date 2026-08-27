@@ -27,7 +27,7 @@ async def dashboard(session: SessionDep) -> DashboardCounts:
     """All six counts in one trip to the database.
 
     Six little subqueries inside one SELECT, instead of six separate queries. This
-    is the first thing that loads on every visit, and six round trips to Supabase
+    is the first thing that loads on every visit, and six round trips to a hosted
     over the internet is a delay you can see. One isn't.
     """
     stmt = select(

@@ -22,10 +22,21 @@ primary_region = "ewr"
   LOG_LEVEL = "INFO"
   STATIC_DIR = "/srv/static"
 
-  # Supabase's pooler, in transaction mode. This is the setting that breaks things
-  # only sometimes and only under load if it is wrong — asyncpg keeps prepared
-  # statements the pooler cannot honour. iam/db.py switches to NullPool and turns
-  # both statement caches off when it sees this.
+  # The hostname this is reachable at. Not secret, and it belongs in git precisely
+  # because it is not a value to improvise: it becomes our SAML entity ID and the
+  # reply URL every identity provider is registered against, so changing it means
+  # re-registering everywhere.
+  #
+  # It defaults to http://localhost:8080, and a deployment that forgets it does not
+  # fail — it publishes metadata advertising localhost, which an identity provider
+  # accepts happily and then cannot reach. That happened here, and it is why this is
+  # a tracked file rather than a remembered step.
+  BASE_URL = "https://iam-console.fly.dev"
+
+  # Neon's pooled endpoint (the "-pooler" host) is PgBouncer in transaction mode.
+  # This is the setting that breaks things only sometimes and only under load if it
+  # is wrong — asyncpg keeps prepared statements the pooler cannot honour. iam/db.py
+  # switches to NullPool and turns both statement caches off when it sees this.
   DB_POOLER_MODE = "transaction"
 
   # The address of the HRMS we provision into, on Fly's private network. Not a
