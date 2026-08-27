@@ -20,6 +20,7 @@ import {
   type Tone,
 } from '../components/ui'
 import { fetchMe, fetchUser, fetchUsers } from '../lib/api'
+import LeaverPanel from '../components/LeaverPanel'
 import RoleGrantPanel from '../components/RoleGrantPanel'
 
 const PAGE_SIZE = 25
@@ -116,6 +117,7 @@ export function UserDetailPage() {
   // A control that always fails is worse than no control.
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
   const canGrantRoles = me.data?.permissions.includes('roles:write') ?? false
+  const canEditUsers = me.data?.permissions.includes('users:write') ?? false
 
   if (user.isPending) return <Loading />
   if (user.isError) return <ErrorBox error={user.error} />
@@ -154,6 +156,8 @@ export function UserDetailPage() {
       </Panel>
 
       <RoleGrantPanel userId={userId} canWrite={canGrantRoles} />
+
+      <LeaverPanel person={person} canWrite={canEditUsers} />
 
       <Panel title={`Groups (${person.groups.length})`}>
         {person.groups.length === 0 ? (
