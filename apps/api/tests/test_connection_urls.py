@@ -158,8 +158,21 @@ def test_the_migration_url_is_rewritten_too() -> None:
     assert "-pooler" not in settings.migration_url
 
 
-def test_the_migration_url_falls_back_to_the_app_url_and_is_still_rewritten() -> None:
-    """What local development does: one server, one URL."""
+def test_the_migration_url_falls_back_to_the_app_url_and_is_still_rewritten(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What local development does: one server, one URL.
+
+    The environment has to be cleared as well as the .env file, and that is the whole
+    lesson of this test's history. It was written reading a developer's .env, which
+    _env_file=None fixed. It then failed in CI, which sets ALEMBIC_DATABASE_URL as a
+    job-level variable — a second source _env_file says nothing about.
+
+    Both had the same shape: the test asserted a fallback while something upstream
+    quietly supplied the value it was meant to fall back from. Deleting the variable
+    is the only way to ask the question honestly.
+    """
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
     settings = Settings(_env_file=None, database_url=f"{NEON}?sslmode=require")
 
     assert settings.migration_url == f"{NEON}?ssl=require"
