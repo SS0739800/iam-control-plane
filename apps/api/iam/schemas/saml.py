@@ -50,6 +50,25 @@ class IdentityProviderRegistration(BaseModel):
     )
 
 
+class SignInOption(BaseModel):
+    """One way to sign in, for the screen shown to somebody who is not signed in yet.
+
+    Deliberately thin. This is the only unauthenticated view of the provider table, so
+    it carries what a button needs and nothing else: a name to print and a URL to send
+    them to. No entity id, no certificate, no timestamps, no enabled flag — a disabled
+    provider simply is not in the list.
+
+    Publishing the names of the providers we accept is not a leak. Every login page on
+    the internet does it, and it has to: somebody who cannot see "Sign in with Okta"
+    cannot sign in with Okta. What would be a leak is the SSO URL, the entity id or the
+    certificate, and none of those are here.
+    """
+
+    slug: str
+    name: str
+    login_url: str
+
+
 class IdentityProviderSummary(BaseModel):
     """A registered provider, without the wall of base64."""
 

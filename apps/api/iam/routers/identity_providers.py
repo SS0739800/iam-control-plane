@@ -27,6 +27,7 @@ from iam.schemas.saml import (
     IdentityProviderDetail,
     IdentityProviderRegistration,
     IdentityProviderSummary,
+    SignInOption,
 )
 from iam.security import Actor, Permission, require
 
@@ -55,6 +56,48 @@ def _detail(provider: IdentityProvider, *, base_url: str) -> IdentityProviderDet
         **_summary(provider, base_url=base_url).model_dump(),
         signing_cert=provider.signing_cert,
     )
+
+
+@router.get(
+    "/sign-in-options",
+    response_model=list[SignInOption],
+    summary="Ways to sign in, for somebody who is not signed in yet",
+)
+async def sign_in_options(session: SessionDep, settings: SettingsDep) -> list[SignInOption]:
+    """The providers a signed-out visitor can choose from.
+
+    Unauthenticated on purpose, and the only endpoint here that is. Everything else
+    about a provider needs idp:read, but a login screen cannot ask for a permission —
+    the person reading it has no session yet, which is the entire reason they are
+    looking at it.
+
+    The console used to solve this by hard-coding ?idp=authentik into the sign-in
+    button, which worked locally and pointed at a provider that did not exist in
+    production. Somebody had to be handed a URL to get in at all.
+
+    Only enabled providers, because a disabled one is not a way to sign in, and
+    offering it would produce a refusal that looks like a fault.
+
+    Declared before the "" route below it: FastAPI matches in order, and "/{slug}"
+    would otherwise swallow this path and try to look up a provider called
+    "sign-in-options".
+    """
+    rows = (
+        await session.scalars(
+            select(IdentityProvider)
+            .where(IdentityProvider.enabled.is_(True))
+            .order_by(IdentityProvider.name)
+        )
+    ).all()
+    root = settings.base_url.rstrip("/")
+    return [
+        SignInOption(
+            slug=provider.slug,
+            name=provider.name,
+            login_url=f"{root}/saml/login?idp={provider.slug}",
+        )
+        for provider in rows
+    ]
 
 
 @router.get(

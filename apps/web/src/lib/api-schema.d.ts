@@ -543,7 +543,7 @@ export interface paths {
          * @description All six counts in one trip to the database.
          *
          *     Six little subqueries inside one SELECT, instead of six separate queries. This
-         *     is the first thing that loads on every visit, and six round trips to Supabase
+         *     is the first thing that loads on every visit, and six round trips to a hosted
          *     over the internet is a delay you can see. One isn't.
          */
         get: operations["dashboard_api_dashboard_get"];
@@ -688,6 +688,42 @@ export interface paths {
          *             409 if another slug has already claimed the same entity id.
          */
         post: operations["register_identity_provider_api_identity_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/identity-providers/sign-in-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ways to sign in, for somebody who is not signed in yet
+         * @description The providers a signed-out visitor can choose from.
+         *
+         *     Unauthenticated on purpose, and the only endpoint here that is. Everything else
+         *     about a provider needs idp:read, but a login screen cannot ask for a permission —
+         *     the person reading it has no session yet, which is the entire reason they are
+         *     looking at it.
+         *
+         *     The console used to solve this by hard-coding ?idp=authentik into the sign-in
+         *     button, which worked locally and pointed at a provider that did not exist in
+         *     production. Somebody had to be handed a URL to get in at all.
+         *
+         *     Only enabled providers, because a disabled one is not a way to sign in, and
+         *     offering it would produce a refusal that looks like a fault.
+         *
+         *     Declared before the "" route below it: FastAPI matches in order, and "/{slug}"
+         *     would otherwise swallow this path and try to look up a provider called
+         *     "sign-in-options".
+         */
+        get: operations["sign_in_options_api_identity_providers_sign_in_options_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3421,6 +3457,28 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * SignInOption
+         * @description One way to sign in, for the screen shown to somebody who is not signed in yet.
+         *
+         *     Deliberately thin. This is the only unauthenticated view of the provider table, so
+         *     it carries what a button needs and nothing else: a name to print and a URL to send
+         *     them to. No entity id, no certificate, no timestamps, no enabled flag — a disabled
+         *     provider simply is not in the list.
+         *
+         *     Publishing the names of the providers we accept is not a leak. Every login page on
+         *     the internet does it, and it has to: somebody who cannot see "Sign in with Okta"
+         *     cannot sign in with Okta. What would be a leak is the SSO URL, the entity id or the
+         *     certificate, and none of those are here.
+         */
+        SignInOption: {
+            /** Login Url */
+            login_url: string;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+        };
+        /**
          * SignedInUser
          * @description Who the console is talking to, and what they can do.
          *
@@ -4654,6 +4712,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_in_options_api_identity_providers_sign_in_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignInOption"][];
                 };
             };
         };

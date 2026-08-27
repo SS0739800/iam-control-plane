@@ -3633,6 +3633,30 @@
         "title": "ScimUser",
         "type": "object"
       },
+      "SignInOption": {
+        "description": "One way to sign in, for the screen shown to somebody who is not signed in yet.\n\nDeliberately thin. This is the only unauthenticated view of the provider table, so\nit carries what a button needs and nothing else: a name to print and a URL to send\nthem to. No entity id, no certificate, no timestamps, no enabled flag \u2014 a disabled\nprovider simply is not in the list.\n\nPublishing the names of the providers we accept is not a leak. Every login page on\nthe internet does it, and it has to: somebody who cannot see \"Sign in with Okta\"\ncannot sign in with Okta. What would be a leak is the SSO URL, the entity id or the\ncertificate, and none of those are here.",
+        "properties": {
+          "login_url": {
+            "title": "Login Url",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "login_url"
+        ],
+        "title": "SignInOption",
+        "type": "object"
+      },
       "SignedInUser": {
         "description": "Who the console is talking to, and what they can do.\n\nThe permissions are sent as a list so the front end can hide buttons nobody\ncan use. It is only ever a nicety: every one of them is checked again on the\nrequest, because a hidden button is not a permission check.",
         "properties": {
@@ -5440,7 +5464,7 @@
     },
     "/api/dashboard": {
       "get": {
-        "description": "All six counts in one trip to the database.\n\nSix little subqueries inside one SELECT, instead of six separate queries. This\nis the first thing that loads on every visit, and six round trips to Supabase\nover the internet is a delay you can see. One isn't.",
+        "description": "All six counts in one trip to the database.\n\nSix little subqueries inside one SELECT, instead of six separate queries. This\nis the first thing that loads on every visit, and six round trips to a hosted\nover the internet is a delay you can see. One isn't.",
         "operationId": "dashboard_api_dashboard_get",
         "responses": {
           "200": {
@@ -5758,6 +5782,32 @@
           }
         },
         "summary": "Register a provider from its metadata, or update one",
+        "tags": [
+          "identity providers"
+        ]
+      }
+    },
+    "/api/identity-providers/sign-in-options": {
+      "get": {
+        "description": "The providers a signed-out visitor can choose from.\n\nUnauthenticated on purpose, and the only endpoint here that is. Everything else\nabout a provider needs idp:read, but a login screen cannot ask for a permission \u2014\nthe person reading it has no session yet, which is the entire reason they are\nlooking at it.\n\nThe console used to solve this by hard-coding ?idp=authentik into the sign-in\nbutton, which worked locally and pointed at a provider that did not exist in\nproduction. Somebody had to be handed a URL to get in at all.\n\nOnly enabled providers, because a disabled one is not a way to sign in, and\noffering it would produce a refusal that looks like a fault.\n\nDeclared before the \"\" route below it: FastAPI matches in order, and \"/{slug}\"\nwould otherwise swallow this path and try to look up a provider called\n\"sign-in-options\".",
+        "operationId": "sign_in_options_api_identity_providers_sign_in_options_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SignInOption"
+                  },
+                  "title": "Response Sign In Options Api Identity Providers Sign In Options Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ways to sign in, for somebody who is not signed in yet",
         "tags": [
           "identity providers"
         ]

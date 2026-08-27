@@ -58,6 +58,7 @@ export type GroupRef = Schema<'GroupRef'>
 export type UserRef = Schema<'UserRef'>
 export type SignedInUser = Schema<'SignedInUser'>
 export type IdentityProviderSummary = Schema<'IdentityProviderSummary'>
+export type SignInOption = Schema<'SignInOption'>
 export type LoginAttempt = Schema<'LoginAttempt'>
 export type LoginAttemptDetail = Schema<'LoginAttemptDetail'>
 export type LoginCheck = Schema<'LoginCheck'>
@@ -256,6 +257,18 @@ export interface LoginListParams {
 
 export async function fetchLoginAttempts(params: LoginListParams = {}) {
   return unwrap(await client.GET('/api/saml/logins', { params: { query: params } }))
+}
+
+/**
+ * The ways somebody can sign in, for the banner shown before they have.
+ *
+ * The only unauthenticated read in this client. A sign-in screen cannot ask for a
+ * permission — whoever is reading it has no session, which is why they are reading it
+ * — so the button used to be hard-coded to ?idp=authentik and pointed at a provider
+ * that did not exist in production.
+ */
+export async function fetchSignInOptions(): Promise<SignInOption[]> {
+  return unwrap(await client.GET('/api/identity-providers/sign-in-options'))
 }
 
 export async function fetchLoginAttempt(eventId: number): Promise<LoginAttemptDetail> {
