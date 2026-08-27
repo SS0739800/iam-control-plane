@@ -161,6 +161,12 @@ provisioning syncs run inside the request that asks for them, because there is n
 background worker. A first sync against the seeded directory takes about forty
 seconds.
 
+A push to `sudaiv-work` deploys both apps, but only after the whole pipeline passes —
+Fly has no git integration of its own, so `.github/workflows/ci.yml` is what makes a
+push a release. The job then asks the running machine whether its `git_sha` matches
+the commit, which is what turns "Fly said it worked" into "this commit is serving
+traffic". See [docs/deploy.md](docs/deploy.md#deploying-by-pushing).
+
 ### Provisioning outward, and the HRMS (P6)
 
 The half that writes to other systems. **Provisioning out** in the console

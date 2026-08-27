@@ -366,6 +366,58 @@ Then paste its metadata into `/api/identity-providers` the same way.
 
 ---
 
+## Deploying by pushing
+
+A push to `sudaiv-work` runs the full pipeline and, if every job passes, releases
+both apps. Fly has no git integration of its own — unlike Render, it will not watch a
+branch — so `.github/workflows/ci.yml` is the piece that turns a push into a release.
+
+The order matters more than the automation: the deploy job `needs: [api, web, images]`,
+so a release cannot happen unless the tests, the types, the linters and the
+xmlsec/lxml source build all agreed first. That is the part a `flyctl deploy` from a
+laptop does not give you.
+
+### One-time setup
+
+```bash
+# A token with access to both apps, so app-scoped will not do.
+flyctl tokens create org --name github-actions
+```
+
+Then add it as a repository secret named exactly `FLY_API_TOKEN` — Settings →
+Secrets and variables → Actions. Without it the deploy job fails at the first
+`flyctl` call; the test jobs are unaffected.
+
+### Which branch
+
+`sudaiv-work`, for now, because that is where every phase lands and `main` is merged
+only at the end — so deploying from `main` would mean one release months from now.
+
+**This is temporary and should move to `main` once the project settles.** A branch
+that deploys ought to be a branch that is reviewed, and this one is neither. The
+tests in front of it are what make that survivable rather than reckless. The switch
+is one line in `ci.yml`, marked with a comment saying so.
+
+### What it checks after deploying
+
+A deploy Fly calls successful can still be serving a broken app, so the job asks the
+running machine four things:
+
+| Check | Catches |
+| ------------------------------- | --------------------------------------------- |
+| `git_sha` matches the commit    | a failed rollout leaving the old release up   |
+| `/api/health/ready`             | started, but cannot reach Postgres            |
+| `<div id="root">` is served     | the bundle missing from the image             |
+| `/users` returns 200            | the SPA fallback broken in production         |
+| the HRMS answers                | one app released and the other not            |
+
+The `git_sha` check is the one that makes this more than a smoke test: it proves the
+machine now answering is running *this* commit. Until this existed every release
+reported `"git_sha":"dev"`, and the only way to tell what was running was to guess
+from timestamps.
+
+---
+
 ## Afterwards
 
 **Nobody is an admin yet.** A person created by logging in starts as an employee with
@@ -415,6 +467,4 @@ rather break in front of you than in front of somebody else.
 - **No background worker.** Provisioning syncs run inside the request that asks for
   them. A first sync against a large directory is a slow HTTP call. A queue nothing
   drains would be worse than saying so.
-- **No automated deploy.** `flyctl deploy` is run by hand. CI builds and tests the
-  image; it does not release it.
 - **Migrations are manual.** By design, see step 2.

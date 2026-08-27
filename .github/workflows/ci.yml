@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # sudaiv-work is where the work happens, one commit per phase; main is merged
+    # at the end. Both are here because the deploy job below hangs off these tests,
+    # and tests that only run on main would mean phases going live unverified.
+    branches: [main, sudaiv-work]
   pull_request:
 
 # A new push supersedes an in-flight run on the same ref.
@@ -224,3 +227,99 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/nonsense)" = 404 \
             || (echo "the frontend is shadowing the API" && exit 1)
           docker rm -f console-ci
+
+  # ---------------------------------------------------------------- deploying
+  # Everything above has to pass first. That is the whole point of putting the
+  # deploy here rather than pushing from a laptop: a release cannot happen unless
+  # the tests, the types, the linters and the xmlsec build all agreed.
+  #
+  # Fly has no git integration of its own — unlike Render, it will not watch a
+  # branch — so this is the piece that makes a push to main become a release.
+  deploy:
+    name: Deploy to Fly
+    runs-on: ubuntu-latest
+    needs: [api, web, images]
+
+    # Only a real push to the deploying branch. A pull request must never deploy:
+    # it would put somebody else's unreviewed branch into production, and forks can
+    # open pull requests. github.event_name is the guard that makes that impossible
+    # rather than merely unlikely.
+    #
+    # sudaiv-work rather than main, deliberately and temporarily. Every phase lands
+    # there and main is merged at the very end, so deploying from main would mean one
+    # release months from now — which is not continuous deployment, it is a manual
+    # deploy with extra steps.
+    #
+    # Move this to refs/heads/main once the project settles. That is the correct
+    # end state: a branch that is deployed should be a branch that is reviewed, and
+    # right now this one is neither, which is a real trade-off rather than an
+    # oversight. The tests above are what makes it survivable in the meantime.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/sudaiv-work'
+
+    # One at a time, and never cancelled halfway. This overrides the workflow-level
+    # concurrency group, which has cancel-in-progress: true — fine for tests, wrong
+    # here, because killing flyctl between "machine stopped" and "machine started"
+    # is how you get an app that is down and a pipeline that says it succeeded.
+    concurrency:
+      group: deploy-fly
+      cancel-in-progress: false
+
+    environment:
+      name: production
+      url: https://iam-console.fly.dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # GIT_SHA is surfaced on /api/health, so a deployed machine can be traced
+      # back to a commit. Without it every release reports "dev" and the only way
+      # to tell what is running is to guess from timestamps.
+      - name: Deploy the console
+        run: flyctl deploy --remote-only --ha=false --build-arg GIT_SHA=${{ github.sha }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy the HRMS
+        working-directory: apps/hrms
+        run: flyctl deploy --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # A deploy that Fly called successful can still be serving a broken app, and
+      # the two failures worth catching are exactly the ones the local checks
+      # cannot see: a machine that starts without reaching the database, and a
+      # bundle that did not make it into the image.
+      #
+      # The commit check is the one that makes this more than a smoke test — it
+      # proves the machine now answering is running *this* commit, not the previous
+      # release that happened to survive a failed rollout.
+      - name: Check what is actually running
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            body=$(curl -sf https://iam-console.fly.dev/api/health) && break
+            echo "not answering yet (attempt $attempt)"
+            sleep 5
+          done
+          echo "$body"
+
+          echo "$body" | grep -q '"git_sha":"${{ github.sha }}"' \
+            || (echo "the machine is not running this commit" && exit 1)
+
+          echo "--- the database"
+          curl -sf https://iam-console.fly.dev/api/health/ready \
+            || (echo "deployed but cannot reach Postgres" && exit 1)
+
+          echo "--- the frontend"
+          curl -sf https://iam-console.fly.dev/ | grep -q '<div id="root">' \
+            || (echo "the bundle is missing from the image" && exit 1)
+
+          echo "--- a deep link"
+          test "$(curl -s -o /dev/null -w '%{http_code}' https://iam-console.fly.dev/users)" = 200 \
+            || (echo "deep links 404 in production" && exit 1)
+
+          echo "--- the HRMS"
+          curl -sf https://iam-hrms.fly.dev/health \
+            || (echo "the HRMS is not answering" && exit 1)
