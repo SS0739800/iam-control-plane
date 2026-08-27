@@ -27,6 +27,18 @@ certs/
 *.crt
 !certs/.gitkeep
 
+# Two exceptions, and only two. The SAML test fixtures include the certificates
+# that verify the recorded authentik assertion, and without them the reader and
+# signer tests cannot even be collected — which is exactly how they failed the
+# first time CI ever ran: the .b64 assertion was committed and the certificates
+# that make sense of it were not.
+#
+# Public halves, checked before allowing them: both are BEGIN CERTIFICATE with no
+# private key material. The rule above stays as it is, because it is the thing
+# stopping somebody committing a signing key, and that is worth far more than the
+# inconvenience of this exception.
+!apps/api/tests/fixtures/*.pem
+
 # --- Docker / infra local state ---
 .caddy/
 pgdata/
