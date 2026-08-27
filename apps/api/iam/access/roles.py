@@ -34,7 +34,7 @@ import datetime as dt
 import logging
 import uuid
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.models.access import RevokedGrantReason, RoleGrant
@@ -59,6 +59,34 @@ class Granter:
 
     user_id: uuid.UUID | None
     label: str
+
+
+async def count_live_admins(db: AsyncSession, *, now: dt.datetime) -> int:
+    """How many people can currently grant anything.
+
+    Counted from the grants rather than the cached column, because this number is the
+    thing standing between us and an unrecoverable system, and it should not depend on
+    a cache being right.
+
+    Only counts people who are still active: a deactivated admin cannot sign in, so
+    they are no help at all when the last other admin is being removed. That clause is
+    also why deactivating somebody has to ask this question — switching off the last
+    admin empties the set just as surely as revoking their grant.
+    """
+    return (
+        await db.scalar(
+            select(func.count())
+            .select_from(RoleGrant)
+            .join(User, User.id == RoleGrant.user_id)
+            .where(
+                RoleGrant.role == PlatformRole.ADMIN,
+                RoleGrant.revoked_at.is_(None),
+                (RoleGrant.expires_at.is_(None)) | (RoleGrant.expires_at > now),
+                User.active.is_(True),
+            )
+        )
+        or 0
+    )
 
 
 async def live_grant(db: AsyncSession, user_id: uuid.UUID, *, now: dt.datetime) -> RoleGrant | None:

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 
-from iam.access import reconcile, touches_rules
+from iam.access import count_live_admins, live_grant, reconcile, touches_rules
 from iam.api.pagination import MAX_LIMIT, Page, clamp_limit
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep
@@ -205,13 +206,54 @@ async def update_user(
 
     Raises:
         HTTPException: 409 if the field belongs to the identity provider and this
-            user came from SCIM.
+            user came from SCIM, if somebody is deactivating themselves, or if
+            deactivating this person would leave nobody able to administer anything.
     """
     user = await _load_user(session, user_id)
     changes = payload.model_dump(exclude_unset=True)
 
     if not changes:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+
+    # Deactivating is the one change here that can lock somebody out, so it gets two
+    # guards the other fields do not need.
+    if changes.get("active") is False:
+        # Yourself, first. Deactivating revokes every session you have immediately and
+        # /saml/acs refuses the next login — a provider will happily sign you in, and
+        # ours is the answer that counts. There is no self-service way back, so this
+        # would end with somebody editing the database by hand.
+        if actor.user_id == user.id:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=(
+                    "You cannot mark yourself as having left. It would end your "
+                    "sessions straight away and refuse your next login, and nothing "
+                    "in the console could undo it. Ask another admin."
+                ),
+            )
+
+        # And the last admin. The same reasoning as revoking their grant — see
+        # iam/routers/access.py — because switching somebody off empties the set of
+        # people who can grant anything just as surely as taking their role away.
+        # count_live_admins only counts active people, which is exactly why.
+        now = dt.datetime.now(dt.UTC)
+        current = await live_grant(session, user.id, now=now)
+        # The count is only asked for once the cheap checks pass, which the
+        # short-circuit takes care of.
+        if (
+            current is not None
+            and current.role is PlatformRole.ADMIN
+            and await count_live_admins(session, now=now) <= 1
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=(
+                    f"{user.display_name} is the only admin left, so marking them "
+                    "as having left would leave nobody able to grant anything — "
+                    "including the ability to undo it. Make somebody else an "
+                    "admin first."
+                ),
+            )
 
     if user.source is IdentitySource.SCIM:
         conflicting = IDP_OWNED_FIELDS & changes.keys()

@@ -24,9 +24,17 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 
-from iam.access import Granter, RoleGrantRefused, grant_role, history, live_grant, revoke_role
+from iam.access import (
+    Granter,
+    RoleGrantRefused,
+    count_live_admins,
+    grant_role,
+    history,
+    live_grant,
+    revoke_role,
+)
 from iam.audit import AuditDraft, append_event
 from iam.deps import SessionDep
 from iam.models.access import RoleGrant
@@ -64,32 +72,6 @@ async def _load_user(session: SessionDep, user_id: uuid.UUID) -> User:
     return user
 
 
-async def _count_live_admins(session: SessionDep, *, now: dt.datetime) -> int:
-    """How many people can currently grant anything.
-
-    Counted from the grants rather than the cached column, because this number is
-    the thing standing between us and an unrecoverable system, and it should not
-    depend on a cache being right.
-
-    Only counts people who are still active: a deactivated admin cannot sign in,
-    so they are no help at all when the last other admin is being removed.
-    """
-    return (
-        await session.scalar(
-            select(func.count())
-            .select_from(RoleGrant)
-            .join(User, User.id == RoleGrant.user_id)
-            .where(
-                RoleGrant.role == PlatformRole.ADMIN,
-                RoleGrant.revoked_at.is_(None),
-                (RoleGrant.expires_at.is_(None)) | (RoleGrant.expires_at > now),
-                User.active.is_(True),
-            )
-        )
-        or 0
-    )
-
-
 async def _refuse_if_last_admin(
     session: SessionDep, user: User, *, now: dt.datetime, doing: str
 ) -> None:
@@ -103,7 +85,7 @@ async def _refuse_if_last_admin(
     if current is None or current.role != PlatformRole.ADMIN:
         return
 
-    if await _count_live_admins(session, now=now) > 1:
+    if await count_live_admins(session, now=now) > 1:
         return
 
     raise HTTPException(
