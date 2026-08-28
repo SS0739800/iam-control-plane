@@ -19,7 +19,25 @@ Upstream identity providers, in the order they get wired up: **authentik**
 
 ## Status
 
-**Phase 2 — inbound SSO. Complete.** A real login against a real authentik goes
+**It is deployed and the whole loop runs on it.**
+[iam-console.fly.dev](https://iam-console.fly.dev) authenticates against a real Okta
+tenant, and [iam-hrms.fly.dev](https://iam-hrms.fly.dev) is the downstream it
+provisions into. Somebody signs in through Okta, an admin grants them access to the
+HRMS, a sync pushes them there, marking them a leaver switches the account off — and
+the record stays, because a system that keeps payroll history has reasons to keep it.
+
+A push to `sudaiv-work` deploys both, but only after the tests, the types, the
+linters and the xmlsec source build all pass. `/api/health` reports the commit it is
+running, so "Fly said it worked" and "this commit is serving traffic" are different
+questions with the same answer.
+
+What is *not* done is worth reading too: the
+[deploy runbook's last section](docs/deploy.md#what-is-not-done) lists it, and
+authentik is not deployed, so multi-provider federation is unproven in production.
+
+### Phase 2 — inbound SSO
+
+A real login against a real authentik goes
 the whole way and comes back: out through `/saml/login`, a password typed at the
 provider, in through `/saml/acs`, a genuine signature checked with xmlsec, all ten
 checks passed, a person created, a session issued, and a cookie the API
@@ -255,7 +273,11 @@ forever.
 
 Approval email goes to Mailpit at http://localhost:8025.
 
-CI is configured but has not run yet — it executes on the first push to a remote.
+CI runs on every push and deploys from `sudaiv-work` when it passes. Its first
+green run found two things that were invisible locally: a test reading CI's own
+environment variables, and SAML fixtures that had never been committed — so the
+recorded assertion had sat in the repository since P2 with no certificate to verify
+it against.
 
 | Phase | Scope                                             | State           |
 | ----- | ------------------------------------------------- | --------------- |
@@ -266,8 +288,15 @@ CI is configured but has not run yet — it executes on the first push to a remo
 | P4    | Lifecycle + entitlements *(MVP line)*             | ✅ done         |
 | P5    | SAML IdP — outbound SSO                           | ✅ done         |
 | P6    | SCIM client — outbound provisioning               | ✅ done         |
-| P7    | Production deploy                                 | ready to deploy |
-| P8    | Entra ID integration sprint                       | planned         |
+| P7    | Production deploy                                 | ✅ done         |
+| P8    | Entra ID integration sprint                       | started: Okta   |
+
+P8 is further from done than that row suggests. Okta signs people in, which is P2's
+machinery pointed at a hosted provider rather than new work. What the phase is really
+for has not started: **inbound SCIM from a hosted provider**, which is the largest
+untested surface in the project — the SCIM server has only ever been written to by
+our own client and by authentik — plus group claims, and Entra itself, whose claim
+URIs and SCIM behaviour differ enough to be their own integration.
 
 ---
 
