@@ -1115,7 +1115,8 @@ export interface paths {
          *
          *     Raises:
          *         HTTPException: 409 if the field belongs to the identity provider and this
-         *             user came from SCIM.
+         *             user came from SCIM, if somebody is deactivating themselves, or if
+         *             deactivating this person would leave nobody able to administer anything.
          */
         patch: operations["update_user_api_users__user_id__patch"];
         trace?: never;
