@@ -20,6 +20,7 @@ import { useState } from 'react'
 import {
   Empty,
   ErrorBox,
+  LinkCell,
   Loading,
   Mono,
   Panel,
@@ -35,6 +36,8 @@ import {
   type RulePreview,
   createAccessRule,
   deleteAccessRule,
+  fetchAffected,
+  runAccessRule,
   fetchAccessRules,
   fetchGroups,
   fetchMe,
@@ -304,7 +307,32 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
     },
   })
 
+  // Who this rule catches *now*, which is not the same question as who is in the
+  // group. A rule that stopped matching anybody still leaves its old members behind
+  // until it runs again, so "granted" and "currently matches" can disagree — and that
+  // disagreement is exactly what somebody wants to see before pressing Run now.
+  const [showing, setShowing] = useState(false)
+  const affected = useQuery({
+    queryKey: ['rule-affected', rule.id],
+    queryFn: () => fetchAffected(rule.id),
+    enabled: showing,
+  })
+
+  // Applying a saved rule to everybody now, instead of waiting for the next login or
+  // department change to trigger it. Rules reconcile, so a run can take memberships
+  // away as well as give them — only ever the ones the rule itself created — which is
+  // why the line under the row reports removals rather than just additions.
+  const run = useMutation({
+    mutationFn: () => runAccessRule(rule.id),
+    onSuccess: () => {
+      refresh()
+      // Membership counts move on the groups screen too.
+      void queryClient.invalidateQueries({ queryKey: ['groups'] })
+    },
+  })
+
   return (
+    <>
     <tr>
       <Td>
         <span className="font-medium">{rule.name}</span>
@@ -348,7 +376,27 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
               </span>
             </span>
           ) : (
-            <span className="flex justify-end gap-2">
+            <span className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowing(!showing)}
+                className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
+              >
+                {showing ? 'Hide who' : 'Who it catches'}
+              </button>
+              <button
+                type="button"
+                onClick={() => run.mutate()}
+                disabled={run.isPending || !rule.enabled}
+                title={
+                  rule.enabled
+                    ? 'Apply this rule to everybody now'
+                    : 'Turn the rule on before running it'
+                }
+                className="rounded-sm border border-brass-600 px-2 py-1 text-xs text-brass-700 disabled:opacity-40 dark:border-brass-400 dark:text-brass-400"
+              >
+                {run.isPending ? 'Running…' : 'Run now'}
+              </button>
               <button
                 type="button"
                 onClick={() => toggle.mutate()}
@@ -367,10 +415,49 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
             </span>
           )
         ) : null}
+        {run.data ? (
+          <span className="block pt-1 text-xs text-slate-500 dark:text-slate-400">
+            {run.data.added} added, {run.data.removed} removed, {run.data.unchanged}{' '}
+            already right
+          </span>
+        ) : null}
         {toggle.isError ? <ErrorBox error={toggle.error} /> : null}
         {remove.isError ? <ErrorBox error={remove.error} /> : null}
+        {run.isError ? <ErrorBox error={run.error} /> : null}
       </Td>
     </tr>
+
+    {showing ? (
+      <tr>
+        <Td colSpan={5}>
+          {affected.isPending ? (
+            <Loading />
+          ) : affected.isError ? (
+            <ErrorBox error={affected.error} />
+          ) : affected.data.length === 0 ? (
+            <Empty>
+              This rule matches nobody at the moment. Anybody it put in{' '}
+              {rule.group_name} stays there until it runs again.
+            </Empty>
+          ) : (
+            <ul className="flex flex-col">
+              {affected.data.map((person) => (
+                <li
+                  key={person.id}
+                  className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-1 last:border-0 dark:border-slate-800/60"
+                >
+                  <LinkCell to={`/users/${person.id}`}>{person.display_name}</LinkCell>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {[person.department, person.job_title].filter(Boolean).join(' · ') || '—'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Td>
+      </tr>
+    ) : null}
+    </>
   )
 }
 

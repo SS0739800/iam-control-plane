@@ -129,9 +129,20 @@ export function Th({ children, right }: { children: ReactNode; right?: boolean }
   )
 }
 
-export function Td({ children, right }: { children: ReactNode; right?: boolean }) {
+export function Td({
+  children,
+  right,
+  colSpan,
+}: {
+  children: ReactNode
+  right?: boolean
+  // For a row that spans the table — an expanded detail panel under its own row,
+  // where a cell per column would be meaningless.
+  colSpan?: number
+}) {
   return (
     <td
+      colSpan={colSpan}
       className={`border-b border-slate-100 py-2 align-top text-sm dark:border-slate-800/60 ${
         right ? 'pl-4 text-right tabular-nums' : 'pr-4'
       }`}

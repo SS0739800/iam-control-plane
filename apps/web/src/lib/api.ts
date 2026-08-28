@@ -74,6 +74,7 @@ export type AccessRuleCreate = Schema<'AccessRuleCreate'>
 export type RuleAttribute = Schema<'RuleAttribute'>
 export type RulePreview = Schema<'RulePreview'>
 export type RuleRunResult = Schema<'RuleRunResult'>
+export type AffectedPerson = Schema<'AffectedPerson'>
 export type RuleOperator = AccessRule['operator']
 export type ScimClientIssued = Schema<'ScimClientIssued'>
 export type ProvisioningOverview = Schema<'ProvisioningOverview'>
@@ -202,6 +203,32 @@ export async function fetchGroups(params: { q?: string; limit?: number; offset?:
 export async function fetchGroup(groupId: string): Promise<GroupDetail> {
   return unwrap(
     await client.GET('/api/groups/{group_id}', { params: { path: { group_id: groupId } } }),
+  )
+}
+
+/**
+ * Put somebody in a group, or take them out.
+ *
+ * Stored as a manual membership, which is what stops the rule engine undoing it.
+ * `group_members.source` is how "a person decided this" is told apart from "a rule
+ * worked it out", and the engine only ever removes its own — so a hand-added member
+ * survives the next run and a rule-added one does not need defending.
+ *
+ * Both answer 204, so there is nothing to return. Callers refetch the group.
+ */
+export async function addToGroup(userId: string, groupId: string): Promise<void> {
+  await unwrap(
+    await client.PUT('/api/users/{user_id}/groups/{group_id}', {
+      params: { path: { user_id: userId, group_id: groupId } },
+    }),
+  )
+}
+
+export async function removeFromGroup(userId: string, groupId: string): Promise<void> {
+  await unwrap(
+    await client.DELETE('/api/users/{user_id}/groups/{group_id}', {
+      params: { path: { user_id: userId, group_id: groupId } },
+    }),
   )
 }
 
@@ -389,13 +416,6 @@ export async function fetchProvisioningAccounts(
 
 // -------------------------------------------------------------- role grants
 
-export async function fetchRoleGrants(userId: string): Promise<RoleGrant[]> {
-  return unwrap(
-    await client.GET('/api/users/{user_id}/role-grants', {
-      params: { path: { user_id: userId } },
-    }),
-  )
-}
 
 export async function fetchAccessSummary(userId: string): Promise<AccessSummary> {
   return unwrap(
@@ -459,6 +479,37 @@ export async function deleteAccessRule(ruleId: string): Promise<RuleRunResult> {
   return unwrap(
     await client.DELETE('/api/access-rules/{rule_id}', {
       params: { path: { rule_id: ruleId } },
+    }),
+  )
+}
+
+/**
+ * Apply a saved rule to everybody now, instead of waiting for something to trigger it.
+ *
+ * Rules reconcile rather than add, so a run can remove memberships as well as create
+ * them — and it only ever touches the ones it made itself. That is why the result
+ * counts removals: a button that quietly took access away without saying so would be
+ * the worst version of this.
+ */
+export async function runAccessRule(ruleId: string): Promise<RuleRunResult> {
+  return unwrap(
+    await client.POST('/api/access-rules/{rule_id}/run', {
+      params: { path: { rule_id: ruleId } },
+    }),
+  )
+}
+
+/**
+ * Who a saved rule currently applies to.
+ *
+ * previewAccessRule answers the same question for a rule that has not been saved yet;
+ * this one is for the rules already running, where "who does this actually catch
+ * today" is the thing nobody can otherwise see.
+ */
+export async function fetchAffected(ruleId: string, limit = 50): Promise<AffectedPerson[]> {
+  return unwrap(
+    await client.GET('/api/access-rules/{rule_id}/affected', {
+      params: { path: { rule_id: ruleId }, query: { limit } },
     }),
   )
 }

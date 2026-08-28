@@ -11,13 +11,13 @@ import {
   Loading,
   Pager,
   Panel,
-  Pill,
   Row,
   TableWrap,
   Td,
   Th,
 } from '../components/ui'
-import { fetchGroup, fetchGroups } from '../lib/api'
+import GroupMembers from '../components/GroupMembers'
+import { fetchGroup, fetchGroups, fetchMe } from '../lib/api'
 
 const PAGE_SIZE = 25
 
@@ -95,12 +95,14 @@ export function GroupsPage() {
 export function GroupDetailPage() {
   const { groupId = '' } = useParams()
   const group = useQuery({ queryKey: ['group', groupId], queryFn: () => fetchGroup(groupId) })
+  // The API enforces this; asking here only decides whether to draw the controls.
+  const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
+  const canWrite = me.data?.permissions.includes('groups:write') ?? false
 
   if (group.isPending) return <Loading />
   if (group.isError) return <ErrorBox error={group.error} />
 
   const data = group.data
-  const showingAll = data.members.length >= data.member_count
 
   return (
     <div className="flex flex-col gap-6">
@@ -133,32 +135,7 @@ export function GroupDetailPage() {
         )}
       </Panel>
 
-      <Panel title="Members">
-        {data.members.length === 0 ? (
-          <Empty>No members.</Empty>
-        ) : (
-          <>
-            <ul className="flex flex-col">
-              {data.members.map((member) => (
-                <li
-                  key={member.id}
-                  className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-                >
-                  <LinkCell to={`/users/${member.id}`}>{member.display_name}</LinkCell>
-                  <Pill tone={member.active ? 'ok' : 'muted'}>
-                    {member.active ? 'active' : 'deactivated'}
-                  </Pill>
-                </li>
-              ))}
-            </ul>
-            {showingAll ? null : (
-              <p className="pt-3 text-sm text-slate-500 dark:text-slate-400">
-                Showing the first {data.members.length} of {data.member_count.toLocaleString()}.
-              </p>
-            )}
-          </>
-        )}
-      </Panel>
+      <GroupMembers group={data} canWrite={canWrite} />
     </div>
   )
 }
