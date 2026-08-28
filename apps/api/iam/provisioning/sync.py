@@ -131,6 +131,16 @@ class SyncOutcome:
         )
 
     @property
+    def touched(self) -> int:
+        """How many accounts this pass actually moved.
+
+        Distinct from `changed`, which is a yes-or-no. Summing that across targets
+        would count a target rather than an account, which reads as "1 pushed" when
+        forty people were provisioned.
+        """
+        return self.created + self.adopted + self.updated + self.deactivated + self.reactivated
+
+    @property
     def ok(self) -> bool:
         return self.failed == 0 and self.stopped_early is None
 

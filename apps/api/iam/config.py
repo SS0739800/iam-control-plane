@@ -174,6 +174,17 @@ class Settings(BaseSettings):
     # server instead. See docs/adr/0008-one-server-serves-both-halves-in-production.md.
     static_dir: str | None = None
 
+    # ------------------------------------------------------- the background sweep
+    # How often the worker reconciles every enabled provisioning target. Only the
+    # worker process reads this; the web process ignores it.
+    #
+    # Five minutes is a compromise nobody will love. Shorter means a leaver's
+    # downstream account closes sooner, which is the thing that matters; longer means
+    # fewer pointless passes over a directory where nothing changed. Five keeps the
+    # worst case for an offboarding under a coffee break without hammering a
+    # downstream that has nothing to do.
+    provisioning_sweep_seconds: int = 300
+
     # ---------------------------------------------------------- properties
     @property
     def app_url(self) -> str:
