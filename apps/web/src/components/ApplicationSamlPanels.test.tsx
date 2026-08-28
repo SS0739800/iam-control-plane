@@ -59,6 +59,9 @@ const NOT_WIRED = { ...WIRED, entity_id: null, acs_url: null }
 let removedUsers: string[] = []
 let removedGroups: string[] = []
 let grants: string[] = []
+/** Every URL the component asked for, so a test can assert it searched rather
+ * than listed. */
+let fetchCalls: string[] = []
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -83,12 +86,14 @@ function stubApi(): void {
   removedUsers = []
   removedGroups = []
   grants = []
+  fetchCalls = []
 
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = urlOf(input)
       const method = methodOf(input, init)
+      fetchCalls.push(url)
 
       if (url.includes('/users/') && method === 'DELETE') {
         removedUsers.push(url)
@@ -282,4 +287,70 @@ test('a deactivated person with access is marked', () => {
   })
 
   expect(screen.getByText('deactivated')).toBeInTheDocument()
+})
+
+// ------------------------------------------- granting to one person, by search
+
+test('choosing one person searches rather than listing everybody', async () => {
+  renderAccess()
+
+  fireEvent.change(at(screen.getAllByRole('combobox'), 0, 'combobox'), {
+    target: { value: 'user' },
+  })
+  fireEvent.change(screen.getByRole('textbox', { name: /Who/ }), {
+    target: { value: 'ada' },
+  })
+
+  // A dropdown capped at 200 hid four fifths of a 1,289-person directory, which reads
+  // as somebody having left rather than as a truncated list.
+  expect(await screen.findByRole('button', { name: /Ada Bergman/ })).toBeInTheDocument()
+  expect(fetchCalls.some((url) => url.includes('q=ada'))).toBe(true)
+})
+
+test('it does not search until there is something worth searching for', async () => {
+  renderAccess()
+
+  fireEvent.change(at(screen.getAllByRole('combobox'), 0, 'combobox'), {
+    target: { value: 'user' },
+  })
+  fireEvent.change(screen.getByRole('textbox', { name: /Who/ }), {
+    target: { value: 'a' },
+  })
+
+  expect(fetchCalls.some((url) => url.includes('q=a&'))).toBe(false)
+})
+
+test('typing again clears the person already chosen', async () => {
+  renderAccess()
+
+  fireEvent.change(at(screen.getAllByRole('combobox'), 0, 'combobox'), {
+    target: { value: 'user' },
+  })
+  const box = screen.getByRole('textbox', { name: /Who/ })
+  fireEvent.change(box, { target: { value: 'ada' } })
+  fireEvent.click(await screen.findByRole('button', { name: /Ada Bergman/ }))
+
+  // Now search for somebody else without picking them, and submit.
+  fireEvent.change(box, { target: { value: 'someone else' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Give access' }))
+
+  // Nothing granted: the earlier choice was cleared, so a search for one person
+  // cannot end up granting access to another.
+  expect(grants).toHaveLength(0)
+})
+
+test('granting to a searched person sends their id', async () => {
+  renderAccess()
+
+  fireEvent.change(at(screen.getAllByRole('combobox'), 0, 'combobox'), {
+    target: { value: 'user' },
+  })
+  fireEvent.change(screen.getByRole('textbox', { name: /Who/ }), {
+    target: { value: 'ada' },
+  })
+  fireEvent.click(await screen.findByRole('button', { name: /Ada Bergman/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Give access' }))
+
+  await waitFor(() => expect(grants).toHaveLength(1))
+  expect(grants[0]).toContain(USER_ID)
 })

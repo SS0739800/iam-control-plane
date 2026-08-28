@@ -92,14 +92,20 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
   const [kind, setKind] = useState<'group' | 'user'>('group')
   const [subject, setSubject] = useState('')
   const [role, setRole] = useState('')
+  const [query, setQuery] = useState('')
 
+  // Groups are listed, people are searched, and the difference is not a style
+  // choice: there are 44 groups and 1,289 people. A dropdown capped at 200 is the
+  // right control for the first and silently hides four fifths of the second — which
+  // reads as somebody having left the company rather than as a truncated list.
   const groups = useQuery({
     queryKey: ['groups', 'for-app-access'],
     queryFn: () => fetchGroups({ limit: 200 }),
   })
-  const users = useQuery({
-    queryKey: ['users', 'for-app-access'],
-    queryFn: () => fetchUsers({ limit: 200, active: true }),
+  const people = useQuery({
+    queryKey: ['users', 'for-app-access', query],
+    queryFn: () => fetchUsers({ q: query, limit: 10, active: true }),
+    enabled: kind === 'user' && query.trim().length >= 2,
   })
 
   const grant = useMutation({
@@ -138,30 +144,69 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
           </select>
         </label>
 
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
-            {kind === 'group' ? 'Which group' : 'Who'}
-          </span>
-          <select
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-            className={FIELD}
-            required
-          >
-            <option value="">choose…</option>
-            {kind === 'group'
-              ? (groups.data?.items ?? []).map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))
-              : (users.data?.items ?? []).map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.display_name} ({person.user_name})
-                  </option>
-                ))}
-          </select>
-        </label>
+        {kind === 'group' ? (
+          <label className="flex flex-1 flex-col gap-1 text-sm">
+            <span className="text-slate-500 dark:text-slate-400">Which group</span>
+            <select
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              className={FIELD}
+              required
+            >
+              <option value="">choose…</option>
+              {(groups.data?.items ?? []).map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label className="flex flex-1 flex-col gap-1 text-sm">
+            <span className="text-slate-500 dark:text-slate-400">Who</span>
+            <input
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                // Typing again means the earlier choice is stale. Leaving it selected
+                // would let somebody search for one person and grant access to another.
+                setSubject('')
+              }}
+              placeholder="Search by name or login"
+              className={FIELD}
+            />
+            {query.trim().length >= 2 ? (
+              <span className="flex flex-col">
+                {(people.data?.items ?? []).length === 0 ? (
+                  <span className="py-1 text-xs text-slate-500 dark:text-slate-400">
+                    Nobody active matching that.
+                  </span>
+                ) : (
+                  (people.data?.items ?? []).map((person) => (
+                    <button
+                      key={person.id}
+                      type="button"
+                      onClick={() => {
+                        setSubject(person.id)
+                        setQuery(`${person.display_name} (${person.user_name})`)
+                      }}
+                      className={`px-1 py-1 text-left text-sm ${
+                        subject === person.id
+                          ? 'bg-brass-50 dark:bg-brass-950'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {person.display_name}{' '}
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {person.user_name}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </span>
+            ) : null}
+          </label>
+        )}
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-500 dark:text-slate-400">Role in the app (optional)</span>
