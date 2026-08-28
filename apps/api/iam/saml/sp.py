@@ -21,6 +21,9 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 from xml.sax.saxutils import escape
 
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
 RELAY_STATE_BYTES = 32
 """Length of the random token we send with a login request.
 
@@ -62,13 +65,23 @@ class ServiceProvider:
     acs_url: str
     slo_url: str
 
+    signing_certificate: str | None = None
+    """Our certificate, base64 with no header, or None when none is configured.
+
+    Published so a provider can verify the logout requests we sign. A signature
+    nobody can check is worse than none: it looks like security and is not.
+    """
+
     @classmethod
-    def from_base_url(cls, base_url: str) -> ServiceProvider:
+    def from_base_url(
+        cls, base_url: str, signing_certificate: str | None = None
+    ) -> ServiceProvider:
         root = base_url.rstrip("/")
         return cls(
             entity_id=f"{root}/saml/metadata",
             acs_url=f"{root}/saml/acs",
             slo_url=f"{root}/saml/sls",
+            signing_certificate=signing_certificate,
         )
 
     def metadata_xml(self) -> str:
@@ -85,6 +98,7 @@ class ServiceProvider:
             '                      WantAssertionsSigned="true"\n'
             "                      protocolSupportEnumeration="
             '"urn:oasis:names:tc:SAML:2.0:protocol">\n'
+            f"{self._key_descriptor()}"
             "    <md:SingleLogoutService\n"
             '      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"\n'
             f'      Location="{self.slo_url}"/>\n'
@@ -97,6 +111,27 @@ class ServiceProvider:
             '      index="0" isDefault="true"/>\n'
             "  </md:SPSSODescriptor>\n"
             "</md:EntityDescriptor>\n"
+        )
+
+    def _key_descriptor(self) -> str:
+        """Our signing certificate, or nothing at all.
+
+        Omitted rather than left empty when no key is configured. An empty
+        KeyDescriptor is a document some providers reject outright and others
+        accept and then fail to verify against — both worse than saying nothing,
+        which at least means "this application does not sign".
+        """
+        if not self.signing_certificate:
+            return ""
+        return (
+            '    <md:KeyDescriptor use="signing">\n'
+            '      <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">\n'
+            "        <ds:X509Data>\n"
+            f"          <ds:X509Certificate>{self.signing_certificate}"
+            f"</ds:X509Certificate>\n"
+            "        </ds:X509Data>\n"
+            "      </ds:KeyInfo>\n"
+            "    </md:KeyDescriptor>\n"
         )
 
 
@@ -243,22 +278,45 @@ def login_redirect_url(*, idp_sso_url: str, authn_request_xml: str, relay_state:
     return f"{idp_sso_url}{separator}{query}"
 
 
+RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+"""The signature algorithm we use for the redirect binding.
+
+Named in the query string as SigAlg, so the provider knows what to verify with.
+"""
+
+
 def redirect_binding_url(
     endpoint: str,
     *,
     saml_request: str | None = None,
     saml_response: str | None = None,
     relay_state: str | None = None,
+    private_key_pem: str | None = None,
 ) -> str:
     """Put a SAML message in a URL, the way the redirect binding wants it.
 
-    Same shape as login_redirect_url, but for logout, where the message can be
-    either a request or a response depending on who started it.
+    Same shape as login_redirect_url, but for logout, where the message can be either
+    a request or a response depending on who started it.
 
-    Nothing here is signed. That is fine for a provider that doesn't insist on it,
-    which authentik doesn't by default, and it's the same position we're already in
-    with login requests. A provider that does insist needs a key of ours, which
-    arrives in P5. See the note on the /saml/sls handler.
+    Signed when a key is given, and that is not optional in practice any more. Okta
+    refuses an unsigned LogoutRequest outright, so single logout silently did nothing:
+    our session ended, theirs did not, and the next login walked straight back in
+    without asking for a password. Which is the opposite of what somebody pressing
+    sign out believes they have done.
+
+    The signing is not XML signing
+    ------------------------------
+
+    This binding signs the *query string*, not the document. The rule is exact and
+    unforgiving: build ``SAMLRequest=…&RelayState=…&SigAlg=…`` in that order, with
+    each value URL-encoded, sign those bytes, and append ``Signature=``. Not the
+    decoded XML, not a different parameter order, not the string after the provider
+    re-encodes it. Get any of that wrong and the signature verifies against nothing,
+    with an error that says only "invalid signature".
+
+    RelayState is included only when we send one, because the octet string is what we
+    actually put on the wire — adding an empty parameter to the signature that is not
+    in the URL breaks it just as thoroughly as omitting a real one.
     """
     parameters: dict[str, str] = {}
     if saml_request is not None:
@@ -268,8 +326,33 @@ def redirect_binding_url(
     if relay_state:
         parameters["RelayState"] = relay_state
 
+    if private_key_pem is not None:
+        parameters["SigAlg"] = RSA_SHA256
+        # urlencode with the dict in insertion order gives exactly the octet string
+        # the specification asks to be signed, which is also exactly what goes in the
+        # URL. Building the two separately is how the two drift apart.
+        signed_part = urlencode(parameters)
+        signature = urlencode({"Signature": _sign_query(signed_part, private_key_pem)})
+        joiner = "&" if "?" in endpoint else "?"
+        return f"{endpoint}{joiner}{signed_part}&{signature}"
+
     separator = "&" if "?" in endpoint else "?"
     return f"{endpoint}{separator}{urlencode(parameters)}"
+
+
+def _sign_query(octets: str, private_key_pem: str) -> str:
+    """Sign the redirect binding's query string, base64 for putting back in a URL.
+
+    Uses cryptography rather than xmlsec on purpose: there is no XML here, and xmlsec
+    only installs in the container — signing a query string is the one part of SAML
+    that can be tested on any machine.
+    """
+    key = serialization.load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
+    if not isinstance(key, rsa.RSAPrivateKey):
+        raise ValueError("the SAML signing key must be RSA for the redirect binding")
+
+    signature = key.sign(octets.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+    return base64.b64encode(signature).decode("ascii")
 
 
 def is_safe_return_path(path: str) -> bool:

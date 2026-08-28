@@ -91,9 +91,20 @@ it early is exactly when a replay would start working again.
 """
 
 
-def _service_provider(settings: Annotated[Settings, Depends(app_settings)]) -> ServiceProvider:
-    """Who we are, worked out from the address we're served on."""
-    return ServiceProvider.from_base_url(settings.base_url)
+def _service_provider(
+    request: Request, settings: Annotated[Settings, Depends(app_settings)]
+) -> ServiceProvider:
+    """Who we are, worked out from the address we're served on.
+
+    Carries the signing certificate so /saml/metadata can publish it. The keypair is
+    built once at startup and lives on app.state — the same one P5 signs assertions
+    with, because there is one identity here, not one per direction.
+    """
+    keypair = getattr(request.app.state, "saml_keypair", None)
+    return ServiceProvider.from_base_url(
+        settings.base_url,
+        signing_certificate=keypair.certificate_body if keypair else None,
+    )
 
 
 SpDep = Annotated[ServiceProvider, Depends(_service_provider)]
@@ -711,7 +722,14 @@ async def logout(
     destination = "/"
 
     if existing is not None:
-        onward = await _single_logout_url(session, sp=sp, saml_session=existing, now=now)
+        keypair = getattr(request.app.state, "saml_keypair", None)
+        onward = await _single_logout_url(
+            session,
+            sp=sp,
+            saml_session=existing,
+            now=now,
+            private_key_pem=keypair.private_key_pem if keypair else None,
+        )
         if onward is not None:
             destination = onward
 
@@ -726,6 +744,7 @@ async def _single_logout_url(
     sp: ServiceProvider,
     saml_session: SamlSession,
     now: dt.datetime,
+    private_key_pem: str | None,
 ) -> str | None:
     """Where to send someone so the provider signs them out too, if it can.
 
@@ -776,10 +795,14 @@ async def _single_logout_url(
         extra={"idp": provider.slug, "request_id": request_id},
     )
 
+    # Signed, because Okta refuses an unsigned LogoutRequest outright — which is how
+    # single logout came to silently do nothing: our session ended, theirs did not,
+    # and the next login walked back in without a password.
     return redirect_binding_url(
         provider.slo_url,
         saml_request=logout_request,
         relay_state=relay_state,
+        private_key_pem=private_key_pem,
     )
 
 
