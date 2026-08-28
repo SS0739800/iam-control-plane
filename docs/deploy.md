@@ -278,10 +278,14 @@ in production unless `ALLOW_PRIVATE_PROVISIONING_TARGETS` is set. It is set in
 `fly.toml`, on purpose, and the target will record the concession so it reads as a
 decision rather than an oversight.
 
-Then **Check it answers**, then **Sync now**. The first sync pushes everybody
-entitled to the application and runs inside the request — around forty seconds
-against a seeded directory of 1,200. There is no background worker; that is a stated
-limitation, not a surprise.
+Then **Check it answers**, then **Sync now**. That first sync runs inside the
+request and pushes everybody entitled to the application — around forty seconds
+against a seeded directory of 1,200.
+
+After that it looks after itself. The `worker` process sweeps every enabled target
+every five minutes, so a leaver's account closes without anybody pressing anything.
+**Sync now** stays useful for impatience and for forcing a retry of links that have
+failed their attempt limit, which the sweep deliberately never does.
 
 ---
 
@@ -464,7 +468,8 @@ rather break in front of you than in front of somebody else.
 
 ## What is not done
 
-- **No background worker.** Provisioning syncs run inside the request that asks for
-  them. A first sync against a large directory is a slow HTTP call. A queue nothing
-  drains would be worse than saying so.
+- **A sweep, not a queue.** The worker reconciles every five minutes rather than
+  reacting to events. Worth knowing rather than a limitation: the worst case for an
+  offboarding reaching a downstream is one interval, set by
+  `PROVISIONING_SWEEP_SECONDS`.
 - **Migrations are manual.** By design, see step 2.

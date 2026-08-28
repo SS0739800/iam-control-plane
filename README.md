@@ -64,10 +64,21 @@ only thing that can check it, because there is no identity provider in CI.
 | `/api/me`           | Who the session says you are                            |
 | `/api/saml/logins`  | The inspector's data                                    |
 
-Two things are deliberately not done, and both wait on the signing key that
-arrives in P5 with the outbound half: we don't sign the messages we send, and an
-unsigned logout request from a provider is refused rather than trusted. authentik
-accepts unsigned messages, so this works today; Okta and Entra may not.
+**The logout requests we send are signed**, and the certificate to verify them is
+published in `/saml/metadata`. That pairing is one feature rather than two: Okta
+refuses an unsigned `LogoutRequest`, and refuses a signed one it cannot check just as
+firmly.
+
+It is not XML signing, which is the whole difficulty. The redirect binding signs the
+*query string* — `SAMLRequest=…&RelayState=…&SigAlg=…`, in that order, URL-encoded,
+with `Signature=` appended. Sign the decoded XML, reorder the parameters, or
+re-encode before signing and the result verifies against nothing, with a provider
+error that says only "invalid signature". A happy side effect: it needs no `xmlsec`,
+so those tests run on any machine rather than only in the container.
+
+Until this existed, signing out ended our session and left the provider's intact, so
+clicking sign in again walked straight back in without a password. authentik tolerated
+unsigned messages and hid it; Okta did not.
 
 The `X-Dev-Actor` header still answers for requests that arrive with no session
 cookie, outside production only. That is impersonation, not authentication. A real
@@ -120,11 +131,18 @@ generated in memory with a warning. See [`iam/saml/keys.py`](apps/api/iam/saml/k
 Three Fly apps and a Neon database. The full runbook is
 [docs/deploy.md](docs/deploy.md); the shape is:
 
-| App             | What                                        |
-| --------------- | ------------------------------------------- |
-| `iam-console`   | The API and the frontend, one process       |
-| `iam-hrms`      | The downstream we provision into            |
-| `iam-authentik` | The identity provider, server and worker    |
+| App             | Process  | What                                     |
+| --------------- | -------- | ---------------------------------------- |
+| `iam-console`   | `app`    | The API and the frontend, one process    |
+| `iam-console`   | `worker` | Sweeps provisioning targets on a timer   |
+| `iam-hrms`      |          | The downstream we provision into         |
+| `iam-authentik` |          | Self-hosted provider — not deployed yet  |
+
+Two processes from one image. They fail differently and should be scaled
+differently: a sweep that wedges must not take the console down, and a console under
+load must not delay somebody's offboarding. The worker is the smaller of the two
+because it never loads `xmlsec` — nothing on `iam.worker`'s import path touches the
+SAML machinery.
 
 **The console is one app serving both halves.** In production FastAPI serves the
 built bundle itself, so the origin is single because there is only one server
@@ -174,10 +192,13 @@ a second time, because a bootstrap that keeps working is a backdoor. It grants t
 the same code path the console uses, so the grant and the cached role agree and
 `find_drift` stays quiet.
 
-Two limitations that are stated rather than hidden: migrations are run by hand, and
-provisioning syncs run inside the request that asks for them, because there is no
-background worker. A first sync against the seeded directory takes about forty
-seconds.
+One limitation stated rather than hidden: migrations are run by hand.
+
+Provisioning no longer waits for anybody. A second process sweeps every enabled
+target every five minutes, so a leaver's downstream account switches off on its own —
+which is how it now works in production, watched end to end from an Okta
+unassignment. **Sync now** is still there for impatience and for forcing a retry,
+which the timer deliberately never does.
 
 A push to `sudaiv-work` deploys both apps, but only after the whole pipeline passes —
 Fly has no git integration of its own, so `.github/workflows/ci.yml` is what makes a
@@ -230,10 +251,20 @@ know. Everything else on that screen can be read from a log; that one means
 somebody has to go and do something, which is why it is the only figure coloured
 red.
 
-The honest limitation: there is no background worker, so a sync runs inside the
-request that asked for it. A first run against the seeded directory pushes about
-1,200 accounts and takes roughly forty seconds. A queue nothing drains would be
-worse than saying so.
+A background sweep runs every five minutes, so nothing waits for somebody to press
+a button. A sweep rather than a queue, and that is the design rather than the
+shortcut: `reconcile()` asks who should have an account here and what this system
+actually has, then fixes the difference — so a timer converges no matter what
+happened in between. A dropped queue message would mean somebody keeps access
+forever with nothing noticing; a missed sweep is fixed by the next one.
+
+It never forces. Forcing retries links past their attempt limit, and doing that
+every five minutes turns one broken target into permanent load. **Sync now** can
+force; a timer should not.
+
+A manual first run against the seeded directory still pushes about 1,200 accounts
+and takes roughly forty seconds — the sweep is incremental after that, because
+nothing unchanged is pushed twice.
 
 ### Lifecycle and entitlements (P4)
 
@@ -289,14 +320,23 @@ it against.
 | P5    | SAML IdP — outbound SSO                           | ✅ done         |
 | P6    | SCIM client — outbound provisioning               | ✅ done         |
 | P7    | Production deploy                                 | ✅ done         |
-| P8    | Entra ID integration sprint                       | started: Okta   |
+| P8    | Entra ID integration sprint                       | Okta done, Entra to go |
 
-P8 is further from done than that row suggests. Okta signs people in, which is P2's
-machinery pointed at a hosted provider rather than new work. What the phase is really
-for has not started: **inbound SCIM from a hosted provider**, which is the largest
-untested surface in the project — the SCIM server has only ever been written to by
-our own client and by authentik — plus group claims, and Entra itself, whose claim
-URIs and SCIM behaviour differ enough to be their own integration.
+Okta is done, and it was the larger half. Inbound SCIM from a hosted provider was
+the biggest untested surface in the project — the SCIM server had only ever been
+written to by our own client and by authentik — and it now handles users, groups,
+memberships, attribute updates and deactivation from Okta, including a group created
+with both its members in one push.
+
+Worth naming what that produced, because it was not all smooth. Okta briefly
+deactivated the only admin, which revoked their role grant, which locked the console
+until a script could be run over SSH. The last-admin guard cannot see that: it
+refuses the change through `PATCH /api/users/{id}`, and the deactivation arrived over
+SCIM. That is arguably correct — the provider is the directory of record — but it
+means a single-admin deployment is one Okta hiccup from needing a shell.
+
+What remains of the phase is **Entra**, whose claim URIs and SCIM behaviour differ
+enough to be its own integration.
 
 ---
 
