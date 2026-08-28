@@ -39,7 +39,13 @@ from iam.models.group import Group, GroupMember
 from iam.models.provisioning import ProvisioningLink, ProvisioningTarget
 from iam.models.user import User
 from iam.provisioning.client import OutboundScim
-from iam.provisioning.sync import MAX_ATTEMPTS, entitled_people, push_one, reconcile
+from iam.provisioning.sync import (
+    MAX_ATTEMPTS,
+    count_waiting,
+    entitled_people,
+    push_one,
+    reconcile,
+)
 from iam.secrets import encrypt
 from tests import scim_stub
 from tests.support import build_settings, database_url
@@ -608,3 +614,95 @@ async def test_pushing_a_deactivated_person_switches_them_off(
     assert rig["downstream"].is_active(user_name_for(rig, "instantleaver")) is False
     stored = await links(rig)
     assert stored[0].state is LinkState.DEPROVISIONED
+
+
+# ------------------------------------------------- what is waiting to be pushed
+
+
+async def test_nothing_is_waiting_when_everything_is_in_step(rig: dict[str, Any]) -> None:
+    await add_person(rig, "settled")
+    await sync(rig)
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        assert await count_waiting(session, target) == 0
+
+
+async def test_somebody_newly_entitled_is_waiting(rig: dict[str, Any]) -> None:
+    """Before the first sync there is no link at all, which is the case a query over
+    link states cannot see — there is no row to count."""
+    await add_person(rig, "newcomer")
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        assert await count_waiting(session, target) == 1
+
+
+async def test_a_leaver_is_waiting_until_the_sync_runs(rig: dict[str, Any]) -> None:
+    """The one that prompted this counter.
+
+    Somebody is marked as having left, the downstream has not been told, and every
+    link-state count still reads as healthy — the link is ACTIVE because the last push
+    succeeded. Only this question notices.
+    """
+    person_id = await add_person(rig, "departing")
+    await sync(rig)
+
+    async with factory(rig)() as session:
+        person = await session.get(User, person_id)
+        assert person is not None
+        person.active = False
+        await session.commit()
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        assert await count_waiting(session, target) == 1
+
+    await sync(rig)
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        assert await count_waiting(session, target) == 0
+
+
+async def test_the_count_matches_what_a_sync_actually_does(rig: dict[str, Any]) -> None:
+    """The property that makes the number worth showing.
+
+    If the count and the run ever disagree, the panel is lying about whether somebody
+    still has access — so this asserts they agree rather than trusting that two pieces
+    of code written together will stay together.
+    """
+    await add_person(rig, "one")
+    await add_person(rig, "two")
+    leaver_id = await add_person(rig, "three")
+    await sync(rig)
+
+    # Three changes at once: one leaver, one edited, one brand new.
+    async with factory(rig)() as session:
+        leaver = await session.get(User, leaver_id)
+        assert leaver is not None
+        leaver.active = False
+        await session.commit()
+    await add_person(rig, "four")
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        predicted = await count_waiting(session, target)
+
+    outcome = await sync(rig)
+    actually_touched = (
+        outcome.created
+        + outcome.adopted
+        + outcome.updated
+        + outcome.deactivated
+        + outcome.reactivated
+    )
+
+    assert predicted == actually_touched, (
+        f"the panel would have said {predicted} waiting and the sync touched " f"{actually_touched}"
+    )

@@ -180,6 +180,47 @@ async def entitled_people(db: AsyncSession, target: ProvisioningTarget) -> list[
     return list(rows.all())
 
 
+async def count_waiting(db: AsyncSession, target: ProvisioningTarget) -> int:
+    """How many people a sync would touch if it ran right now.
+
+    This exists because the target summary could say "in step" while a leaver sat
+    unpushed. The counts next to it are link *states* — active, failed, orphaned — and
+    none of them answers "has anything changed since we last pushed". With no
+    background worker, nothing pushes on its own, so a health indicator that only
+    reads the last run's outcome tells somebody a leaver is offboarded everywhere when
+    they are not.
+
+    Deliberately built out of the same two pieces reconcile() decides with —
+    entitled_people and _needs_push — rather than a second query that approximates
+    them. If the two ever disagree, the number on the screen becomes a lie, and the
+    kind of lie that matters: somebody reading "nothing waiting" about somebody who
+    still has access.
+
+    It costs what a sync's read phase costs, which is one pass over the entitled
+    people. That is the price of the number being true rather than close.
+    """
+    people = await entitled_people(db, target)
+    links = await _links_by_user(db, target)
+
+    waiting = 0
+    entitled: set[uuid.UUID] = set()
+
+    for person in people:
+        entitled.add(person.id)
+        link = links.get(person.id)
+        if link is None or not link.exists_downstream or _needs_push(link, person):
+            waiting += 1
+
+    # And the other direction: somebody with a live account downstream who is no
+    # longer entitled, or who has been marked as having left. They are the reason
+    # this count exists.
+    for user_id, link in links.items():
+        if user_id not in entitled and link.state is LinkState.ACTIVE:
+            waiting += 1
+
+    return waiting
+
+
 async def _links_by_user(
     db: AsyncSession, target: ProvisioningTarget
 ) -> dict[uuid.UUID, ProvisioningLink]:

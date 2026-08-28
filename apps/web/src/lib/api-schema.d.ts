@@ -3073,6 +3073,11 @@ export interface components {
              */
             accounts_pending: number;
             /**
+             * Accounts Waiting To Push
+             * @description People a sync would touch right now — changed since the last push, newly entitled, or no longer entitled and still switched on downstream. Nothing pushes on its own, so this is the difference between what we know and what the downstream has been told.
+             */
+            accounts_waiting_to_push: number;
+            /**
              * Address Concession
              * @description A rule from ADR 0007 that was relaxed to allow this address — a private address, or plain HTTP. Shown so it reads as a decision somebody made rather than something nobody noticed.
              */

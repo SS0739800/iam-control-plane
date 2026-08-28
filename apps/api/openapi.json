@@ -2775,6 +2775,11 @@
             "title": "Accounts Pending",
             "type": "integer"
           },
+          "accounts_waiting_to_push": {
+            "description": "People a sync would touch right now \u2014 changed since the last push, newly entitled, or no longer entitled and still switched on downstream. Nothing pushes on its own, so this is the difference between what we know and what the downstream has been told.",
+            "title": "Accounts Waiting To Push",
+            "type": "integer"
+          },
           "address_concession": {
             "anyOf": [
               {
@@ -2876,7 +2881,8 @@
           "accounts_pending",
           "accounts_failed",
           "accounts_orphaned",
-          "accounts_deprovisioned"
+          "accounts_deprovisioned",
+          "accounts_waiting_to_push"
         ],
         "title": "ProvisioningTargetSummary",
         "type": "object"

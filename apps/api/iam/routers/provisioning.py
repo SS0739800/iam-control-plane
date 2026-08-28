@@ -36,7 +36,14 @@ from iam.models.group import Group
 from iam.models.provisioning import ProvisioningLink, ProvisioningTarget
 from iam.models.scim import ScimClient
 from iam.models.user import User
-from iam.provisioning import OutboundScim, PushFailed, UnusableTarget, check, reconcile
+from iam.provisioning import (
+    OutboundScim,
+    PushFailed,
+    UnusableTarget,
+    check,
+    count_waiting,
+    reconcile,
+)
 from iam.schemas.provisioning import (
     ProvisioningActivity,
     ProvisioningOverview,
@@ -417,6 +424,9 @@ async def _target_summary(
         created_at=target.created_at,
         updated_at=target.updated_at,
         **await _counts(session, target.id),
+        # Asked separately from the state counts because it is a different question:
+        # those describe what the links are, this describes what a sync would do.
+        accounts_waiting_to_push=await count_waiting(session, target),
     )
 
 

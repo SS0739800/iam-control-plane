@@ -55,6 +55,17 @@ function when(value: string | null | undefined): string {
  * A target that has never been synced is not the same as one that is fine, and calling
  * both of them "ok" would hide the more interesting case: something registered months
  * ago that nobody ever pointed at anything.
+ *
+ * "changes waiting" was added after watching this lie. A leaver had been marked in the
+ * console and the downstream had not been told, because the sync ran twenty-eight
+ * seconds before the deactivation arrived — and the panel said "in step" throughout.
+ * Every count beside it described what the *links* were; none answered whether
+ * anything had changed since the last push. With no background worker nothing pushes
+ * on its own, so the one word on this panel was telling somebody a leaver was
+ * offboarded everywhere when they were not.
+ *
+ * It sits below the failures on purpose. Work waiting is ordinary; work that failed
+ * needs somebody.
  */
 function healthOf(target: ProvisioningTarget): { tone: Tone; label: string } {
   if (!target.enabled) return { tone: 'muted', label: 'paused' }
@@ -62,6 +73,7 @@ function healthOf(target: ProvisioningTarget): { tone: Tone; label: string } {
   if (target.last_sync_ok === null) return { tone: 'warn', label: 'never synced' }
   if (!target.last_sync_ok) return { tone: 'bad', label: 'last sync failed' }
   if (target.accounts_failed > 0) return { tone: 'warn', label: 'some failures' }
+  if (target.accounts_waiting_to_push > 0) return { tone: 'warn', label: 'changes waiting' }
   return { tone: 'ok', label: 'in step' }
 }
 
@@ -402,6 +414,16 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
           />
           <Stat label="Switched off" value={target.accounts_deprovisioned} />
         </div>
+
+        {target.accounts_waiting_to_push > 0 ? (
+          <p className="rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            {target.accounts_waiting_to_push}{' '}
+            {target.accounts_waiting_to_push === 1 ? 'person has' : 'people have'} changes
+            this system has not been told about — somebody newly entitled, somebody
+            changed, or somebody who has left and still has an account there. Nothing
+            pushes on its own, so this stays true until you sync.
+          </p>
+        ) : null}
 
         {target.accounts_orphaned > 0 ? (
           <p className="rounded-sm border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">

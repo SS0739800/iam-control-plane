@@ -22,7 +22,13 @@ from iam.provisioning.client import (
     reactivate_patch,
     user_payload,
 )
-from iam.provisioning.sync import SyncOutcome, entitled_people, push_one, reconcile
+from iam.provisioning.sync import (
+    SyncOutcome,
+    count_waiting,
+    entitled_people,
+    push_one,
+    reconcile,
+)
 
 __all__ = [
     "Decision",
@@ -32,6 +38,7 @@ __all__ = [
     "SyncOutcome",
     "UnusableTarget",
     "check",
+    "count_waiting",
     "deactivate_patch",
     "entitled_people",
     "push_one",

@@ -60,6 +60,15 @@ class ProvisioningTargetSummary(BaseModel):
     )
     accounts_deprovisioned: int
 
+    accounts_waiting_to_push: int = Field(
+        description=(
+            "People a sync would touch right now — changed since the last push, newly "
+            "entitled, or no longer entitled and still switched on downstream. Nothing "
+            "pushes on its own, so this is the difference between what we know and what "
+            "the downstream has been told."
+        )
+    )
+
 
 class ProvisioningTargetCreate(BaseModel):
     """Register a downstream system."""

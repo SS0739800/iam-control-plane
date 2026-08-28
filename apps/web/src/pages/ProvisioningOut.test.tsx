@@ -43,6 +43,7 @@ const HEALTHY: ProvisioningTarget = {
   accounts_failed: 0,
   accounts_orphaned: 0,
   accounts_deprovisioned: 3,
+  accounts_waiting_to_push: 0,
 }
 
 const WITH_ORPHANS: ProvisioningTarget = {
@@ -320,4 +321,58 @@ test('nothing registered yet says what to do about it', async () => {
   renderPage()
 
   expect(await screen.findByText(/Nothing is being provisioned outward yet/)).toBeInTheDocument()
+})
+
+
+// ------------------------------------------- work that has not been pushed yet
+
+test('a target with changes waiting does not claim to be in step', async () => {
+  targets = [{ ...HEALTHY, accounts_waiting_to_push: 1 }]
+  renderPage()
+
+  // The bug this replaced: a leaver was marked in the console, the sync had run
+  // twenty-eight seconds earlier, and the panel said "in step" while the downstream
+  // still had them switched on.
+  expect(await screen.findByText('changes waiting')).toBeInTheDocument()
+  expect(screen.queryByText('in step')).not.toBeInTheDocument()
+})
+
+test('it says what waiting means, and that nothing pushes on its own', async () => {
+  targets = [{ ...HEALTHY, accounts_waiting_to_push: 2 }]
+  renderPage()
+
+  expect(await screen.findByText(/2 people have changes this system has not been told about/))
+    .toBeInTheDocument()
+  expect(screen.getByText(/Nothing\s+pushes on its own/)).toBeInTheDocument()
+})
+
+test('one person waiting reads as one person', async () => {
+  targets = [{ ...HEALTHY, accounts_waiting_to_push: 1 }]
+  renderPage()
+
+  expect(await screen.findByText(/1 person has changes/)).toBeInTheDocument()
+})
+
+test('nothing waiting shows no warning at all', async () => {
+  renderPage()
+  await screen.findByText('HRMS')
+
+  expect(screen.queryByText(/has not been told about/)).not.toBeInTheDocument()
+  expect(screen.getByText('in step')).toBeInTheDocument()
+})
+
+test('a failure still outranks waiting work', async () => {
+  // Work waiting is ordinary; work that failed needs somebody. If both are true the
+  // panel should say the one that needs a person.
+  targets = [{ ...HEALTHY, accounts_failed: 1, accounts_waiting_to_push: 3 }]
+  renderPage()
+
+  expect(await screen.findByText('some failures')).toBeInTheDocument()
+})
+
+test('orphans still outrank everything', async () => {
+  targets = [{ ...HEALTHY, accounts_orphaned: 1, accounts_waiting_to_push: 3 }]
+  renderPage()
+
+  expect(await screen.findByText('orphans')).toBeInTheDocument()
 })
