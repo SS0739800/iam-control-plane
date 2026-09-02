@@ -23,6 +23,7 @@ from iam.provisioning.client import (
     user_payload,
 )
 from iam.provisioning.sync import (
+    AlreadyRunning,
     SyncOutcome,
     count_waiting,
     entitled_people,
@@ -31,6 +32,7 @@ from iam.provisioning.sync import (
 )
 
 __all__ = [
+    "AlreadyRunning",
     "Decision",
     "OutboundScim",
     "PushFailed",

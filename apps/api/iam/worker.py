@@ -38,9 +38,11 @@ and doing that every few minutes turns a permanently broken target into a perman
 source of load and log noise. Somebody pressing Sync now can force; a timer should
 not.
 
-It does not run more than one sweep at a time. Two overlapping reconciles against the
-same target would race on the same links, and the second would mostly do nothing
-useful while holding a connection open.
+It does not run more than one sweep against a target at a time, and that is enforced
+rather than assumed. An earlier version of this docstring claimed it while nothing
+stopped it: the loop below is sequential, so it was true within one process and false
+across two machines, or when somebody pressed "sync now" mid-sweep. reconcile() now
+takes a lease on the target and refuses if another sync holds it.
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.logging_setup import configure_logging
 from iam.models.provisioning import ProvisioningTarget
-from iam.provisioning import reconcile
+from iam.provisioning import AlreadyRunning, reconcile
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +107,16 @@ async def sweep_once(
                     # Removed or paused between the listing and now. Ordinary.
                     continue
 
-                outcome = await reconcile(
-                    session, fresh, settings, now=now, correlation_id=correlation_id
-                )
+                try:
+                    outcome = await reconcile(
+                        session, fresh, settings, now=now, correlation_id=correlation_id
+                    )
+                except AlreadyRunning:
+                    # Somebody else has it — another worker machine, or a person who
+                    # pressed sync now. Skipping is the whole point: the next sweep
+                    # is five minutes away and reconcile converges either way.
+                    logger.info("worker.target_busy", extra={"target": fresh.base_url})
+                    continue
 
             summary["pushed"] += outcome.touched
             summary["failed"] += outcome.failed

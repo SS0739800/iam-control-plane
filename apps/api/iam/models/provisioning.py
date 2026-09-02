@@ -109,6 +109,18 @@ class ProvisioningTarget(UUIDPrimaryKey, Timestamps, Base):
         "current problem rather than a history of them.",
     )
 
+    sweep_lease_until: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        comment=(
+            "Held while a sync is running against this target, so two of them cannot "
+            "run at once. A lease rather than a lock because reconcile() commits "
+            "between every person and a transaction-scoped lock cannot span that, "
+            "while a session-scoped one is unreliable through a transaction pooler "
+            "that may hand out a different backend per transaction. Expires on its "
+            "own, so a worker dying mid-sweep does not wedge the target."
+        ),
+    )
+
     application: Mapped[Application] = relationship()
     links: Mapped[list[ProvisioningLink]] = relationship(
         back_populates="target",

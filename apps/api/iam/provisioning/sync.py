@@ -78,7 +78,7 @@ import datetime as dt
 import logging
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from iam.audit import AuditDraft, append_event
@@ -188,6 +188,71 @@ async def entitled_people(db: AsyncSession, target: ProvisioningTarget) -> list[
         .order_by(User.user_name)
     )
     return list(rows.all())
+
+
+SWEEP_LEASE = dt.timedelta(minutes=15)
+"""How long a sync holds its target before another one may take over.
+
+Longer than any sync should take — a first run against 1,200 accounts is about forty
+seconds — and short enough that a worker killed mid-sweep does not wedge the target
+for an afternoon. Nothing renews it, deliberately: a sync that somehow runs longer
+than this loses its claim, and the worst case is the overlap this exists to prevent,
+bounded to once.
+"""
+
+
+class AlreadyRunning(Exception):
+    """Another sync holds this target, so this one should not start.
+
+    Not an error in the ordinary sense. The sweep skips and tries again in five
+    minutes; the console tells whoever pressed the button to wait. Both are better
+    than two reconciles working the same links.
+    """
+
+
+async def take_lease(db: AsyncSession, target: ProvisioningTarget, *, now: dt.datetime) -> None:
+    """Claim this target, or refuse to run.
+
+    One conditional UPDATE, which is what makes this safe: the database decides who
+    wins, and the loser sees zero rows affected rather than a stale read. Two workers
+    issuing this at the same instant cannot both succeed.
+
+    Raises:
+        AlreadyRunning: Somebody else holds an unexpired lease.
+    """
+    claimed = await db.execute(
+        update(ProvisioningTarget)
+        .where(
+            ProvisioningTarget.id == target.id,
+            or_(
+                ProvisioningTarget.sweep_lease_until.is_(None),
+                ProvisioningTarget.sweep_lease_until < now,
+            ),
+        )
+        .values(sweep_lease_until=now + SWEEP_LEASE)
+    )
+    await db.commit()
+
+    if claimed.rowcount != 1:
+        raise AlreadyRunning(
+            f"a sync is already running against {target.base_url}. It will finish, or "
+            "its claim expires within fifteen minutes."
+        )
+
+
+async def release_lease(db: AsyncSession, target_id: uuid.UUID) -> None:
+    """Give the target back, so the next sync need not wait for the lease to expire.
+
+    Best effort by design. If this never runs — the process was killed, the database
+    went away — the lease expiry is what recovers, which is the whole reason it is a
+    lease and not a flag.
+    """
+    await db.execute(
+        update(ProvisioningTarget)
+        .where(ProvisioningTarget.id == target_id)
+        .values(sweep_lease_until=None)
+    )
+    await db.commit()
 
 
 async def count_waiting(db: AsyncSession, target: ProvisioningTarget) -> int:
@@ -400,8 +465,40 @@ async def reconcile(
         force: Push everybody regardless of whether they look unchanged, and retry
             links that have exhausted their attempts. What a manual "sync now" means.
 
+    Takes a lease on the target first, so two syncs cannot work the same links. That
+    covers both doors: two worker machines, and somebody pressing "sync now" while a
+    sweep is already running.
+
     Returns:
         What it did, including the correlation id every audit entry shares.
+
+    Raises:
+        AlreadyRunning: Another sync holds this target.
+    """
+    await take_lease(db, target, now=now)
+    try:
+        return await _reconcile_holding_lease(
+            db, target, settings, now=now, correlation_id=correlation_id, force=force
+        )
+    finally:
+        # Best effort. If this never runs the lease expiry recovers, which is why it
+        # is a lease rather than a flag.
+        await release_lease(db, target.id)
+
+
+async def _reconcile_holding_lease(
+    db: AsyncSession,
+    target: ProvisioningTarget,
+    settings: Settings,
+    *,
+    now: dt.datetime,
+    correlation_id: uuid.UUID | None = None,
+    force: bool = False,
+) -> SyncOutcome:
+    """The work itself, with the target already claimed.
+
+    Split out rather than nested so the lease handling reads as three lines and this
+    keeps the shape it had before the lease existed.
     """
     run = SyncOutcome(correlation_id=correlation_id or uuid.uuid4())
 

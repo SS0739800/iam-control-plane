@@ -41,10 +41,14 @@ from iam.models.user import User
 from iam.provisioning.client import OutboundScim
 from iam.provisioning.sync import (
     MAX_ATTEMPTS,
+    SWEEP_LEASE,
+    AlreadyRunning,
     count_waiting,
     entitled_people,
     push_one,
     reconcile,
+    release_lease,
+    take_lease,
 )
 from iam.secrets import encrypt
 from tests import scim_stub
@@ -706,3 +710,91 @@ async def test_the_count_matches_what_a_sync_actually_does(rig: dict[str, Any]) 
     assert predicted == actually_touched, (
         f"the panel would have said {predicted} waiting and the sync touched " f"{actually_touched}"
     )
+
+
+# ------------------------------------------------- two syncs cannot run at once
+
+
+async def test_a_second_sync_is_refused_while_one_holds_the_lease(
+    rig: dict[str, Any],
+) -> None:
+    """The gap the lease closes.
+
+    Nothing stopped two reconciles working the same links: two worker machines, a
+    deploy that briefly overlaps them, or somebody pressing "sync now" mid-sweep.
+    It would have converged — the unique index stops duplicate links and a 409 on
+    create is adopted — but by adopting an account it had half-created itself, with
+    two correlation ids interleaved through the audit log.
+    """
+    await add_person(rig, "contended")
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        await take_lease(session, target, now=dt.datetime.now(dt.UTC))
+
+    with pytest.raises(AlreadyRunning):
+        await sync(rig)
+
+    # And nothing was pushed, rather than half of it.
+    assert rig["downstream"].account_for(user_name_for(rig, "contended")) is None
+
+
+async def test_releasing_the_lease_lets_the_next_sync_run(rig: dict[str, Any]) -> None:
+    await add_person(rig, "afterwards")
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        await take_lease(session, target, now=dt.datetime.now(dt.UTC))
+        await release_lease(session, target.id)
+
+    outcome = await sync(rig)
+
+    assert outcome.created == 1
+
+
+async def test_an_expired_lease_does_not_wedge_the_target(rig: dict[str, Any]) -> None:
+    """The reason it is a lease and not a flag.
+
+    A worker killed mid-sweep never releases anything. If that blocked the target
+    forever, one unlucky restart would stop provisioning until somebody noticed and
+    edited the database.
+    """
+    await add_person(rig, "recovered")
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        stale = dt.datetime.now(dt.UTC) - SWEEP_LEASE - dt.timedelta(minutes=1)
+        await take_lease(session, target, now=stale)
+
+    # No release, and the lease is older than its lifetime.
+    outcome = await sync(rig)
+
+    assert outcome.created == 1
+
+
+async def test_a_finished_sync_leaves_the_lease_clear(rig: dict[str, Any]) -> None:
+    """Released in a finally, so the next sync need not wait fifteen minutes."""
+    await add_person(rig, "tidy")
+    await sync(rig)
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        assert target.sweep_lease_until is None
+
+
+async def test_a_failing_sync_still_releases_the_lease(rig: dict[str, Any]) -> None:
+    """The case a naive implementation gets wrong: release on the happy path only,
+    and one rejected token locks the target for fifteen minutes."""
+    await add_person(rig, "brokenlease")
+    rig["downstream"].reject_token = True
+
+    await sync(rig)  # stops early rather than raising
+
+    async with factory(rig)() as session:
+        target = await session.get(ProvisioningTarget, rig["target_id"])
+        assert target is not None
+        assert target.sweep_lease_until is None

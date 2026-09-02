@@ -37,6 +37,7 @@ from iam.models.provisioning import ProvisioningLink, ProvisioningTarget
 from iam.models.scim import ScimClient
 from iam.models.user import User
 from iam.provisioning import (
+    AlreadyRunning,
     OutboundScim,
     PushFailed,
     UnusableTarget,
@@ -749,7 +750,14 @@ async def sync_target(
     """
     target = await _target_or_404(session, target_id)
 
-    outcome = await reconcile(session, target, settings, now=dt.datetime.now(dt.UTC), force=force)
+    try:
+        outcome = await reconcile(
+            session, target, settings, now=dt.datetime.now(dt.UTC), force=force
+        )
+    except AlreadyRunning as busy:
+        # The background sweep has it, or another admin pressed this a moment ago.
+        # 409 rather than 500: the request is fine, the state of the world says wait.
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(busy)) from busy
 
     logger.info(
         "provisioning.sync_requested",
