@@ -466,6 +466,45 @@ rather break in front of you than in front of somebody else.
 
 ---
 
+## What it costs
+
+Fly is not free. It bills by usage, and does not *collect* bills under $5 on a
+personal organisation — which works like a free tier until it doesn't.
+
+Three machines running continuously came to roughly $7 a month, so the first full
+month would have been charged. Two of the three are idle almost all the time, so
+they now sleep:
+
+| Machine                    | Size  | Runs                      |
+| -------------------------- | ----- | ------------------------- |
+| `iam-console` — `app`      | 256MB | wakes on a request        |
+| `iam-console` — `worker`   | 256MB | always, it is a timer     |
+| `iam-hrms`                 | 256MB | wakes on a request        |
+| `hrms_data` volume         | 1 GB  | always                    |
+
+That lands around $2.50 of usage, which is not collected. The worker is most of it
+and cannot sleep: it has no HTTP surface to wake it.
+
+**Two things to understand rather than assume.**
+
+The threshold is a cliff. A month at $5.20 is charged $5.20, not $0.20. The gap
+between the estimate and the threshold is the whole safety margin, so set a spend
+limit on the organisation rather than trusting arithmetic — including this
+arithmetic.
+
+Waking costs a second or two on the first request. An earlier version of this file
+pinned a machine up to avoid that, reasoning that a link taking fifty seconds to
+answer is a link nobody waits for. That is true of platforms whose cold start really
+is that slow; Fly resumes a small machine fast enough that nobody notices.
+
+**If $0 rather than "probably not collected" is the requirement**, the worker is the
+thing to remove: drive the sweep from a scheduled GitHub Actions workflow calling an
+authenticated endpoint, which is free for public repositories and fits because
+reconcile is idempotent. The cost is a new authenticated surface and a cron that is
+best-effort rather than punctual.
+
+---
+
 ## What is not done
 
 - **A sweep, not a queue.** The worker reconciles every five minutes rather than

@@ -70,11 +70,16 @@ primary_region = "ewr"
   internal_port = 8000
   force_https = true
 
-  # Kept warm. A portfolio link that takes fifty seconds to answer the first time is
-  # a portfolio link nobody waits for.
-  auto_stop_machines = "off"
+  # Asleep when nobody is looking, which is almost always for a portfolio link.
+  #
+  # This was "off" with one machine pinned up, on the reasoning that a link taking
+  # fifty seconds to answer is a link nobody waits for. That reasoning was about
+  # Render's free tier, where a cold start really is that slow. Fly restarts a small
+  # machine in a second or two, which nobody notices — and the difference in the bill
+  # is most of it, because a portfolio deployment is idle essentially all the time.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
 [[http_service.checks]]
   # The API, not the static files. A machine happily serving the bundle with a dead
@@ -86,9 +91,14 @@ primary_region = "ewr"
 
 [[vm]]
   processes = ["app"]
-  # xmlsec and SQLAlchemy are not free, and a first provisioning sync pushes the
-  # whole entitled directory inside one request. 512MB is enough; 256 is not.
-  memory = "512mb"
+  # 512MB was sized for a manual sync pushing the whole seeded directory — 1,289
+  # people — inside one request. Production holds two, and the background sweep is
+  # incremental, so that ceiling is no longer the one that matters.
+  #
+  # Worth knowing before seeding anything real here: a large manual "Sync now" is
+  # what would run this out of memory, and the fix is to raise it back rather than
+  # to wonder why the machine restarted.
+  memory = "256mb"
   cpu_kind = "shared"
   cpus = 1
 

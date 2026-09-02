@@ -22,9 +22,11 @@ primary_region = "ewr"
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = "off"
+  # Asleep between visits. It is a demo downstream that nothing depends on answering
+  # instantly, and the volume keeps its data across a suspend.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
 [[http_service.checks]]
   path = "/health"
