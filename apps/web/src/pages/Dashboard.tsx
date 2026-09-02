@@ -46,7 +46,6 @@ export default function Dashboard() {
               value={counts.data.users - counts.data.active_users}
               hint="kept for their history"
             />
-            <Stat label="Access packages" value="—" hint="arrives in P4" />
           </div>
         )}
       </Panel>

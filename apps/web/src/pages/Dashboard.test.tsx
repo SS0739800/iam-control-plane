@@ -115,9 +115,15 @@ test('surfaces a broken database instead of a failed request', async () => {
   expect(database.getByText('ConnectionRefusedError')).toBeInTheDocument()
 })
 
-test('marks access packages as not built yet rather than showing zero', async () => {
+test('nothing on the dashboard promises a feature that does not exist', async () => {
   renderDashboard()
+  await screen.findByText('Users')
 
-  // Zero would be a lie. There is no access-package feature until P4.
-  expect(await screen.findByText('arrives in P4')).toBeInTheDocument()
+  // There was an "Access packages — arrives in P4" tile here. It was honest while
+  // P4 was ahead of us and became a false promise the moment P4 shipped: the
+  // capability was delivered as access requests and access rules, and the Entra-style
+  // package abstraction never was. A placeholder that outlives its deadline reads as
+  // a broken feature rather than as a decision.
+  expect(screen.queryByText('Access packages')).not.toBeInTheDocument()
+  expect(screen.queryByText(/arrives in P/)).not.toBeInTheDocument()
 })
