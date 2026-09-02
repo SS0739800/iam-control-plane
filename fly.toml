@@ -91,14 +91,21 @@ primary_region = "ewr"
 
 [[vm]]
   processes = ["app"]
-  # 512MB was sized for a manual sync pushing the whole seeded directory — 1,289
-  # people — inside one request. Production holds two, and the background sweep is
-  # incremental, so that ceiling is no longer the one that matters.
+  # Sized for a manual "Sync now", which is the only thing here that needs the room:
+  # reconcile() loads every entitled person into memory at once, so against the
+  # seeded directory that is 1,289 SQLAlchemy objects in a process already holding
+  # FastAPI and xmlsec.
   #
-  # Worth knowing before seeding anything real here: a large manual "Sync now" is
-  # what would run this out of memory, and the fix is to raise it back rather than
-  # to wonder why the machine restarted.
-  memory = "256mb"
+  # This was briefly 256MB to save about $1.25 a month. That saving evaporated the
+  # moment the machine started suspending when idle — Fly bills running time, not
+  # reserved size, so a machine asleep almost always costs pennies either way. What
+  # the smaller size kept was the risk: an OOM kill mid-sync, which looks like a
+  # mystery restart rather than "out of memory".
+  #
+  # The ceiling itself is the real limit, and raising the machine does not remove it.
+  # reconcile() holding the whole directory is fine at 1,289 and wrong at 50,000; the
+  # answer there is batching, not a bigger machine.
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
 
