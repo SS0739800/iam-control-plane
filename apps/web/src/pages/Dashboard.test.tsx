@@ -12,6 +12,7 @@ const COUNTS = {
   applications: 17,
   sso_applications: 12,
   audit_events: 45829,
+  live_admins: 2,
 }
 const LIVENESS = { status: 'ok', env: 'ci', version: '0.1.0', git_sha: 'abc1234' }
 const READY = { status: 'ready', database: 'ok', detail: null }
@@ -36,7 +37,11 @@ function urlOf(input: RequestInfo | URL): string {
   return input.url
 }
 
-function stubApi(readiness: unknown, readinessStatus = 200): void {
+function stubApi(
+  readiness: unknown,
+  readinessStatus = 200,
+  counts: Record<string, number> = COUNTS,
+): void {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL) => {
@@ -45,7 +50,7 @@ function stubApi(readiness: unknown, readinessStatus = 200): void {
         return Promise.resolve(jsonResponse(readiness, readinessStatus))
       }
       if (url.includes('/api/health')) return Promise.resolve(jsonResponse(LIVENESS))
-      if (url.includes('/api/dashboard')) return Promise.resolve(jsonResponse(COUNTS))
+      if (url.includes('/api/dashboard')) return Promise.resolve(jsonResponse(counts))
       return Promise.reject(new Error(`unexpected fetch: ${url}`))
     }),
   )
@@ -126,4 +131,42 @@ test('nothing on the dashboard promises a feature that does not exist', async ()
   // a broken feature rather than as a decision.
   expect(screen.queryByText('Access packages')).not.toBeInTheDocument()
   expect(screen.queryByText(/arrives in P/)).not.toBeInTheDocument()
+})
+
+
+// ------------------------------------------- nobody left who can administer it
+
+test('an empty admin set is said out loud, not left to be discovered', async () => {
+  stubApi(READY, 200, { ...COUNTS, live_admins: 0 })
+  renderDashboard()
+
+  // This happened here. Okta deactivated the only admin, which revoked their grant,
+  // and the console said nothing — the first sign was a permission error on an
+  // unrelated page. The only way back was a script over SSH.
+  expect(await screen.findByText(/Nobody can administer this deployment/))
+    .toBeInTheDocument()
+  expect(screen.getByText(/grant_first_admin/)).toBeInTheDocument()
+})
+
+test('it explains that this is reachable without anybody being careless', async () => {
+  stubApi(READY, 200, { ...COUNTS, live_admins: 0 })
+  renderDashboard()
+
+  // The guard that refuses deactivating the last admin lives on the console
+  // endpoint. A SCIM write never asks it, so a provider can empty the set.
+  expect(await screen.findByText(/cannot see a SCIM write/)).toBeInTheDocument()
+})
+
+test('with admins present there is no warning', async () => {
+  renderDashboard()
+  await screen.findByText('Users')
+
+  expect(screen.queryByText(/Nobody can administer/)).not.toBeInTheDocument()
+})
+
+test('the admin count is shown as a number', async () => {
+  renderDashboard()
+
+  expect(await screen.findByText('Admins')).toBeInTheDocument()
+  expect(screen.getByText('who can grant anything')).toBeInTheDocument()
 })

@@ -53,7 +53,12 @@ export function GroupsPage() {
       ) : groups.isPending ? (
         <Loading />
       ) : groups.data.items.length === 0 ? (
-        <Empty>No groups match that search.</Empty>
+        <Empty>
+          {search
+            ? 'No groups match that search.'
+            : 'No groups yet. They arrive from an identity provider over SCIM, or ' +
+              'can be created there and pushed.'}
+        </Empty>
       ) : (
         <>
           <TableWrap>

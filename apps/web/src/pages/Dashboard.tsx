@@ -22,6 +22,20 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-6">
+      {counts.data && counts.data.live_admins === 0 ? (
+        <p className="rounded-sm border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">
+          <strong>Nobody can administer this deployment.</strong> There is no live
+          admin grant, so no role can be granted from the console — including the one
+          that would fix this. It needs{' '}
+          <code>scripts.grant_first_admin</code> run against the database.
+          <span className="mt-1 block text-xs">
+            This is reachable without anybody doing something careless: an identity
+            provider deactivating the last admin over SCIM revokes their grant, and
+            the guard that refuses it in the console cannot see a SCIM write.
+          </span>
+        </p>
+      ) : null}
+
       <Panel title="Directory">
         {counts.isPending ? (
           <Loading />
@@ -41,6 +55,11 @@ export default function Dashboard() {
               hint={`${counts.data.sso_applications} using SAML`}
             />
             <Stat label="Audit events" value={counts.data.audit_events} />
+            <Stat
+              label="Admins"
+              value={counts.data.live_admins}
+              hint="who can grant anything"
+            />
             <Stat
               label="Deactivated"
               value={counts.data.users - counts.data.active_users}

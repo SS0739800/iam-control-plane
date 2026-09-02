@@ -295,3 +295,46 @@ def test_a_deactivated_admin_stops_counting_towards_the_last_admin_rule(
     after = run_db(lambda s: count_live_admins(s, now=now))
 
     assert after == before - 1
+
+
+# --------------------------------------------- telling somebody the set is empty
+
+
+def test_the_dashboard_counts_live_admins(db_client: TestClient, console: ConsoleUsers) -> None:
+    """So the console can say "nobody can administer this" instead of only failing.
+
+    Counted from the grants rather than users.platform_role, which is a cache. This
+    number is the difference between "somebody can fix this" and "somebody needs a
+    shell", so it must not depend on a cache being right.
+    """
+    counts = db_client.get("/api/dashboard", headers=console.as_admin)
+
+    assert counts.status_code == 200
+    assert counts.json()["live_admins"] >= 1
+
+
+def test_a_deactivated_admin_does_not_count(db_client: TestClient, console: ConsoleUsers) -> None:
+    """The case that locked this deployment out.
+
+    Okta deactivated the only admin, which revoked the grant. An admin who cannot
+    sign in is no help, so they must not keep the number above zero and make the
+    console look healthy.
+    """
+    before = db_client.get("/api/dashboard", headers=console.as_admin).json()["live_admins"]
+
+    admin_id = console.id_of(console.admin)
+
+    async def deactivate(session: AsyncSession) -> None:
+        person = await session.get(User, admin_id)
+        assert person is not None
+        person.active = False
+        await session.commit()
+
+    run_db(deactivate)
+
+    # Asked as helpdesk, because the admin can no longer do anything.
+    after = db_client.get("/api/dashboard", headers=console.as_user(console.helpdesk)).json()[
+        "live_admins"
+    ]
+
+    assert after == before - 1

@@ -89,3 +89,11 @@ class DashboardCounts(BaseModel):
         description="How many of the apps use SAML login. Part of `applications`."
     )
     audit_events: int
+    live_admins: int = Field(
+        description=(
+            "People who can currently grant anything. Counted from the grants rather "
+            "than the cached role, and only counting active people — a deactivated "
+            "admin cannot sign in, so they are no help. Zero means nobody can "
+            "administer this deployment and the only way back is a shell."
+        )
+    )

@@ -540,10 +540,10 @@ export interface paths {
         };
         /**
          * Headline counts
-         * @description All six counts in one trip to the database.
+         * @description Every count in one trip to the database.
          *
-         *     Six little subqueries inside one SELECT, instead of six separate queries. This
-         *     is the first thing that loads on every visit, and six round trips to a hosted
+         *     Little subqueries inside one SELECT, instead of one query each. This is the first
+         *     thing that loads on every visit, and that many round trips to a hosted database
          *     over the internet is a delay you can see. One isn't.
          */
         get: operations["dashboard_api_dashboard_get"];
@@ -2250,6 +2250,11 @@ export interface components {
             audit_events: number;
             /** Groups */
             groups: number;
+            /**
+             * Live Admins
+             * @description People who can currently grant anything. Counted from the grants rather than the cached role, and only counting active people — a deactivated admin cannot sign in, so they are no help. Zero means nobody can administer this deployment and the only way back is a shell.
+             */
+            live_admins: number;
             /**
              * Sso Applications
              * @description How many of the apps use SAML login. Part of `applications`.

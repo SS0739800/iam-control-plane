@@ -1218,6 +1218,11 @@
             "title": "Groups",
             "type": "integer"
           },
+          "live_admins": {
+            "description": "People who can currently grant anything. Counted from the grants rather than the cached role, and only counting active people \u2014 a deactivated admin cannot sign in, so they are no help. Zero means nobody can administer this deployment and the only way back is a shell.",
+            "title": "Live Admins",
+            "type": "integer"
+          },
           "sso_applications": {
             "description": "How many of the apps use SAML login. Part of `applications`.",
             "title": "Sso Applications",
@@ -1234,7 +1239,8 @@
           "groups",
           "applications",
           "sso_applications",
-          "audit_events"
+          "audit_events",
+          "live_admins"
         ],
         "title": "DashboardCounts",
         "type": "object"
@@ -5470,7 +5476,7 @@
     },
     "/api/dashboard": {
       "get": {
-        "description": "All six counts in one trip to the database.\n\nSix little subqueries inside one SELECT, instead of six separate queries. This\nis the first thing that loads on every visit, and six round trips to a hosted\nover the internet is a delay you can see. One isn't.",
+        "description": "Every count in one trip to the database.\n\nLittle subqueries inside one SELECT, instead of one query each. This is the first\nthing that loads on every visit, and that many round trips to a hosted database\nover the internet is a delay you can see. One isn't.",
         "operationId": "dashboard_api_dashboard_get",
         "responses": {
           "200": {
