@@ -18,25 +18,58 @@
  * banner says so, instead of a fixed warning nobody rereads.
  */
 
+import { useState } from 'react'
+
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { fetchMe, fetchSignInOptions } from './lib/api'
 
-const NAV = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/users', label: 'Users', end: false },
-  { to: '/groups', label: 'Groups', end: false },
-  { to: '/applications', label: 'Applications', end: false },
-  { to: '/logins', label: 'Sign-ins', end: false },
-  { to: '/access-rules', label: 'Access rules', end: false },
-  { to: '/access-requests', label: 'Requests', end: false },
-  { to: '/access-review', label: 'Review', end: false },
-  // Two entries rather than one, because the two directions are not variations on
-  // a theme: one manages who may write to us, the other manages where we write.
-  { to: '/provisioning', label: 'Provisioning in', end: false },
-  { to: '/provisioning-out', label: 'Provisioning out', end: false },
-  { to: '/audit', label: 'Audit log', end: false },
+/**
+ * The left rail, grouped the way the portal groups things.
+ *
+ * Eleven flat entries across the top was a lot to scan. Entra splits its navigation
+ * into headed sections — who exists, what they can reach, how it is governed — and
+ * that grouping is doing real work rather than decoration: "Requests" and "Review"
+ * mean nothing next to "Users" and everything next to each other.
+ */
+const NAV: { heading: string; items: { to: string; label: string; end?: boolean }[] }[] = [
+  {
+    heading: 'Overview',
+    items: [{ to: '/', label: 'Dashboard', end: true }],
+  },
+  {
+    heading: 'Directory',
+    items: [
+      { to: '/users', label: 'Users' },
+      { to: '/groups', label: 'Groups' },
+      { to: '/applications', label: 'Applications' },
+    ],
+  },
+  {
+    heading: 'Governance',
+    items: [
+      { to: '/access-rules', label: 'Access rules' },
+      { to: '/access-requests', label: 'Requests' },
+      { to: '/access-review', label: 'Review' },
+    ],
+  },
+  {
+    heading: 'Provisioning',
+    // Two entries rather than one, because the two directions are not variations on
+    // a theme: one manages who may write to us, the other manages where we write.
+    items: [
+      { to: '/provisioning', label: 'Provisioning in' },
+      { to: '/provisioning-out', label: 'Provisioning out' },
+    ],
+  },
+  {
+    heading: 'Monitoring',
+    items: [
+      { to: '/logins', label: 'Sign-ins' },
+      { to: '/audit', label: 'Audit log' },
+    ],
+  },
 ]
 
 /**
@@ -83,6 +116,88 @@ function SignInLinks({ className }: { className?: string }) {
   )
 }
 
+/** A small chevron, rotated by the caller to show open vs. closed. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+      className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+    >
+      <path
+        d="M2.5 4.5L6 8l3.5-3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/**
+ * The left rail's sections, each one collapsible the way Entra's are.
+ *
+ * Collapsing only applies from `sm` up. Below that the sections flatten into one
+ * horizontal scrolling strip (see the comment on NAV above) with the headings already
+ * hidden, so there is nothing there to collapse — every link stays reachable by
+ * scrolling. On the rail, closing a section keeps its links in the DOM and only hides
+ * them past `sm`, so the mobile strip is never affected by rail state.
+ */
+function SectionNav() {
+  const [closed, setClosed] = useState<Record<string, boolean>>({})
+
+  return (
+    <nav
+      aria-label="Sections"
+      className="flex gap-1 overflow-x-auto border-b border-neutral-40 bg-neutral-10 px-2 py-2 sm:block sm:w-56 sm:shrink-0 sm:overflow-visible sm:border-r sm:border-b-0 sm:py-4 dark:border-neutral-160 dark:bg-neutral-190"
+    >
+      {NAV.map((section) => {
+        const isOpen = !closed[section.heading]
+        return (
+          <div key={section.heading} className="contents sm:block sm:pb-3">
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() =>
+                setClosed((prev) => ({ ...prev, [section.heading]: !prev[section.heading] }))
+              }
+              className="hidden w-full items-center justify-between px-3 pb-1 text-xs font-semibold text-neutral-130 sm:flex dark:text-neutral-90"
+            >
+              {section.heading}
+              <Chevron open={isOpen} />
+            </button>
+            {section.items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  /* Selected is a tint, plus a left bar once there is a rail to
+                     put it against. The portal marks position rather than shouting
+                     about it — a solid dark chip in a rail this size reads as a
+                     button somebody should press. Closed sections hide their links
+                     from `sm` up only — the mobile strip never reads `isOpen`. */
+                  `rounded-fluent px-3 py-1.5 text-sm whitespace-nowrap sm:rounded-none sm:border-l-2 ${
+                    isOpen ? 'sm:block' : 'sm:hidden'
+                  } ${
+                    isActive
+                      ? 'bg-fluent-50 font-semibold text-fluent-700 sm:border-fluent-500 dark:bg-neutral-160 dark:text-fluent-200'
+                      : 'text-neutral-160 hover:bg-neutral-20 sm:border-transparent dark:text-neutral-20 dark:hover:bg-neutral-160'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        )
+      })}
+    </nav>
+  )
+}
+
 /** Who the API thinks we are, and how it worked that out. */
 function WhoAmI() {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
@@ -95,35 +210,29 @@ function WhoAmI() {
 
   const who = me.data
 
-  if (!who.via_saml_session) {
-    return (
-      <p className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-        <span>
-          Acting as <strong>{who.display_name}</strong> because no session cookie was sent. This is
-          the development stand-in, not a login, and it never runs in production.
-        </span>
-        <SignInLinks className="flex flex-wrap gap-3 whitespace-nowrap underline underline-offset-2" />
-      </p>
-    )
-  }
-
+  // Sits in the dark top bar, so this is light-on-dark in both colour schemes rather
+  // than the bordered panel it used to be.
   return (
-    <p className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-      <span>
-        Signed in as <strong>{who.display_name}</strong>{' '}
-        <span className="text-slate-500 dark:text-slate-400">({who.role})</span>
+    <span className="flex flex-wrap items-center gap-3 text-sm">
+      {!who.via_saml_session ? (
+        /* Still loud, because it is still impersonation rather than authentication —
+           but it has to be loud against a dark bar now, so it is an amber chip rather
+           than a tinted box. */
+        <span className="rounded-fluent bg-amber-400 px-2 py-0.5 text-xs font-semibold text-neutral-190">
+          development stand-in, not a login
+        </span>
+      ) : null}
+      <span className="text-neutral-30">
+        {who.display_name} <span className="text-neutral-90">({who.role})</span>
       </span>
       {/* A form, not a link. A sign-out you can trigger with a link means any page
           on the internet can sign our users out with an image tag. */}
       <form method="post" action="/saml/logout">
-        <button
-          type="submit"
-          className="text-brass-700 underline-offset-2 hover:underline dark:text-brass-400"
-        >
+        <button type="submit" className="text-sm text-neutral-30 hover:underline">
           Sign out
         </button>
       </form>
-    </p>
+    </span>
   )
 }
 
@@ -179,40 +288,31 @@ export default function App() {
   if (me.isError) return <SignInPage />
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10">
-      <header className="flex flex-col gap-3 border-b-2 border-slate-900 pb-4 dark:border-slate-100">
-        {/* No phase label. It said "Phase 7 · ready to deploy" long after it was
-            deployed, which is the trouble with putting a project's build order in
-            front of the people using it: nobody who signs in cares which phase built
-            the page, and the label is wrong the moment the phase ends. */}
-        <h1 className="text-2xl font-bold tracking-tight">IAM Control Plane</h1>
-
-        <nav aria-label="Sections" className="flex flex-wrap gap-1">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `rounded-sm px-3 py-1.5 text-sm ${
-                  isActive
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800'
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+    <div className="min-h-screen">
+      {/* The top bar. Thin, dark, and always there — in the portal it is where the
+          product name and your account live, and it is the thing that makes the page
+          feel like part of a suite rather than a standalone app. */}
+      <header className="flex items-center justify-between gap-4 bg-neutral-160 px-4 py-2 text-white dark:bg-black">
+        <span className="text-sm font-semibold">IAM Control Plane</span>
+        <WhoAmI />
       </header>
 
-      <WhoAmI />
+      <div className="flex">
+        {/* The left rail. The single most recognisable thing about the portal, and
+            the reason this redesign is a layout change rather than a repaint.
 
-      <main>
-        <Outlet />
-      </main>
+            One nav, two shapes. The first version rendered a rail and a separate
+            horizontal strip, hiding one with CSS — which put every link in the
+            document twice and read as two identical menus to a screen reader. So the
+            sections use `display: contents` on small screens: the headings hide, the
+            wrappers stop being boxes, and the links become direct children of a
+            scrolling row. Same DOM, same order, one menu. */}
+        <SectionNav />
 
+        <main className="min-w-0 flex-1 px-6 py-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

@@ -1,12 +1,55 @@
 @import 'tailwindcss';
 
-/* Cool greys with a brass accent, taken from the plan doc so the console looks
-   like itself from the start instead of getting restyled when shadcn arrives. */
+/* Fluent, near enough.
+ *
+ * The Entra admin centre is built on Microsoft's Fluent design language, and the
+ * things that actually make it recognisable are surprisingly few: one blue, a
+ * near-white page behind white surfaces, hairline borders, small radii, and Segoe UI.
+ * Getting those right matters more than matching any particular component.
+ *
+ * These are Fluent's own values rather than approximations — #0078D4 is the
+ * communication blue Microsoft uses for primary actions, and the neutral ramp is
+ * Fluent's grey scale. Copying a palette is not copying a product: the layout,
+ * wording and behaviour here are ours.
+ */
 @theme {
-  --color-brass-50: #f7efe0;
-  --color-brass-400: #dfa94b;
-  --color-brass-600: #a76f16;
-  --color-brass-700: #7d5210;
+  /* Communication blue: primary actions, links, the selected nav item. */
+  --color-fluent-50: #eff6fc;
+  --color-fluent-100: #deecf9;
+  --color-fluent-200: #c7e0f4;
+  --color-fluent-400: #2b88d8;
+  --color-fluent-500: #0078d4;
+  --color-fluent-600: #106ebe;
+  --color-fluent-700: #005a9e;
+  --color-fluent-900: #004578;
+
+  /* Fluent's neutral ramp. Slightly warmer and flatter than Tailwind's slate,
+     which is most of why the portal looks the way it does. */
+  --color-neutral-10: #faf9f8;
+  --color-neutral-20: #f3f2f1;
+  --color-neutral-30: #edebe9;
+  --color-neutral-40: #e1dfdd;
+  --color-neutral-60: #c8c6c4;
+  --color-neutral-90: #a19f9d;
+  --color-neutral-130: #605e5c;
+  --color-neutral-160: #323130;
+  --color-neutral-190: #201f1e;
+
+  /* Status colours, from Fluent's semantic set rather than invented. */
+  --color-status-ok: #107c10;
+  --color-status-warn: #797775;
+  --color-status-bad: #a4262c;
+
+  /* Segoe UI first, then the system stack. Nobody outside Windows has Segoe, and a
+     bad substitute reads worse than a good local font — so the fallbacks are the
+     platform's own UI faces rather than a generic sans. */
+  --font-sans:
+    'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', system-ui, sans-serif;
+
+  /* Fluent uses small radii throughout. Two pixels reads as "portal"; eight reads
+     as a consumer app. */
+  --radius-fluent: 2px;
 }
 
 @layer base {
@@ -15,12 +58,25 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    /* Near-white behind white surfaces, which is what gives the portal its layered
+       look without heavy borders or shadows. */
+    @apply bg-neutral-20 text-neutral-160 antialiased;
+    font-family: var(--font-sans);
   }
 
+  /* Dark is kept, though the real admin centre has none. Imitating a limitation
+     would be a strange thing to do to somebody whose system asked for dark. The
+     values are Fluent's dark neutrals rather than inverted light ones. */
   @media (prefers-color-scheme: dark) {
     body {
-      @apply bg-slate-950 text-slate-100;
+      @apply bg-neutral-190 text-neutral-20;
     }
+  }
+
+  /* The portal's focus ring: a visible outline rather than a soft glow. Keyboard
+     users in an admin console need to see exactly where they are. */
+  :focus-visible {
+    outline: 2px solid var(--color-fluent-500);
+    outline-offset: 1px;
   }
 }
