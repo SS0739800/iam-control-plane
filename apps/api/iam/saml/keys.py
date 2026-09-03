@@ -1,34 +1,30 @@
 """The keypair we sign assertions with.
 
-This is the most dangerous secret in the system, and it is worth being explicit
-about why. The session cookie secret lets somebody forge a session. This key lets
-somebody mint a login for anybody, for any application that trusts us, and every
-one of those logins verifies correctly. There is no way to tell a forged assertion
-from a real one after the fact.
+This is the most dangerous secret in the system. The session cookie secret lets
+somebody forge a session; this key lets somebody mint a login for anybody, for
+any application that trusts us, and it verifies correctly every time. There's
+no way to tell a forged assertion from a real one after the fact.
 
-So two decisions follow from that.
+It is not in the database. Every other secret here (session tokens, SCIM
+tokens) is stored hashed, since a hash is useless to whoever reads it. This key
+has to be usable as-is, so storing it next to the user table would mean a
+database dump or one SQL injection is enough to impersonate the entire
+company. It comes from the environment instead, which in compose comes from a
+gitignored file.
 
-**It is not in the database.** Every other secret here is — hashed session tokens,
-hashed SCIM tokens — because a hash is useless to whoever reads it. This one has to
-be usable, so storing it next to the user table would mean a database dump, a
-backup on somebody's laptop, or one SQL injection is enough to impersonate the
-entire company. It comes from the environment, which in compose comes from a file
-that is gitignored.
+Production refuses to start without one, same as SESSION_SECRET: no default,
+no key generated quietly at boot. If a key just appears with no record of who
+generated it, nobody can rotate it on purpose, and every login it signed stops
+verifying the next time the process restarts.
 
-**Production refuses to start without one.** The same shape as SESSION_SECRET:
-there is no default, and no key generated quietly at boot. A key that appears on
-its own is a key nobody wrote down, nobody backed up, and nobody can rotate
-deliberately — and every login it signed stops verifying the next time the process
-restarts.
-
-Outside production there is a fallback, and it is loud. It generates a keypair in
-memory, logs a warning saying assertions signed with it will stop verifying on
-restart, and never writes it anywhere. That is right for `docker compose up` on a
-laptop and wrong everywhere else.
+Outside production there's a loud fallback: it generates a keypair in memory,
+logs a warning that logins signed with it stop verifying on restart, and never
+writes it anywhere. Fine for `docker compose up` on a laptop, wrong anywhere
+else.
 
 Nothing here needs xmlsec. Generating, loading and checking a keypair is
-``cryptography``, which installs on every platform, so all of this is testable on a
-laptop. Only the signing in signer.py needs the container.
+``cryptography``, which installs on every platform, so this is all testable on
+a laptop. Only the actual signing in signer.py needs the container.
 """
 
 from __future__ import annotations
@@ -53,10 +49,10 @@ generate and buys nothing anybody has asked for."""
 CERTIFICATE_YEARS = 5
 """How long a generated certificate lasts.
 
-Long, on purpose. This certificate is not proving our identity to a browser — it is
-a container for a public key that we hand to each application when it registers.
-Expiry means every one of those applications has to be updated on the same day, so
-a short lifetime buys nothing and creates an outage with a date on it.
+Long, since this certificate isn't proving our identity to a browser, it's just
+a container for a public key handed to each application at registration.
+Expiry would mean every one of those applications needs updating on the same
+day, so a short lifetime buys nothing and just schedules an outage.
 """
 
 PEM_CERT_HEADER = "-----BEGIN CERTIFICATE-----"
@@ -79,17 +75,16 @@ class Keypair:
     private_key_pem: str
     certificate_pem: str
     generated: bool = False
-    """True when this was made up at boot because none was configured. Only ever
-    possible outside production."""
+    """True when this was made up at boot because none was configured. Only
+    happens outside production."""
 
     @property
     def certificate_body(self) -> str:
         """The base64 between the PEM markers, which is what goes in metadata.
 
-        SAML metadata carries the certificate without its header and footer, and
-        with the line breaks removed. Getting this wrong produces metadata a
-        provider accepts and then fails every signature against, which is a
-        miserable thing to debug.
+        SAML metadata carries the certificate without its header, footer, or
+        line breaks. Getting this wrong produces metadata a provider accepts
+        and then fails every signature against.
         """
         lines = [
             line.strip()
@@ -102,8 +97,8 @@ class Keypair:
     def fingerprint(self) -> str:
         """Short identifier for the certificate, for showing a human.
 
-        Not used for anything security-relevant. It exists so "the key changed" is
-        visible at a glance rather than being a diff of two blocks of base64.
+        Not used for anything security-relevant, just so "the key changed" is
+        visible at a glance instead of diffing two blocks of base64.
         """
         body = self.certificate_body
         return f"{body[:16]}…{body[-16:]}" if len(body) > 32 else body
@@ -112,10 +107,10 @@ class Keypair:
 def generate(*, common_name: str, valid_for_years: int = CERTIFICATE_YEARS) -> Keypair:
     """Make a fresh keypair and a self-signed certificate for it.
 
-    Self-signed is correct here rather than a shortcut. Nothing checks this
-    certificate against a chain of trust — each application is told this exact
-    certificate when it registers, and compares future signatures against that one.
-    A certificate authority would add a step and change nothing about what is
+    Self-signed is correct here, not a shortcut. Nothing checks this against a
+    chain of trust; each application is told this exact certificate at
+    registration and compares future signatures against that one. A
+    certificate authority would add a step without changing what gets
     verified.
     """
     key = rsa.generate_private_key(public_exponent=65537, key_size=KEY_SIZE)
@@ -126,13 +121,11 @@ def generate(*, common_name: str, valid_for_years: int = CERTIFICATE_YEARS) -> K
     certificate = (
         x509.CertificateBuilder()
         .subject_name(subject)
-        # Issuer is the subject: that is what self-signed means.
+        # Issuer is the subject: that's what self-signed means.
         .issuer_name(subject)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        # A minute in the past. Clocks between here and whoever reads this are not
-        # perfectly aligned, and a certificate that is not valid yet fails in a way
-        # nobody thinks to look for.
+        # A minute in the past, so slight clock skew doesn't make it "not valid yet".
         .not_valid_before(now - dt.timedelta(minutes=1))
         .not_valid_after(now + dt.timedelta(days=365 * valid_for_years))
         .sign(key, hashes.SHA256())
@@ -152,11 +145,10 @@ def generate(*, common_name: str, valid_for_years: int = CERTIFICATE_YEARS) -> K
 def _check_they_belong_together(private_key_pem: str, certificate_pem: str) -> None:
     """Confirm the certificate's public key matches the private key.
 
-    The failure this catches is somebody rotating one and not the other. Everything
-    keeps working — the app starts, metadata publishes, assertions get signed — and
-    every application rejects every login, because the signature was made with a key
-    the published certificate does not match. Checking at startup turns a confusing
-    outage into a refusal to boot.
+    Catches somebody rotating one and not the other. Without this check
+    everything looks fine at startup, but every application rejects every
+    login since the signature doesn't match the published certificate.
+    Checking here turns that confusing outage into a refusal to boot.
 
     Raises:
         UnusableKeypair: They don't match, or either one can't be parsed.
@@ -223,15 +215,15 @@ def load(settings: Settings) -> Keypair:
         )
         return made
 
-    # One without the other is always a mistake, and a specific message saves
-    # somebody staring at a signature error.
+    # One without the other is always a mistake, so give a specific message here
+    # instead of leaving somebody to stare at a signature error.
     if not private_key:
         raise UnusableKeypair("SAML_IDP_CERTIFICATE is set but SAML_IDP_PRIVATE_KEY is not.")
     if not certificate:
         raise UnusableKeypair("SAML_IDP_PRIVATE_KEY is set but SAML_IDP_CERTIFICATE is not.")
 
-    # Caught early with a readable message. Both of these usually mean a .env file
-    # holding a file path, or PEM whose newlines were eaten by whatever pasted it.
+    # Usually means a .env file holding a file path, or PEM whose newlines got
+    # eaten by whatever pasted it.
     if not _looks_like_pem(private_key, PEM_KEY_HEADERS):
         raise UnusableKeypair(
             "SAML_IDP_PRIVATE_KEY does not look like PEM. It should be the whole key "
@@ -257,14 +249,14 @@ def for_settings(settings: Settings) -> Keypair:
     Cached because parsing PEM and comparing public numbers is real work for an
     answer that only changes on restart.
 
-    Keyed on the settings that decide it, not on nothing. A test that builds a
-    second app with a different key has to get that key, and a single cached value
-    would hand it the first one anybody asked for — which would make the production
-    refusal test pass or fail depending on what ran before it.
+    Keyed on the settings that decide it, not cached as a single global value.
+    Otherwise a test that builds a second app with a different key would get
+    back whichever key was loaded first, and the production refusal test would
+    pass or fail depending on what ran before it.
 
-    The generated-in-memory case is cached too, and that is what makes it usable:
-    every request in one process gets the same made-up key, so logins keep
-    verifying until the process stops.
+    The generated-in-memory case is cached too, so every request in one
+    process gets the same made-up key and logins keep verifying until the
+    process stops.
     """
     cache_key = (
         settings.saml_idp_private_key or "",

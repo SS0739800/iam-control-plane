@@ -1,41 +1,30 @@
 """Signing the logins we issue.
 
-The counterpart to reader.py, and like it, the only thing in this direction that
-needs xmlsec — so it is the only part of the identity-provider side that cannot run
-on Windows. Everything about *what* an assertion says lives in idp.py and stays
-testable anywhere.
-
-What gets signed, and why it is the assertion
----------------------------------------------
+The counterpart to reader.py, and like it, the only thing in this direction
+that needs xmlsec, so the only part of the identity-provider side that can't
+run on Windows. Everything about what an assertion says lives in idp.py and
+stays testable anywhere.
 
 The signature goes over the assertion element, not the response wrapping it.
+Both are legal and providers differ, but signing only the response leaves the
+assertion unprotected against a receiver that pulls it out and reads it on its
+own — the same signature-wrapping shape reader.py refuses on the other side of
+this. Signing the assertion protects the part carrying the claims, wherever it
+ends up. We sign the assertion, which is also what authentik, Okta, and Entra
+do by default.
 
-Both are legal, and providers differ. Signing only the response leaves the assertion
-inside it unprotected against a receiver that pulls the assertion out and reads it on
-its own — which is exactly the signature-wrapping shape reader.py refuses when we are
-on the other side of this. Signing the assertion means the part carrying the claims is
-the part that is protected, wherever it ends up.
+python3-saml's ``add_sign`` finds the first ``//saml:Issuer`` in whatever it's
+given and signs that issuer's parent. Handed a whole response, that's the
+response's own issuer, so it would sign the response instead of the
+assertion. That's why the assertion is pulled out, signed on its own, and put
+back. That's safe because the signature uses exclusive canonicalisation,
+which omits namespace declarations the subtree inherits but doesn't use, so
+moving the element back into the response doesn't change what was signed.
 
-Belt and braces would be signing both. We sign the assertion, which is what
-authentik, Okta and Entra all do by default, and what every receiver expects.
-
-How this actually gets the assertion signed
--------------------------------------------
-
-python3-saml's ``add_sign`` finds the first ``//saml:Issuer`` in whatever it is
-given, inserts the signature after it, and signs that issuer's parent. Handed a
-whole response, the first issuer is the *response's* — so it would sign the
-response and silently do the opposite of what this module is for.
-
-So the assertion is pulled out, signed on its own, and put back. That is safe
-because the signature uses exclusive canonicalisation, which is the form designed
-for exactly this: it omits namespace declarations the subtree inherits but does not
-use, so moving the element back into the response does not change what was signed.
-
-Everything else in the document has to be final first. The signature covers the
-canonicalised element, so one attribute added afterwards invalidates it — which is
-why this takes a finished document and returns a finished document rather than
-offering a builder.
+Everything else in the document has to be final first: the signature covers
+the canonicalised element, so one attribute added afterwards invalidates it.
+That's why this takes a finished document and returns a finished document
+rather than offering a builder.
 """
 
 from __future__ import annotations
@@ -75,18 +64,17 @@ def sign_assertion(response_xml: str, *, private_key_pem: str, certificate_pem: 
             or xmlsec refused.
     """
     try:
-        # S320 is about parsing untrusted XML with lxml. SAFE_PARSER is the locked
-        # down one from reader.py, and this input is a document we built a moment
-        # ago — but it is parsed with the same parser regardless, because "we made
-        # it" is exactly the assumption that stops being true after a refactor.
+        # SAFE_PARSER is the locked-down one from reader.py. This input is a
+        # document we built a moment ago, but it's parsed with the same
+        # parser anyway — "we made it" is the assumption that stops being
+        # true after a refactor.
         root = etree.fromstring(response_xml.encode("utf-8"), parser=SAFE_PARSER)  # noqa: S320
     except etree.XMLSyntaxError as exc:
         raise SigningFailed(f"the response is not valid XML: {exc}") from exc
 
-    # Deliberately a direct child rather than a descendant search. A document with
-    # an assertion nested somewhere unexpected is not one we built, and signing
-    # whatever assertion turns up first is the mistake that makes signature
-    # wrapping possible in the first place.
+    # A direct child, not a descendant search. A document with an assertion
+    # nested somewhere unexpected isn't one we built, and signing whatever
+    # assertion turns up first is how signature wrapping happens.
     assertion = root.find(ASSERTION_TAG)
     if assertion is None:
         raise SigningFailed(
@@ -96,31 +84,31 @@ def sign_assertion(response_xml: str, *, private_key_pem: str, certificate_pem: 
 
     try:
         # The assertion on its own, not the whole response. add_sign signs the
-        # parent of the first //saml:Issuer it finds, and in a response that is the
-        # response's own issuer — so passing the whole document would sign the
-        # wrapper and leave the assertion inside it unprotected.
+        # parent of the first //saml:Issuer it finds, which in a response is
+        # the response's own issuer — passing the whole document would sign
+        # the wrapper and leave the assertion unprotected.
         signed_assertion = OneLogin_Saml2_Utils.add_sign(
             etree.tostring(assertion),
             private_key_pem,
             certificate_pem,
-            # RSA-SHA256 and exclusive C14N with SHA-256 digests. SHA-1 is still
-            # the default in several libraries and is refused by current versions
-            # of the same libraries on the receiving side, so being explicit here
-            # is what stops a login that works today failing after an upgrade
-            # somewhere else.
+            # RSA-SHA256 and exclusive C14N with SHA-256 digests, explicit
+            # rather than relying on defaults: SHA-1 is still the default in
+            # some libraries and gets refused by newer versions on the
+            # receiving side.
             sign_algorithm=OneLogin_Saml2_Constants.RSA_SHA256,
             digest_algorithm=OneLogin_Saml2_Constants.SHA256,
         )
     except Exception as exc:
-        # Caught broadly on purpose. xmlsec surfaces failures as xmlsec.Error,
-        # lxml errors, and occasionally ValueError, and none of them are worth
-        # distinguishing here: whatever it was, the document is unsigned and must
-        # not be sent.
+        # Caught broadly: xmlsec surfaces failures as xmlsec.Error, lxml
+        # errors, and occasionally ValueError. None of them are worth
+        # distinguishing here since the document is unsigned either way and
+        # must not be sent.
         raise SigningFailed(f"xmlsec refused to sign the assertion: {exc}") from exc
 
-    # Put the signed assertion back where it came from. Safe because the signature
-    # used exclusive canonicalisation, which omits inherited-but-unused namespace
-    # declarations precisely so a signed subtree can move between documents.
+    # Put the signed assertion back where it came from. Safe because the
+    # signature used exclusive canonicalisation, which omits
+    # inherited-but-unused namespace declarations so a signed subtree can
+    # move between documents without changing what was signed.
     replacement = etree.fromstring(signed_assertion, parser=SAFE_PARSER)  # noqa: S320
     root.replace(assertion, replacement)
 
@@ -131,14 +119,15 @@ def sign_document(document_xml: str, *, private_key_pem: str, certificate_pem: s
     """Sign a whole document at its root, and return it.
 
     For messages that carry no assertion — a LogoutResponse, and eventually a
-    LogoutRequest. ``sign_assertion`` cannot be used for those and should not be
-    made to: it deliberately signs the assertion *inside* a response and refuses a
-    document that has none, because signing the wrapper and leaving the assertion
-    unprotected is exactly the mistake that makes signature wrapping possible.
+    LogoutRequest. ``sign_assertion`` won't work for these: it signs the
+    assertion inside a response and refuses a document with none, since
+    signing the wrapper and leaving an assertion unprotected is the mistake
+    that makes signature wrapping possible.
 
-    Here there is nothing nested to protect. The document is one element with a
-    status in it, so the root is the right thing to sign, and the two functions stay
-    separate rather than growing a parameter that decides which mistake to make.
+    Here there's nothing nested to protect — the document is one element with
+    a status in it — so the root is the right thing to sign. The two
+    functions stay separate rather than growing a parameter that picks which
+    one to sign.
 
     Args:
         document_xml: A complete, final document. Nothing may change afterwards —
@@ -151,17 +140,17 @@ def sign_document(document_xml: str, *, private_key_pem: str, certificate_pem: s
         SigningFailed: The document will not parse, or xmlsec refused.
     """
     try:
-        # Same locked-down parser as everywhere else, for the same reason: "we built
-        # it a moment ago" is the assumption that stops being true after a refactor.
+        # Same locked-down parser as everywhere else, for the same reason: "we
+        # built it a moment ago" stops being true after a refactor.
         root = etree.fromstring(document_xml.encode("utf-8"), parser=SAFE_PARSER)  # noqa: S320
     except etree.XMLSyntaxError as exc:
         raise SigningFailed(f"the document is not valid XML: {exc}") from exc
 
     try:
         # add_sign signs the parent of the first //saml:Issuer it finds. In a
-        # LogoutResponse that issuer is the document's own, so its parent is the
-        # root — which is what we want here, and is precisely why the assertion
-        # version could not pass the whole document.
+        # LogoutResponse that issuer is the document's own, so its parent is
+        # the root, which is what we want here — and why sign_assertion
+        # can't just be handed the whole document too.
         signed = OneLogin_Saml2_Utils.add_sign(
             etree.tostring(root),
             private_key_pem,
@@ -170,10 +159,8 @@ def sign_document(document_xml: str, *, private_key_pem: str, certificate_pem: s
             digest_algorithm=OneLogin_Saml2_Constants.SHA256,
         )
     except Exception as exc:
-        # Caught broadly for the same reason as in sign_assertion: xmlsec reports
-        # failure as xmlsec.Error, lxml errors and occasionally ValueError, and none
-        # of them change what has to happen — the document is unsigned and must not
-        # be sent.
+        # Caught broadly, same reason as sign_assertion: whatever xmlsec threw,
+        # the document is unsigned and must not be sent.
         raise SigningFailed(f"xmlsec refused to sign the document: {exc}") from exc
 
     return signed.decode("utf-8") if isinstance(signed, bytes) else str(signed)

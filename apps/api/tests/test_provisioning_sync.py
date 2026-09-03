@@ -1,19 +1,17 @@
 """Tests for the sync: what gets pushed, and when.
 
-The client's own tests point at our real SCIM server, because interoperability is
-worth proving against a real implementation. These point at the stub in
-tests/scim_stub.py instead, for the reason that file explains: this is asking whether
-the sync makes the right decisions, and pointing it at our own app makes it contend
-with itself for the audit log's advisory lock.
+The client's own tests point at our real SCIM server. These point at the
+stub in tests/scim_stub.py instead - see that file for why: this is testing
+whether the sync makes the right decisions, and pointing it at our own app
+would make it contend with itself for the audit log's advisory lock.
 
-Every request still goes through the real ``OutboundScim``, so the headers, filter
-escaping and status handling are real. Only the far end is pretend — and being pretend
-is what lets a test say "answer 401" or "fail for this one person", which our own
-server cannot be asked to do.
+Every request still goes through the real `OutboundScim`, so headers,
+filter escaping, and status handling are real. Only the far end is a stub,
+which is what lets a test say "answer 401" or "fail for this one person".
 
-Four claims carry the phase: a joiner gets an account, a leaver is deactivated rather
-than deleted, a second pass over an unchanged directory does nothing, and one bad
-record does not stop the others.
+Four claims carry the phase: a joiner gets an account, a leaver is
+deactivated rather than deleted, a second pass over an unchanged directory
+does nothing, and one bad record doesn't stop the others.
 
 Needs Postgres for our own state, and skips without IAM_TEST_DATABASE_URL.
 """
@@ -91,24 +89,20 @@ async def rig() -> AsyncIterator[dict[str, Any]]:
         await session.commit()
         app_id, target_id = application.id, target.id
 
-    # The sync builds its own client, so the transport is patched in rather than
-    # threaded through the whole signature purely for tests.
+    # The sync builds its own client, so the transport is patched in here
+    # rather than threaded through the whole signature just for tests.
     original = sync_module._client_for
     sync_module._client_for = lambda row, active: OutboundScim(  # type: ignore[assignment]
         base_url=row.scim_root, token=downstream.token, client=http
     )
 
-    # The clock the pushes are stamped with, read from the database rather than typed
-    # in. users.updated_at comes from the database via func.now(); the timestamp it
-    # gets compared against is whatever the caller hands reconcile(). A hard-coded
-    # literal makes the staleness check ask "is this person's real modification time
-    # later than a date somebody typed", which is true for everybody once the wall
-    # clock passes it.
-    #
-    # This was a literal — noon on the day it was written — so the suite went red at
-    # noon that day, and the failure reads like a broken staleness check rather than a
-    # broken fixture. Taking the clock from the same place updated_at comes from says
-    # what these tests actually mean: we pushed them after they last changed.
+    # The clock the pushes are stamped with, read from the database instead
+    # of hard-coded. users.updated_at comes from func.now(), and the
+    # timestamp it's compared against is whatever the caller hands
+    # reconcile(). A fixed literal used to make this pass only until the
+    # wall clock caught up to it (it was noon on the day it was written, and
+    # the suite went red at noon that day). Reading `now` from the same
+    # clock as updated_at avoids that.
     async with sessionmaker() as session:
         stamped = await session.scalar(select(func.now()))
         assert isinstance(stamped, dt.datetime)
@@ -208,8 +202,8 @@ async def links(rig: dict[str, Any]) -> list[ProvisioningLink]:
 
 
 async def test_entitlement_comes_from_the_application(rig: dict[str, Any]) -> None:
-    """No second notion of who belongs where. These are the same rows P5 reads before
-    it will sign a login."""
+    """No second notion of who belongs where - these are the same rows used
+    to decide whether a login gets signed."""
     await add_person(rig, "wanted")
 
     async with factory(rig)() as session:
@@ -221,8 +215,7 @@ async def test_entitlement_comes_from_the_application(rig: dict[str, Any]) -> No
 
 
 async def test_group_access_counts_too(rig: dict[str, Any]) -> None:
-    """Access through a group is how it should usually be given, so the sync has to
-    see it."""
+    """Access through a group is the usual case, so the sync has to see it."""
     async with factory(rig)() as session:
         group = Group(name=f"team-{rig['suffix']}", source=IdentitySource.MANUAL)
         session.add(group)
@@ -251,7 +244,7 @@ async def test_group_access_counts_too(rig: dict[str, Any]) -> None:
 
 
 async def test_a_deactivated_person_is_not_entitled(rig: dict[str, Any]) -> None:
-    """They keep their link, and a link with nobody entitled behind it is what
+    """They keep their link - a link with nobody entitled behind it is what
     triggers deprovisioning."""
     await add_person(rig, "gone", active=False)
 
@@ -276,16 +269,15 @@ async def test_granting_access_creates_an_account(rig: dict[str, Any]) -> None:
     stored = await links(rig)
     assert len(stored) == 1
     assert stored[0].state is LinkState.ACTIVE
-    # The id the downstream assigned, which is what makes updating and deactivating
-    # possible at all.
+    # The id the downstream assigned - needed to update or deactivate later.
     assert stored[0].remote_id is not None
 
     assert rig["downstream"].is_active(user_name_for(rig, "joiner")) is True
 
 
 async def test_the_account_carries_our_own_id(rig: dict[str, Any]) -> None:
-    """externalId is our id, not their email — so a downstream can still match the
-    account after somebody changes their name."""
+    """externalId is our id, not their email, so a downstream can still
+    match the account after somebody changes their name."""
     person_id = await add_person(rig, "external")
 
     await sync(rig)
@@ -298,8 +290,7 @@ async def test_the_account_carries_our_own_id(rig: dict[str, Any]) -> None:
 async def test_a_second_pass_over_an_unchanged_directory_does_nothing(
     rig: dict[str, Any],
 ) -> None:
-    """Without this every sync re-pushes everybody, which is a thousand requests to
-    reach the answer it already had."""
+    """Without this every sync re-pushes everybody it already pushed."""
     await add_person(rig, "steady")
 
     first = await sync(rig)
@@ -310,12 +301,12 @@ async def test_a_second_pass_over_an_unchanged_directory_does_nothing(
     assert second.created == 0
     assert second.unchanged == 1
     assert not second.changed
-    # And it really did not talk to the downstream about that person again.
+    # It really didn't talk to the downstream about that person again.
     assert len(rig["downstream"].requests) == before
 
 
 async def test_forcing_pushes_even_when_nothing_changed(rig: dict[str, Any]) -> None:
-    """What a manual "sync now" means: do not trust the staleness check."""
+    """What a manual "sync now" means: don't trust the staleness check."""
     await add_person(rig, "forced")
     await sync(rig)
 
@@ -328,11 +319,10 @@ async def test_forcing_pushes_even_when_nothing_changed(rig: dict[str, Any]) -> 
 async def test_an_account_that_already_exists_is_adopted(rig: dict[str, Any]) -> None:
     """What onboarding a downstream that already has people looks like.
 
-    Without this every one of them fails forever on a 409, which is the normal case
-    for anything other than an empty system.
+    Without this every one of them fails forever on a 409.
     """
     await add_person(rig, "existing")
-    # Somebody is already there with the same userName, and we do not know its id.
+    # Somebody is already there with the same userName, and we don't know its id.
     rig["downstream"].accounts["pre-existing-id"] = {
         "id": "pre-existing-id",
         "userName": user_name_for(rig, "existing"),
@@ -347,7 +337,7 @@ async def test_an_account_that_already_exists_is_adopted(rig: dict[str, Any]) ->
     assert outcome.failed == 0
 
     stored = await links(rig)
-    # Linked to the account that was already there rather than a second one.
+    # Linked to the account that was already there, not a second one.
     assert stored[0].remote_id == "pre-existing-id"
     assert len(rig["downstream"].accounts) == 1
 
@@ -355,7 +345,7 @@ async def test_an_account_that_already_exists_is_adopted(rig: dict[str, Any]) ->
 async def test_an_ambiguous_search_is_refused_rather_than_guessed(
     rig: dict[str, Any],
 ) -> None:
-    """Linking to an account at random is a mistake nobody can see afterwards."""
+    """Linking to an account at random is a mistake nobody can see afterward."""
     await add_person(rig, "ambiguous")
     rig["downstream"].accounts["one"] = {
         "id": "one",
@@ -377,7 +367,7 @@ async def test_an_ambiguous_search_is_refused_rather_than_guessed(
 
 
 async def test_losing_access_deactivates_the_account(rig: dict[str, Any]) -> None:
-    """The operation the whole phase exists for."""
+    """Losing access deactivates the account downstream."""
     person_id = await add_person(rig, "leaver")
     await sync(rig)
 
@@ -388,7 +378,7 @@ async def test_losing_access_deactivates_the_account(rig: dict[str, Any]) -> Non
 
     stored = await links(rig)
     assert stored[0].state is LinkState.DEPROVISIONED
-    # Kept, so a rehire revives this account instead of creating a second one.
+    # Kept so a rehire revives this account instead of creating a second one.
     assert stored[0].remote_id is not None
 
     # Switched off downstream, not deleted.
@@ -399,7 +389,7 @@ async def test_losing_access_deactivates_the_account(rig: dict[str, Any]) -> Non
 async def test_deactivating_uses_patch_so_the_record_survives(
     rig: dict[str, Any],
 ) -> None:
-    """A PUT would blank every attribute the downstream holds that we do not send."""
+    """A PUT would blank every attribute the downstream holds that we don't send."""
     person_id = await add_person(rig, "keeps")
     await sync(rig)
     await revoke_access(rig, person_id)
@@ -408,7 +398,7 @@ async def test_deactivating_uses_patch_so_the_record_survives(
     account = rig["downstream"].account_for(user_name_for(rig, "keeps"))
     assert account is not None
     assert account["active"] is False
-    # Still there, because deactivation only touched `active`.
+    # Still there, since deactivation only touched `active`.
     assert account["displayName"].startswith("Keeps")
     assert "PATCH" in rig["downstream"].methods
 
@@ -438,8 +428,8 @@ async def test_a_rehire_revives_the_same_account(rig: dict[str, Any]) -> None:
 async def test_a_failed_deprovision_is_orphaned_not_just_failed(
     rig: dict[str, Any],
 ) -> None:
-    """The distinction that matters: we were told to remove somebody's access and
-    could not, so they still have it. That is what a review has to surface."""
+    """We were told to remove somebody's access and couldn't, so they still
+    have it - what a review has to surface."""
     person_id = await add_person(rig, "orphan")
     await sync(rig)
     await revoke_access(rig, person_id)
@@ -457,7 +447,7 @@ async def test_a_failed_deprovision_is_orphaned_not_just_failed(
 
 
 async def test_one_bad_record_does_not_stop_the_others(rig: dict[str, Any]) -> None:
-    """Otherwise one unpushable person blocks everybody behind them."""
+    """One unpushable person shouldn't block everybody behind them."""
     await add_person(rig, "afine")
     await add_person(rig, "bbroken")
     await add_person(rig, "cfine")
@@ -473,8 +463,8 @@ async def test_one_bad_record_does_not_stop_the_others(rig: dict[str, Any]) -> N
 async def test_a_bad_token_stops_the_run_rather_than_repeating(
     rig: dict[str, Any],
 ) -> None:
-    """Grinding through a thousand people to collect a thousand identical 401s helps
-    nobody and looks like a retry storm from the far end."""
+    """Retrying a thousand people to collect a thousand identical 401s helps
+    nobody."""
     for index in range(3):
         await add_person(rig, f"blocked{index}")
     rig["downstream"].reject_token = True
@@ -491,8 +481,8 @@ async def test_a_bad_token_stops_the_run_rather_than_repeating(
 async def test_an_exhausted_link_is_left_alone_until_forced(
     rig: dict[str, Any],
 ) -> None:
-    """A link failing five times is failing for a reason a retry will not fix, and
-    retrying it every run buries the transient ones."""
+    """A link failing five times won't be fixed by another retry, and
+    retrying it every run buries the transient failures."""
     person_id = await add_person(rig, "stuck")
     async with factory(rig)() as session:
         session.add(
@@ -515,8 +505,8 @@ async def test_an_exhausted_link_is_left_alone_until_forced(
 
 
 async def test_a_disabled_target_pushes_nothing(rig: dict[str, Any]) -> None:
-    """Turning a target off stops pushes without losing the links, so turning it back
-    on does not recreate every account."""
+    """Turning a target off stops pushes without losing the links, so
+    turning it back on doesn't recreate every account."""
     await add_person(rig, "paused")
     async with factory(rig)() as session:
         target = await session.get(ProvisioningTarget, rig["target_id"])
@@ -537,8 +527,8 @@ async def test_a_disabled_target_pushes_nothing(rig: dict[str, Any]) -> None:
 async def test_every_event_in_a_run_shares_a_correlation_id(
     rig: dict[str, Any],
 ) -> None:
-    """The reason that column has existed since P1. A sync that touches forty people
-    is one event to a person and forty-odd rows in the log."""
+    """A sync that touches forty people is one event to a person, not
+    forty-odd unrelated rows in the log."""
     for index in range(3):
         await add_person(rig, f"crowd{index}")
 
@@ -557,8 +547,8 @@ async def test_every_event_in_a_run_shares_a_correlation_id(
 
 
 async def test_a_failure_is_recorded_with_its_consequence(rig: dict[str, Any]) -> None:
-    """An audit entry for a failed deprovision has to say what it means, because
-    "push failed" does not convey that somebody still has access."""
+    """An audit entry for a failed deprovision has to say what it means -
+    "push failed" doesn't convey that somebody still has access."""
     person_id = await add_person(rig, "consequence")
     await sync(rig)
     await revoke_access(rig, person_id)
@@ -582,8 +572,7 @@ async def test_a_failure_is_recorded_with_its_consequence(rig: dict[str, Any]) -
 
 
 async def test_pushing_one_person_immediately(rig: dict[str, Any]) -> None:
-    """The reaction on top of the baseline: somebody granted access gets an account
-    now rather than at the next full pass."""
+    """Somebody granted access gets an account now, not at the next full pass."""
     person_id = await add_person(rig, "instant")
 
     async with factory(rig)() as session:
@@ -602,7 +591,7 @@ async def test_pushing_one_person_immediately(rig: dict[str, Any]) -> None:
 async def test_pushing_a_deactivated_person_switches_them_off(
     rig: dict[str, Any],
 ) -> None:
-    """The immediate half of the leaver flow."""
+    """push_one on a deactivated person switches them off immediately."""
     person_id = await add_person(rig, "instantleaver")
     await sync(rig)
 
@@ -634,8 +623,8 @@ async def test_nothing_is_waiting_when_everything_is_in_step(rig: dict[str, Any]
 
 
 async def test_somebody_newly_entitled_is_waiting(rig: dict[str, Any]) -> None:
-    """Before the first sync there is no link at all, which is the case a query over
-    link states cannot see — there is no row to count."""
+    """Before the first sync there's no link at all, so a query over link
+    states can't see this case - there's no row to count."""
     await add_person(rig, "newcomer")
 
     async with factory(rig)() as session:
@@ -645,11 +634,9 @@ async def test_somebody_newly_entitled_is_waiting(rig: dict[str, Any]) -> None:
 
 
 async def test_a_leaver_is_waiting_until_the_sync_runs(rig: dict[str, Any]) -> None:
-    """The one that prompted this counter.
-
-    Somebody is marked as having left, the downstream has not been told, and every
-    link-state count still reads as healthy — the link is ACTIVE because the last push
-    succeeded. Only this question notices.
+    """Somebody is marked as having left, the downstream hasn't been told,
+    and every link-state count still reads as healthy - the link is ACTIVE
+    because the last push succeeded. Only this question notices.
     """
     person_id = await add_person(rig, "departing")
     await sync(rig)
@@ -674,11 +661,9 @@ async def test_a_leaver_is_waiting_until_the_sync_runs(rig: dict[str, Any]) -> N
 
 
 async def test_the_count_matches_what_a_sync_actually_does(rig: dict[str, Any]) -> None:
-    """The property that makes the number worth showing.
-
-    If the count and the run ever disagree, the panel is lying about whether somebody
-    still has access — so this asserts they agree rather than trusting that two pieces
-    of code written together will stay together.
+    """If the count and the run ever disagree, the panel is lying about
+    whether somebody still has access - so this asserts they agree instead
+    of trusting that two pieces of code written together will stay together.
     """
     await add_person(rig, "one")
     await add_person(rig, "two")
@@ -718,13 +703,12 @@ async def test_the_count_matches_what_a_sync_actually_does(rig: dict[str, Any]) 
 async def test_a_second_sync_is_refused_while_one_holds_the_lease(
     rig: dict[str, Any],
 ) -> None:
-    """The gap the lease closes.
-
-    Nothing stopped two reconciles working the same links: two worker machines, a
-    deploy that briefly overlaps them, or somebody pressing "sync now" mid-sweep.
-    It would have converged — the unique index stops duplicate links and a 409 on
-    create is adopted — but by adopting an account it had half-created itself, with
-    two correlation ids interleaved through the audit log.
+    """Without the lease, nothing stops two reconciles working the same
+    links - two worker machines, an overlapping deploy, or someone pressing
+    "sync now" mid-sweep. It would eventually converge (the unique index
+    stops duplicate links, and a 409 on create gets adopted), but by
+    adopting an account it had half-created itself, with two correlation ids
+    interleaved through the audit log.
     """
     await add_person(rig, "contended")
 
@@ -736,7 +720,7 @@ async def test_a_second_sync_is_refused_while_one_holds_the_lease(
     with pytest.raises(AlreadyRunning):
         await sync(rig)
 
-    # And nothing was pushed, rather than half of it.
+    # Nothing was pushed, not half of it.
     assert rig["downstream"].account_for(user_name_for(rig, "contended")) is None
 
 
@@ -755,11 +739,11 @@ async def test_releasing_the_lease_lets_the_next_sync_run(rig: dict[str, Any]) -
 
 
 async def test_an_expired_lease_does_not_wedge_the_target(rig: dict[str, Any]) -> None:
-    """The reason it is a lease and not a flag.
+    """Why it's a lease, not a flag.
 
-    A worker killed mid-sweep never releases anything. If that blocked the target
-    forever, one unlucky restart would stop provisioning until somebody noticed and
-    edited the database.
+    A worker killed mid-sweep never releases anything. If that blocked the
+    target forever, one unlucky restart would stop provisioning until
+    somebody noticed and edited the database.
     """
     await add_person(rig, "recovered")
 
@@ -776,7 +760,7 @@ async def test_an_expired_lease_does_not_wedge_the_target(rig: dict[str, Any]) -
 
 
 async def test_a_finished_sync_leaves_the_lease_clear(rig: dict[str, Any]) -> None:
-    """Released in a finally, so the next sync need not wait fifteen minutes."""
+    """Released in a finally, so the next sync doesn't wait fifteen minutes."""
     await add_person(rig, "tidy")
     await sync(rig)
 
@@ -787,8 +771,8 @@ async def test_a_finished_sync_leaves_the_lease_clear(rig: dict[str, Any]) -> No
 
 
 async def test_a_failing_sync_still_releases_the_lease(rig: dict[str, Any]) -> None:
-    """The case a naive implementation gets wrong: release on the happy path only,
-    and one rejected token locks the target for fifteen minutes."""
+    """A naive implementation releases only on the happy path, so one
+    rejected token would lock the target for fifteen minutes."""
     await add_person(rig, "brokenlease")
     rig["downstream"].reject_token = True
 

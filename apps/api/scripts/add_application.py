@@ -2,38 +2,18 @@
 
     python -m scripts.add_application hrms "HRMS" --protocol scim2
 
-Why this exists
----------------
+``POST /api/applications`` registers a SAML service provider from a metadata
+document, which is the right shape for most apps but not for one we only
+*provision into*. The HRMS takes SCIM pushes and has no SSO, so there's no
+metadata to read an entity id from — but it's still a real application that
+needs to exist so access can be granted to it. Until now only ``scripts.seed``
+created rows like this, which is fine locally but wrong for production (it
+would add 1,284 fictional employees to a real directory).
 
-``POST /api/applications`` registers a SAML service provider: it requires a metadata
-document, reads an entity id and a reply URL out of it, and exists so applications
-can be signed into. That is the right shape for most of them.
-
-It is the wrong shape for an application we only *provision into*. The HRMS accepts
-SCIM pushes and has no SSO at all, so there is no metadata to paste and no entity id
-to read — but there is still a real application, with real access to grant, and
-somebody has to be able to create it.
-
-``AppProtocol`` has had ``scim2`` and ``none`` since P1 for exactly this, and until
-now the only thing that ever created such a row was ``scripts.seed``. That is fine
-locally and useless in production, where running the seed would add 1,284 fictional
-employees to a real directory.
-
-So this is the third gap of the same family that deploying turned up, after the
-identity-provider bootstrap and the ``BASE_URL`` default. The pattern is worth
-naming: every one of them was a path that existed only through seed data, and none
-of them was visible until a database started empty.
-
-What it does not do
--------------------
-
-It does not grant anybody access. An application with nobody assigned provisions
-nobody, which is the correct starting state — access is a separate decision, made in
-the console where it is recorded as one.
-
-It also does not touch a SAML application. If the slug already exists and carries an
-entity id, this refuses rather than quietly converting somebody's SSO integration
-into a provision-only row.
+This does not grant anybody access — that's a separate step in the console. It
+also refuses to touch an existing SAML application (one with an entity id
+already set), rather than silently converting an SSO integration into a
+provision-only row.
 """
 
 from __future__ import annotations
@@ -53,9 +33,9 @@ from iam.models.enums import ActorType, AppProtocol, AppStatus, AuditOutcome
 
 ACTOR_LABEL = "scripts.add_application (bootstrap)"
 
-# saml2 is deliberately absent. A SAML application needs an entity id and a reply URL
-# read out of a metadata document, and inventing one here would produce a row that
-# looks registered and cannot be signed into.
+# saml2 is absent: it needs an entity id and reply URL read from a metadata
+# document, and inventing one here would produce a row that looks registered
+# but can't actually be signed into.
 ALLOWED = (AppProtocol.SCIM2, AppProtocol.NONE, AppProtocol.OIDC)
 
 
@@ -108,9 +88,8 @@ async def add(
         session,
         AuditDraft(
             action="application.registered",
-            # Nobody did this through the console, because the console cannot: there
-            # is no form for an application without SAML metadata. Saying "system"
-            # keeps the log honest rather than attributing it to whoever ran it.
+            # The console has no form for an application without SAML metadata,
+            # so this can't be attributed to a person who used the console.
             actor_type=ActorType.SYSTEM,
             actor_id=None,
             actor_label=ACTOR_LABEL,

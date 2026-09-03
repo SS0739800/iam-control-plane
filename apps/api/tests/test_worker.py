@@ -1,15 +1,15 @@
 """The background sweep.
 
-Provisioning used to happen only inside the request that asked for it, so a leaver
-kept their downstream account until somebody opened the console and pressed a button.
-That is not hypothetical here: Okta deactivated somebody at 8:51:40, the last sync had
-run at 8:51:12, and the account stayed live until a person noticed.
+Provisioning used to happen only inside the request that asked for it, so a
+leaver kept their downstream account until somebody opened the console and
+pressed a button. This has actually happened: Okta deactivated somebody at
+8:51:40, the last sync had run at 8:51:12, and the account stayed live until a
+person noticed.
 
-What these check is mostly the failure behaviour, because the happy path is just
-reconcile() — which has its own tests — called on a timer. What is new is everything
-around it: that one broken target does not stop the others, that a paused target is
-left alone, and that the loop survives a bad sweep rather than exiting and needing
-somebody to notice.
+Mostly checks failure behavior, since the happy path is just reconcile()
+(which has its own tests) called on a timer. What's new here: one broken
+target doesn't stop the others, a paused target is left alone, and the loop
+survives a bad sweep instead of exiting.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -149,7 +149,7 @@ async def sweep(rig: dict[str, Any]) -> dict[str, int]:
 async def test_a_sweep_provisions_without_anybody_pressing_anything(
     rig: dict[str, Any],
 ) -> None:
-    """The whole point. Nobody opened the console."""
+    """The basic case: nobody opened the console."""
     summary = await sweep(rig)
 
     assert summary["targets"] >= 2
@@ -159,8 +159,8 @@ async def test_a_sweep_provisions_without_anybody_pressing_anything(
 
 
 async def test_a_second_sweep_does_nothing(rig: dict[str, Any]) -> None:
-    """A timer that re-pushed everybody every five minutes would be a thousand
-    requests to reach the answer it already had."""
+    """A timer re-pushing everybody every five minutes would be wasted requests
+    to reach the answer it already had."""
     await sweep(rig)
     before = {name: len(d.requests) for name, d in rig["downstreams"].items()}
 
@@ -172,7 +172,7 @@ async def test_a_second_sweep_does_nothing(rig: dict[str, Any]) -> None:
 
 async def test_the_count_is_accounts_not_targets(rig: dict[str, Any]) -> None:
     """`changed` is a yes-or-no per target. Summing that would report "1 pushed"
-    when forty people were provisioned, which is why `touched` exists."""
+    when forty people were provisioned; `touched` counts the actual accounts."""
     summary = await sweep(rig)
 
     assert summary["pushed"] == 2  # one person in each of the two targets
@@ -206,8 +206,8 @@ async def test_a_paused_target_is_left_alone(rig: dict[str, Any]) -> None:
 
 
 async def test_a_leaver_is_switched_off_by_the_sweep(rig: dict[str, Any]) -> None:
-    """The case that prompted the worker: a deactivation arriving after the last
-    manual sync, with nobody around to press the button."""
+    """The case that prompted the worker: a deactivation arriving after the
+    last manual sync, with nobody around to press the button."""
     await sweep(rig)
     user_name = f"alpha.{rig['suffix']}@demo.local"
     assert rig["downstreams"]["alpha"].is_active(user_name) is True
@@ -230,9 +230,9 @@ async def test_a_leaver_is_switched_off_by_the_sweep(rig: dict[str, Any]) -> Non
 async def test_the_loop_survives_a_failing_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
     """A worker that exits on the first bad minute is one somebody has to notice.
 
-    The database being unreachable, a bad migration, a bug in reconcile — none of
-    them should end the process, because the next sweep may well succeed and nothing
-    is watching this thing.
+    The database being unreachable, a bad migration, a bug in reconcile — none
+    of them should end the process, since the next sweep may well succeed and
+    nothing else is watching it.
     """
     calls = 0
 

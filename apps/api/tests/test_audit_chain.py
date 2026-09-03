@@ -72,9 +72,8 @@ def test_canonical_form_is_stable() -> None:
 def test_canonical_form_normalises_timezone() -> None:
     """The same moment written in a different timezone must come out the same.
 
-    If it didn't, a database handing timestamps back in its own timezone would make
-    entries fail the check on a server set up differently from the one that wrote
-    them.
+    Otherwise a database handing timestamps back in its own timezone would
+    fail the check on a server set up differently from the one that wrote them.
     """
     kolkata = dt.timezone(dt.timedelta(hours=5, minutes=30))
     assert canonical(occurred_at=FIXED_TIME.astimezone(kolkata)) == canonical()
@@ -164,9 +163,8 @@ async def test_chain_verifies_after_appending(db_session: AsyncSession) -> None:
 async def test_tampering_is_detected_at_the_altered_event(db_session: AsyncSession) -> None:
     """Change a saved entry and the check must fail, naming that entry.
 
-    We have to switch the database rule off just to make the edit, which is the
-    interesting bit: even with that protection gone, the fingerprints still catch
-    it.
+    The database rule has to be switched off just to make the edit — even with
+    that protection gone, the fingerprints still catch it.
     """
     target = await append_event(db_session, _draft("test.tamper_me"))
     await append_event(db_session, _draft("test.after"))
@@ -213,9 +211,8 @@ async def test_database_blocks_deletes(db_session: AsyncSession) -> None:
 async def test_stored_event_round_trips_through_postgres(db_session: AsyncSession) -> None:
     """An entry read back from the database still matches its fingerprint.
 
-    Catches the case where saving and loading changes something subtly — timestamp
-    precision, JSON key order — so entries pass the check in memory but fail once
-    they've been through Postgres.
+    Catches subtle changes from saving and loading — timestamp precision, JSON
+    key order — that would pass in memory but fail once through Postgres.
     """
     appended = await append_event(
         db_session,

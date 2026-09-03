@@ -1,22 +1,18 @@
 """Bootstrapping the first admin.
 
-The only test file here that covers a script, and it earns the exception: this is
-the one piece of code that can create an admin without an admin asking for it.
+The only test file here covering a script, since this is the one piece of
+code that can create an admin without an admin asking for it.
 
-There is no root account by design — somebody created by logging in starts as an
-employee with no console permissions, so there is no path from "the provider let them
-in" to "they can change things here". That leaves one gap, on the first day of a
-deployment's life, when nobody exists who can grant anything. This closes it.
+There's no root account — someone created by logging in starts as an
+employee with no permissions, so there's no path from "the provider let
+them in" to "they can change things here." That leaves a gap on day one of
+a deployment, when nobody exists who can grant anything. This script
+closes it, so the refusal half matters most: a bootstrap that keeps
+working after that is a backdoor.
 
-Which makes the refusal the important half. A bootstrap that keeps working is a
-backdoor, and it is the kind of backdoor nobody notices because it lives in a script
-directory and reads like setup.
-
-The other thing worth pinning down is that the grant is a *real* grant. The obvious
-implementation is `UPDATE users SET platform_role = 'admin'`, and it would look
-right on every screen while leaving a person the console calls an admin with no grant
-behind them — the exact inconsistency find_drift exists to report, planted on day
-one.
+Also checked: the grant is a *real* grant, not just `UPDATE users SET
+platform_role = 'admin'`, which would look right everywhere while leaving
+no grant behind it — exactly the drift find_drift exists to catch.
 """
 
 from __future__ import annotations
@@ -45,15 +41,15 @@ pytestmark = pytest.mark.integration
 async def people(monkeypatch: pytest.MonkeyPatch) -> Any:
     """Two employees on a database with no admin.
 
-    The script reads its own settings through get_settings(), so the database URL goes
-    into the environment rather than being passed in — which is also how it runs for
-    real, from a shell with DATABASE_URL set.
+    The script reads settings through get_settings(), so the database URL
+    goes into the environment, matching how it runs for real.
 
-    Patching iam.config.get_settings would not work: the script does `from iam.config
-    import get_settings`, so it holds its own reference and never looks the module
-    attribute up again. The environment plus a cleared cache is what actually reaches
-    it. get_settings is lru_cached, so the clear has to happen *before* the script
-    runs, and again afterwards so the next test does not inherit this URL.
+    Patching iam.config.get_settings wouldn't work here: the script does
+    `from iam.config import get_settings`, so it holds its own reference
+    and never looks the module attribute up again. Setting the environment
+    and clearing the lru_cache is what actually reaches it — cleared
+    before the script runs, and again after so the next test doesn't
+    inherit this URL.
     """
     url = database_url()
     monkeypatch.setenv("DATABASE_URL", url)
@@ -112,10 +108,9 @@ async def test_it_makes_them_an_admin(people: dict[str, str]) -> None:
 
 
 async def test_the_grant_is_real_and_not_just_the_cached_column(people: dict[str, str]) -> None:
-    """The test that rules out the tempting shortcut.
-
-    An UPDATE on users.platform_role would pass the test above and leave no grant
-    behind it. find_drift is what reports that, so it is what checks it here.
+    """Rules out the tempting shortcut: an UPDATE on users.platform_role
+    would pass the test above but leave no grant behind it, which
+    find_drift would catch.
     """
     await bootstrap_admin(people["first"], reason="first admin")
 
@@ -224,12 +219,9 @@ async def test_it_refuses_somebody_who_does_not_exist(people: dict[str, str]) ->
 
 
 async def test_existing_admin_reads_the_grants_not_the_column(people: dict[str, str]) -> None:
-    """Deliberately planting the drift this script must not be fooled by.
-
-    Somebody who set the column by hand looks like an admin on every screen. The
-    check has to look at the grants, because that is where the truth is — and a
-    database in that state should still refuse, since somebody clearly already has
-    admin access however badly it was arranged.
+    """Plants the drift this script must not be fooled by: someone who set
+    the column by hand looks like an admin on every screen, but the check
+    looks at the grants, since that's where the truth is.
     """
 
     async def plant(session: Any) -> None:
@@ -251,12 +243,10 @@ async def test_existing_admin_reads_the_grants_not_the_column(people: dict[str, 
 async def test_an_expired_admin_grant_does_not_block_the_bootstrap(
     people: dict[str, str],
 ) -> None:
-    """The lockout this would otherwise cause.
-
-    An admin grant that has run out still has revoked_at unset until
-    expire_due_grants sweeps it. Counting that as somebody holding admin would refuse
-    the bootstrap on a deployment where nobody can log in and grant anything — which
-    is precisely the situation this script exists for.
+    """An admin grant that's run out still has revoked_at unset until
+    expire_due_grants sweeps it. Counting that as someone holding admin
+    would refuse the bootstrap exactly when nobody can log in to grant
+    anything — the situation this script exists for.
     """
 
     async def plant_expired(session: Any) -> None:

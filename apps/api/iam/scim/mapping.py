@@ -1,9 +1,9 @@
 """Turning our rows into SCIM resources, and SCIM documents back into rows.
 
-Kept apart from the endpoints so that the shape of what we send is one readable
-function rather than something assembled inline in a handler. It is also the
-only place that decides what SCIM is allowed to overwrite, which is a security
-question rather than a formatting one — see apply_user.
+Kept apart from the endpoints so the shape of what we send lives in one
+readable function instead of being assembled inline in a handler. This is
+also the only place that decides what SCIM is allowed to overwrite - a
+security question, not just formatting. See apply_user.
 
 No database access here. Everything takes objects already loaded and returns
 plain data, so all of it is tested without Postgres.
@@ -38,9 +38,8 @@ from iam.scim.constants import (
 def _version(updated_at: dt.datetime | None) -> str:
     """An ETag for a resource.
 
-    Derived from the last-modified time rather than stored, because there is
-    nothing else it would be used for. A weak ETag would do; this is stable,
-    cheap, and changes exactly when the row does.
+    Derived from the last-modified time instead of stored, since there's no
+    other use for it. Stable, cheap, and changes exactly when the row does.
     """
     stamp = (updated_at or dt.datetime.now(dt.UTC)).isoformat()
     return f'W/"{hashlib.sha256(stamp.encode()).hexdigest()[:16]}"'
@@ -63,8 +62,8 @@ def _meta(
 def user_to_scim(user: User, *, base_url: str, groups: list[Group] | None = None) -> ScimUser:
     """Our person, as SCIM sees them.
 
-    The name is sent both split and formatted, because providers read whichever
-    one they were built around and the two disagreeing is a common source of a
+    The name is sent both split and formatted, since providers read whichever
+    one they were built around - leaving one out is a common cause of a
     display name that never updates.
     """
     root = base_url.rstrip("/")
@@ -135,11 +134,9 @@ def group_to_scim(group: Group, *, base_url: str, members: list[User] | None = N
 
 # What SCIM is allowed to write. Everything else on the row is ours.
 #
-# platform_role is the one that matters and it is not in here. A provider can
-# create somebody, name them, deactivate them — and cannot decide what they are
-# allowed to do in this console. Nothing upstream should be able to grant itself
-# an admin here by editing a directory record, and leaving the field out is a
-# stronger guarantee than remembering to filter it.
+# platform_role is not in here: a provider can create, name, or deactivate
+# someone, but it must never be able to grant console admin by editing a
+# directory record.
 WRITABLE_USER_FIELDS = (
     "user_name",
     "email",
@@ -156,10 +153,10 @@ WRITABLE_USER_FIELDS = (
 def user_fields_from_scim(scim: ScimUser) -> dict[str, object]:
     """The columns a SCIM document is asking us to set.
 
-    Only fields the document actually carries. A provider that sends a partial
-    resource on PUT should not have the omissions read as "set these to null",
-    which is the difference between a sync that tidies a record and one that
-    blanks everybody's department.
+    Only includes fields the document actually carries. A provider sending a
+    partial resource on PUT shouldn't have the omitted fields read as "set
+    these to null" - otherwise a sync would blank everybody's department
+    instead of just tidying a record.
     """
     values: dict[str, object] = {
         "user_name": scim.user_name,
@@ -204,10 +201,9 @@ def user_fields_from_scim(scim: ScimUser) -> dict[str, object]:
 def apply_user(user: User, values: dict[str, object]) -> tuple[str, ...]:
     """Write the allowed fields onto a person, and say what changed.
 
-    Anything outside WRITABLE_USER_FIELDS is dropped rather than raising. A
-    provider sending something it shouldn't is not a reason to fail the whole
-    sync; it is a reason to ignore that field, which is what the spec asks for
-    with read-only attributes anyway.
+    Anything outside WRITABLE_USER_FIELDS is dropped, not raised. A provider
+    sending a field it shouldn't isn't reason to fail the whole sync - just
+    ignore that field, which matches how the spec treats read-only attributes.
     """
     changed: list[str] = []
 

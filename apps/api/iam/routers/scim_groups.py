@@ -1,19 +1,18 @@
-"""/scim/v2/Groups — the provider telling us who is in what.
+"""/scim/v2/Groups - the provider telling us who is in what.
 
-Membership is the whole point of this endpoint. Creating a group is nearly
-trivial; keeping its members in step is where the work and the mistakes are.
+Creating a group is nearly trivial; keeping its members in step is where the
+work and the mistakes are.
 
-Two things shape everything below.
+Two things to know:
 
-**Membership is written here, not on the person.** A provider adds somebody by
-PATCHing the group, and `User.groups` in the SCIM output is the read-only
-reflection of that. Allowing both directions would mean two ways to write the
-same rows and a race between them.
-
-**PATCH add is not PUT.** ``add`` puts somebody in without disturbing anyone
-else; ``replace`` on ``members`` sets the list to exactly what arrived, which
-means removing everybody not in it. Confusing the two empties groups, and it
-empties them quietly — the request succeeds and the members are simply gone.
+- Membership is written here, not on the person. A provider adds somebody by
+  PATCHing the group, and `User.groups` in the SCIM output is just a
+  read-only reflection of that. Allowing both directions would mean two ways
+  to write the same rows and a race between them.
+- PATCH `add` is not PUT. `add` puts somebody in without disturbing anyone
+  else; `replace` on `members` sets the list to exactly what arrived,
+  removing everybody not in it. Confusing the two empties a group quietly -
+  the request succeeds and the members are simply gone.
 """
 
 from __future__ import annotations
@@ -99,13 +98,12 @@ async def _record(
 def _member_ids(value: Any) -> list[uuid.UUID]:
     """Read the user ids out of a members value.
 
-    SCIM sends members as a list of objects with a ``value`` holding the id, and
-    providers also send a bare list of ids or a single object. All three are
-    accepted because the alternative is refusing a sync over punctuation.
+    SCIM sends members as a list of objects with a `value` holding the id,
+    but providers also send a bare list of ids or a single object. All three
+    are accepted rather than refusing a sync over punctuation.
 
-    Ids that aren't ids are skipped rather than failing the request. A provider
-    referring to somebody who was deleted upstream should not be able to wedge
-    the whole group sync.
+    Ids that aren't valid ids are skipped, not failed - a provider referring
+    to somebody deleted upstream shouldn't be able to wedge the whole sync.
     """
     if value is None:
         return []
@@ -134,9 +132,9 @@ async def _existing_members(session: SessionDep, group: Group) -> set[uuid.UUID]
 async def _real_users(session: SessionDep, ids: list[uuid.UUID]) -> set[uuid.UUID]:
     """Which of these ids are people we actually have.
 
-    Checked before inserting, because a membership row pointing at nobody is a
-    foreign key error that fails the whole request — and one stale id in a list
-    of two hundred should not lose the other hundred and ninety-nine.
+    Checked before inserting, since a membership row pointing at nobody is a
+    foreign key error that fails the whole request. One stale id in a list of
+    two hundred shouldn't lose the other hundred and ninety-nine.
     """
     if not ids:
         return set()
@@ -156,8 +154,8 @@ async def _add_members(session: SessionDep, group: Group, ids: list[uuid.UUID]) 
             GroupMember(
                 group_id=group.id,
                 user_id=user_id,
-                # The provider owns this row. The rule engine reads it and never
-                # removes it — see iam/access/rules.py.
+                # The provider owns this row. The rule engine reads it but
+                # never removes it - see iam/access/rules.py.
                 source=MembershipSource.SCIM,
             )
         )
@@ -180,9 +178,8 @@ async def _replace_members(
 ) -> tuple[int, int]:
     """Make the membership exactly this list.
 
-    The destructive one. Anybody not in the list is removed, which is what
-    ``replace`` means and why it must never be reached by a request that said
-    ``add``.
+    The destructive one - anybody not in the list is removed. Must never be
+    reached by a request that said `add`.
     """
     wanted = set(await _real_users(session, ids))
     current = await _existing_members(session, group)
@@ -297,9 +294,9 @@ async def replace_group(
 ) -> Response:
     """Set the group to exactly what arrived, members included.
 
-    PUT means replace, so the membership becomes the list in the document and
-    anybody missing from it is removed. That is the destructive reading and it is
-    the correct one here — unlike PATCH add, which only ever puts people in.
+    PUT means replace: the membership becomes the list in the document, and
+    anybody missing from it is removed. That's correct here, unlike PATCH
+    `add`, which only ever puts people in.
     """
     group = await _load(session, group_id)
 
@@ -357,13 +354,12 @@ async def patch_group(
 ) -> Response:
     """Add or remove members, or rename the group.
 
-    This is how membership actually changes in practice: somebody joins a team
-    upstream and the provider sends one ``add`` with one member in it.
+    This is how membership actually changes in practice: somebody joins a
+    team upstream and the provider sends one `add` with one member in it.
 
-    The distinction that matters is between ``add`` and ``replace`` on
-    ``members``. Add puts people in and leaves everyone else alone. Replace sets
-    the list to exactly what arrived, removing anybody absent from it. Treating
-    an add as a replace empties groups, and does it quietly.
+    `add` puts people in and leaves everyone else alone. `replace` sets the
+    list to exactly what arrived, removing anybody absent from it. Treating
+    an add as a replace empties a group quietly.
     """
     group = await _load(session, group_id)
 
@@ -373,8 +369,8 @@ async def patch_group(
     for operation in patch.operations:
         path = (operation.path or "").strip().lower()
 
-        # A pathless operation carries a partial resource, the way Entra sends
-        # them: {"op": "replace", "value": {"displayName": "..."}}.
+        # A pathless operation carries a partial resource, the way Entra
+        # sends it: {"op": "replace", "value": {"displayName": "..."}}.
         if not path and isinstance(operation.value, dict):
             new_name = operation.value.get("displayName") or operation.value.get("displayname")
             members = operation.value.get("members")
@@ -390,8 +386,8 @@ async def patch_group(
             renamed = renamed or await _rename(session, group, str(operation.value))
             continue
 
-        # members, or members[value eq "..."] which is how a provider names one
-        # person to remove.
+        # members, or members[value eq "..."], which is how a provider names
+        # one person to remove.
         if not path.startswith("members"):
             raise bad_path(
                 f"Cannot patch {operation.path!r} on a Group. Supported: displayName, members."
@@ -407,8 +403,8 @@ async def patch_group(
         if operation.operation == "add":
             added += await _add_members(session, group, ids)
         elif operation.operation == "remove":
-            # No ids at all means "remove every member", which the spec allows
-            # and which a provider means when it clears a group.
+            # No ids at all means "remove every member" - what a provider
+            # means when it clears a group, and the spec allows it.
             removed += await (
                 _remove_members(session, group, ids)
                 if ids
@@ -471,10 +467,9 @@ async def delete_group(
 ) -> Response:
     """Remove a group. Unlike a person, this really does delete.
 
-    A group is a container, not somebody's record. Keeping an emptied group
-    around forever would clutter the directory without answering any question the
-    audit log doesn't already answer — the entries saying who was in it and when
-    they were removed survive this, because the audit log is append-only.
+    A group is a container, not somebody's record, so there's no reason to
+    keep an emptied one around. The audit log's entries about who was in it
+    survive this since the log is append-only.
 
     The membership rows go with it through the cascade; the people do not.
     """

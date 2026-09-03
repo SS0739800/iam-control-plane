@@ -2,46 +2,21 @@
 
     python -m scripts.register_first_idp okta "Okta" ./okta-idp.xml
 
-Why this exists
----------------
+A fresh deployment can't let anybody in: ``/api/identity-providers`` needs an
+admin, becoming an admin needs an existing user, users are only created by
+logging in, and logging in needs a registered provider. There's no password
+login to break the loop, so the first provider has to be registered out of
+band. This is that missing step.
 
-A fresh deployment cannot let anybody in, and the reason is a loop:
+Unlike ``grant_first_admin``, this doesn't refuse to run twice — it only stores
+a provider's public SAML metadata (entity id, URLs, signing certificate), which
+doesn't hand out any new authority. It does refuse to *replace* an existing
+provider without ``--replace``, since overwriting a certificate a working
+login depends on should not happen by accident. Prefer the console for
+rotations once it's reachable, since the endpoint records both fingerprints.
 
-- ``POST /api/identity-providers`` needs ``idp:write``, which only an admin has.
-- Becoming an admin needs ``scripts.grant_first_admin``, which grants to a user that
-  already exists.
-- Users are only created by logging in.
-- Logging in needs a registered identity provider.
-
-There is no password authentication anywhere, on purpose, so no hand-made row breaks
-the loop either — an admin who cannot authenticate is not a way in. The first
-provider has to be registered out of band or not at all.
-
-``grant_first_admin`` closed the analogous gap one step further along, and the
-deploy runbook then said "POST it to /api/identity-providers", which is not
-something a new deployment can do. This is the missing step, found by trying to
-follow the runbook on a real deployment.
-
-Why it does not refuse to run twice
------------------------------------
-
-Unlike ``grant_first_admin``, which is a genuine backdoor if it keeps working, this
-grants nobody anything. It stores the public half of a provider's SAML metadata — an
-entity id, two URLs and a signing certificate — and an operator who can already run
-commands inside the container is not being handed new authority by it.
-
-It does refuse to *replace* an existing provider without ``--replace``, because
-overwriting the certificate a working login depends on should be deliberate. Use the
-console for rotations once somebody can reach it: the endpoint records the old and
-new fingerprints, which this cannot do as usefully.
-
-The audit entry
----------------
-
-Written as ``actor_type=system`` with ``bootstrap: true`` in the detail, the same
-shape ``grant_first_admin`` uses. Every other provider registration on the log has a
-person behind it; this one has nobody, and the log should say so rather than
-inventing an actor.
+The audit entry is written as ``actor_type=system`` with ``bootstrap: true``,
+same shape as ``grant_first_admin``, since there's no admin to attribute it to.
 """
 
 from __future__ import annotations
@@ -82,9 +57,8 @@ async def register(
 ) -> IdentityProvider:
     """Store what a provider's metadata says about it.
 
-    Goes through the same reader the endpoint uses, so a document this accepts is one
-    the console would have accepted, and a document it rejects fails here rather than
-    at the first login.
+    Goes through the same reader the endpoint uses, so this accepts and rejects
+    the same documents the console would.
 
     Raises:
         Refused: The metadata is unusable, the slug is taken and --replace was not
@@ -103,8 +77,8 @@ async def register(
             "records the old and new certificate fingerprints."
         )
 
-    # The same guard the endpoint has. Two slugs for one provider makes logins
-    # ambiguous: an assertion names the entity that issued it, not which of our rows
+    # Same guard the endpoint has: two slugs for one provider makes logins
+    # ambiguous, since an assertion names the entity that issued it, not the row
     # to check it against.
     clash = await session.scalar(
         select(IdentityProvider).where(
@@ -138,8 +112,7 @@ async def register(
         session,
         AuditDraft(
             action="idp.updated" if existing else "idp.registered",
-            # Nobody did this. There is no admin yet — that is the whole reason this
-            # script exists — so inventing an actor would put a lie on the log.
+            # No admin exists yet, so there's no person to attribute this to.
             actor_type=ActorType.SYSTEM,
             actor_id=None,
             actor_label=ACTOR_LABEL,
@@ -195,8 +168,6 @@ async def main_async(args: argparse.Namespace) -> int:
             base = settings.base_url.rstrip("/")
             print(f"Log in at: {base}/saml/login?idp={provider.slug}")
             if total == 0:
-                # The reason this script exists, said out loud at the moment it stops
-                # being true.
                 print(
                     "\nThat was the first provider on this deployment, so somebody "
                     "can now log in.\nThe first person to do so becomes an ordinary "

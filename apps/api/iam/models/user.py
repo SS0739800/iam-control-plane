@@ -1,9 +1,7 @@
 """A person, and what they're allowed to do in this console.
 
-The field names match what SCIM calls things (userName, externalId, active,
-employeeNumber) instead of picking our own words for them. P3 has to hand these
-straight back over SCIM, and renaming everything at that point would mean
-touching every file.
+Field names match SCIM's own names (userName, externalId, active,
+employeeNumber) since these get sent back over SCIM as-is.
 """
 
 from __future__ import annotations
@@ -52,8 +50,8 @@ class User(UUIDPrimaryKey, Timestamps, Base):
         nullable=False,
         default=True,
         server_default=text("true"),
-        comment="Switching this off is how we remove someone. We never delete the "
-        "row, so you can still see what they had access to after they've left.",
+        comment="Switching this off is how we remove someone; the row is "
+        "never deleted, so past access stays visible.",
     )
 
     # -------------------------------------------------------------- employment
@@ -73,16 +71,16 @@ class User(UUIDPrimaryKey, Timestamps, Base):
         nullable=False,
         default=PlatformRole.EMPLOYEE,
         server_default=PlatformRole.EMPLOYEE.value,
-        comment="What this person can do in the console. A cached copy of their "
-        "role grants — iam/access/roles.py is the only thing that writes it.",
+        comment="What this person can do in the console. A cached copy of "
+        "their role grants; only iam/access/roles.py writes it.",
     )
 
     source: Mapped[IdentitySource] = mapped_column(
         enum_type(IdentitySource),
         nullable=False,
         default=IdentitySource.MANUAL,
-        comment="Where this record came from. If SCIM created it, editing it here "
-        "gets overwritten on the next sync, so the API refuses those edits.",
+        comment="Where this record came from. If SCIM created it, the API "
+        "refuses manual edits since the next sync would overwrite them.",
     )
 
     # ------------------------------------------------------------ relationships
@@ -123,8 +121,7 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     )
 
     __table_args__ = (
-        # The user list filters on these all the time. With 1,284 users, scanning
-        # the whole table is already slow enough to notice.
+        # The user list filters on all of these.
         Index("ix_users_active", "active"),
         Index("ix_users_department", "department"),
         Index("ix_users_manager_id", "manager_id"),

@@ -1,8 +1,7 @@
 """Settings helpers the test suite builds apps from.
 
-Its own module rather than living in conftest.py, because saml_harness.py needs
-them and conftest.py needs saml_harness.py. Putting them here is what stops those
-two importing each other.
+Its own module rather than living in conftest.py: saml_harness.py needs these,
+and conftest.py needs saml_harness.py, so keeping them here avoids a cycle.
 """
 
 from __future__ import annotations
@@ -44,12 +43,11 @@ TEST_DATABASE_ENV_VAR = "IAM_TEST_DATABASE_URL"
 def signing_keypair() -> Keypair:
     """A throwaway signing keypair, for tests that build a production app.
 
-    Production refuses to start without one, which is the point — but a test about
-    authentication should not have to care, so this exists to satisfy the guard
+    Production refuses to start without one, so this satisfies that guard
     without making every such test generate its own RSA key.
 
-    Cached: keygen costs about a tenth of a second, and a test suite that builds
-    several production apps would otherwise pay it each time.
+    Cached, since keygen costs about a tenth of a second and a test suite that
+    builds several production apps would otherwise pay it each time.
     """
     from iam.saml.keys import generate
 
@@ -59,16 +57,15 @@ def signing_keypair() -> Keypair:
 def build_settings(database_url: str = UNREACHABLE_DATABASE_URL) -> Settings:
     """Settings for a test app. Values passed here beat whatever's in the shell.
 
-    ``_env_file=None`` matters more than it looks. Settings reads .env by default, so
-    without this a field nobody passes explicitly is inherited from whatever the
-    developer happens to have configured. That bit: alembic_database_url was picked
-    up from the repo's .env, which meant migration_url pointed at the real compose
-    database while database_url pointed at the unreachable stand-in — so a test
-    reaching for the migration URL would quietly connect to a live database.
+    ``_env_file=None`` matters: without it, Settings reads .env by default, so
+    a field nobody passes explicitly is inherited from the developer's own
+    config. This actually happened — alembic_database_url got picked up from
+    the repo's .env, so migration_url pointed at the real compose database
+    while database_url pointed at the unreachable stand-in, and a test reaching
+    for the migration URL quietly connected to a live database.
 
-    alembic_database_url is pinned to the same value for the same reason. The point
-    of this helper is that nothing it returns reaches a real server unless the caller
-    asked for one.
+    alembic_database_url is pinned to the same value for the same reason:
+    nothing this helper returns should reach a real server unless asked for.
     """
     return Settings(
         _env_file=None,
@@ -92,9 +89,8 @@ def database_url() -> str:
 class ScimCaller:
     """A SCIM client and the token it was issued, unique to one test.
 
-    The token is generated here and only its hash is stored, the same way a real
-    one would be — so these tests exercise the actual lookup path rather than a
-    shortcut around it.
+    The token is generated here and only its hash is stored, the same way a
+    real one would be, so these tests exercise the actual lookup path.
     """
 
     suffix: str
@@ -156,10 +152,10 @@ def remove_scim_client(caller: ScimCaller) -> None:
 def run_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
     """Run one piece of database work on its own engine, and commit it.
 
-    For setting up and checking on a test that drives the app over HTTP. Its own
-    engine, because the app under test has one of its own running in the
-    TestClient's event loop, and sharing a connection across the two would be the
-    interesting kind of flaky.
+    For setting up and checking on a test that drives the app over HTTP. Uses
+    its own engine since the app under test has one running in the
+    TestClient's event loop, and sharing a connection across the two would be
+    flaky.
     """
 
     async def main() -> T:
@@ -178,12 +174,12 @@ def run_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
 async def with_db(work: Callable[[AsyncSession], Awaitable[T]]) -> T:
     """The same as run_db, awaited instead of run.
 
-    Exists because run_db calls asyncio.run, which cannot be called from inside a
-    running loop — so using it from an async test fails with a closed-transport error
-    that points at asyncio internals rather than at the real mistake. That has now
-    caught me twice.
+    run_db calls asyncio.run, which can't run inside a running loop — using it
+    from an async test fails with a closed-transport error that points at
+    asyncio internals rather than the real mistake.
 
-    Use run_db from a sync test driving the app over HTTP, and this from an async one.
+    Use run_db from a sync test driving the app over HTTP, and this from an
+    async one.
     """
     engine = build_engine(build_settings(database_url()))
     try:

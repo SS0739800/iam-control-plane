@@ -1,9 +1,8 @@
 """The access review: what somebody should actually look at.
 
-Guarded by audit:read, which auditor, helpdesk and admin all hold. This is review
-work rather than a change, and the person whose job is reviewing access should not
-need the permission to grant it — the whole point of the auditor role is that those
-two are separate.
+Guarded by audit:read, which auditor, helpdesk, and admin all hold. This is
+review work, not a change, so it doesn't require the permission to grant
+access — the auditor role keeps those two separate.
 """
 
 from __future__ import annotations
@@ -29,9 +28,9 @@ router = APIRouter(prefix="/access-review", tags=["access review"])
 async def access_review(session: SessionDep) -> AccessReviewOut:
     """Run every check and report what turned up, worst first.
 
-    Computed on request rather than stored. The answer changes whenever anybody
-    grants anything, and a cached review is one that tells an auditor about a
-    problem somebody fixed last week.
+    Computed on request, not stored — the answer changes whenever anyone
+    grants anything, and a cached review could tell an auditor about a
+    problem that's already fixed.
     """
     result = await run(session, now=dt.datetime.now(dt.UTC))
 

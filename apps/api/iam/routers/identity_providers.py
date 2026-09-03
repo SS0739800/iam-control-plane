@@ -1,14 +1,14 @@
 """Registering the providers we accept logins from.
 
-Registering one is the most consequential write in this system. The certificate
-that lands on the row becomes the thing every future login is checked against, so
-whoever can change it can decide who gets to be anybody. That's why it needs its
-own permission rather than borrowing apps:write, and why every change here is
-audited with the certificate fingerprint attached.
+Registering one is the most consequential write in this system. The
+certificate that lands on the row becomes the thing every future login is
+checked against, so whoever can change it can decide who gets to be anybody.
+That's why it needs its own permission rather than borrowing apps:write, and
+why every change here is audited with the certificate fingerprint attached.
 
-The document is pasted in. We never fetch a metadata URL, and the reasoning is
-worth reading before adding that convenience back:
-docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+The document is pasted in. We never fetch a metadata URL — see
+docs/adr/0006-paste-metadata-do-not-fetch-it.md before adding that
+convenience back.
 """
 
 from __future__ import annotations
@@ -66,21 +66,22 @@ def _detail(provider: IdentityProvider, *, base_url: str) -> IdentityProviderDet
 async def sign_in_options(session: SessionDep, settings: SettingsDep) -> list[SignInOption]:
     """The providers a signed-out visitor can choose from.
 
-    Unauthenticated on purpose, and the only endpoint here that is. Everything else
-    about a provider needs idp:read, but a login screen cannot ask for a permission —
-    the person reading it has no session yet, which is the entire reason they are
-    looking at it.
+    Unauthenticated, the only endpoint here that is. Everything else about a
+    provider needs idp:read, but a login screen can't ask for a permission —
+    the person reading it has no session yet, which is why they're looking
+    at it.
 
-    The console used to solve this by hard-coding ?idp=authentik into the sign-in
-    button, which worked locally and pointed at a provider that did not exist in
-    production. Somebody had to be handed a URL to get in at all.
+    The console used to solve this by hard-coding ?idp=authentik into the
+    sign-in button, which worked locally and pointed at a provider that
+    didn't exist in production. Somebody had to be handed a URL to get in
+    at all.
 
-    Only enabled providers, because a disabled one is not a way to sign in, and
+    Only enabled providers: a disabled one isn't a way to sign in, and
     offering it would produce a refusal that looks like a fault.
 
-    Declared before the "" route below it: FastAPI matches in order, and "/{slug}"
-    would otherwise swallow this path and try to look up a provider called
-    "sign-in-options".
+    Declared before the "" route below it: FastAPI matches in order, and
+    "/{slug}" would otherwise swallow this path and try to look up a
+    provider called "sign-in-options".
     """
     rows = (
         await session.scalars(
@@ -111,8 +112,8 @@ async def list_identity_providers(
 ) -> list[IdentityProviderSummary]:
     """Every registered provider, enabled or not.
 
-    Not paginated. There are three of these at most, and there is never going to
-    be a fourth page of identity providers.
+    Not paginated. There are three of these at most, and there's never going
+    to be a fourth page of identity providers.
     """
     rows = (await session.scalars(select(IdentityProvider).order_by(IdentityProvider.name))).all()
     return [_summary(provider, base_url=settings.base_url) for provider in rows]
@@ -147,15 +148,15 @@ async def register_identity_provider(
 ) -> IdentityProviderDetail:
     """Read a provider's metadata and store what it says.
 
-    Registering the same slug again replaces the details, which is what makes this
-    the way to handle a certificate rotation: paste the new metadata, and the row
-    updates. It's a POST that isn't a create-only, on purpose — a separate "update"
-    endpoint would take the same document and do the same work, and having two
-    would just mean guessing which one to use.
+    Registering the same slug again replaces the details, which is how this
+    handles a certificate rotation: paste the new metadata, the row updates.
+    A POST that isn't create-only, since a separate "update" endpoint would
+    take the same document and do the same work, and having two would just
+    mean guessing which one to use.
 
-    Rotations are worth watching, so the audit entry records the old and new
-    certificate fingerprints whenever the key changes. A key changing when nobody
-    rotated one is exactly the event you want to find in a log.
+    The audit entry records the old and new certificate fingerprints
+    whenever the key changes, so a key changing when nobody rotated one
+    shows up in the log.
 
     Raises:
         HTTPException: 400 if the metadata can't be read or is missing something.
@@ -173,8 +174,9 @@ async def register_identity_provider(
         select(IdentityProvider).where(IdentityProvider.slug == payload.slug)
     )
 
-    # Two slugs pointing at one provider would make logins ambiguous: an assertion
-    # says which entity issued it, not which of our rows to check it against.
+    # Two slugs pointing at one provider would make logins ambiguous: an
+    # assertion says which entity issued it, not which of our rows to check
+    # it against.
     clash = await session.scalar(
         select(IdentityProvider).where(
             IdentityProvider.entity_id == metadata.entity_id,
@@ -236,10 +238,10 @@ async def register_identity_provider(
     await session.commit()
 
     # Reload before reading anything off the row. updated_at is set by the
-    # database through onupdate, so after an UPDATE that attribute is expired, and
-    # touching an expired attribute wants a query — which plain attribute access
-    # can't do under asyncio. It fails as MissingGreenlet rather than as anything
-    # that mentions timestamps, so this line is not as optional as it looks.
+    # database through onupdate, so after an UPDATE that attribute is
+    # expired, and touching an expired attribute needs a query, which plain
+    # attribute access can't do under asyncio — it fails as MissingGreenlet,
+    # not with anything that mentions timestamps.
     await session.refresh(provider)
 
     return _detail(provider, base_url=settings.base_url)

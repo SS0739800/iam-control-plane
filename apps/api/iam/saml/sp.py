@@ -1,14 +1,13 @@
 """Our side of the login: who we are, and how we ask someone to sign in.
 
-No xmlsec here either. Building a login request is assembling a bit of XML and
-compressing it, and our metadata document is the same. Both are plain strings, so
-this runs and is tested anywhere.
+No xmlsec here either. Building a login request is assembling a bit of XML
+and compressing it, and our metadata document is the same — both plain
+strings, so this runs and is tested anywhere.
 
-We don't sign our login requests. That's normal and it's what most setups do: the
-provider already knows which address to send the answer to, because that address
-was agreed when the application was registered, and it won't send it anywhere
-else. Signing them becomes worth doing in P5, when we're the one issuing logins
-and we need a key anyway.
+We don't sign our login requests. That's normal, and what most setups do:
+the provider already knows which address to send the answer to (agreed at
+registration) and won't send it anywhere else. Signing becomes worth doing
+in P5, when we're the one issuing logins and need a key anyway.
 """
 
 from __future__ import annotations
@@ -55,10 +54,10 @@ def new_request_id() -> str:
 class ServiceProvider:
     """Who we are, from a provider's point of view.
 
-    All three come from one base address, so there's a single thing to change when
-    this moves from localhost to a real hostname. Getting these wrong is the most
-    common setup mistake, and it fails in a confusing way: the provider signs
-    someone in and then posts the answer somewhere that isn't us.
+    All three come from one base address, so there's a single thing to change
+    when this moves from localhost to a real hostname. Getting these wrong is
+    a common setup mistake and fails confusingly: the provider signs someone
+    in and posts the answer somewhere that isn't us.
     """
 
     entity_id: str
@@ -68,8 +67,9 @@ class ServiceProvider:
     signing_certificate: str | None = None
     """Our certificate, base64 with no header, or None when none is configured.
 
-    Published so a provider can verify the logout requests we sign. A signature
-    nobody can check is worse than none: it looks like security and is not.
+    Published so a provider can verify the logout requests we sign. A
+    signature nobody can check is worse than none: it looks like security
+    and isn't.
     """
 
     @classmethod
@@ -117,9 +117,9 @@ class ServiceProvider:
         """Our signing certificate, or nothing at all.
 
         Omitted rather than left empty when no key is configured. An empty
-        KeyDescriptor is a document some providers reject outright and others
-        accept and then fail to verify against — both worse than saying nothing,
-        which at least means "this application does not sign".
+        KeyDescriptor gets rejected outright by some providers and silently
+        fails verification on others — both worse than omitting it, which
+        just means "this application doesn't sign".
         """
         if not self.signing_certificate:
             return ""
@@ -145,10 +145,10 @@ def build_authn_request(
 ) -> str:
     """Build the XML asking a provider to sign someone in.
 
-    The id in here is the important part. The answer has to quote it back, and
-    that's what proves the answer is for us rather than something someone posted at
-    us out of the blue. It gets stored before the person is redirected, and looked
-    up again when the answer arrives.
+    The id is the important part. The answer has to quote it back, which is
+    what proves the answer is for us rather than something posted at us out
+    of the blue. It's stored before the redirect and looked up again when the
+    answer arrives.
     """
     stamp = issued_at.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     force = ' ForceAuthn="true"' if force_authn else ""
@@ -182,16 +182,16 @@ def build_logout_request(
 ) -> str:
     """Build the XML asking a provider to sign someone out.
 
-    Two things identify who to sign out. The NameID says which person, and the
-    SessionIndex says which of their sessions — somebody signed in on a laptop and
-    a phone has two, and leaving the index out asks the provider to end both.
-    We send it, so signing out here signs out the one session that matches.
+    Two things identify who to sign out: the NameID says which person, and
+    the SessionIndex says which of their sessions (somebody signed in on a
+    laptop and a phone has two). Leaving the index out asks the provider to
+    end both; we send it so only the matching session ends.
 
-    The values are XML-escaped, unlike the ones in build_authn_request. That isn't
-    inconsistency: those come from our own configuration, and these came from the
-    provider and went through our database on the way here. An ampersand in a
-    NameID would produce a document the provider can't parse, and a quote or an
-    angle bracket would let it be steered.
+    The values here are XML-escaped, unlike build_authn_request's. That's not
+    inconsistency: those come from our own configuration, these came from the
+    provider through our database. An ampersand in a NameID would break
+    parsing, and a quote or angle bracket unescaped would let the value steer
+    the document.
     """
     stamp = issued_at.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     name_format = f' Format="{name_id_format}"' if name_id_format else ""
@@ -224,9 +224,9 @@ def build_logout_response(
 ) -> str:
     """Build the answer to a provider's request that we sign somebody out.
 
-    The provider is waiting to hear that we did it. Say so even when there was no
-    session to end: from its point of view the person is signed out of this
-    application either way, which is what it asked for.
+    Says success even with no session to end: from the provider's point of
+    view the person is signed out of this application either way, which is
+    what it asked for.
     """
     stamp = issued_at.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     status = (
@@ -252,9 +252,8 @@ def build_logout_response(
 def deflate_and_encode(xml: str) -> str:
     """Compress and base64 the request, the way the redirect binding wants it.
 
-    Raw deflate with no zlib header, which is what the spec asks for and what
-    providers expect. Sending a normal zlib stream here produces a request the
-    provider can't read, with an unhelpful error.
+    Raw deflate with no zlib header, per spec. A normal zlib stream here
+    produces a request the provider can't read, with an unhelpful error.
     """
     compressor = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
     deflated = compressor.compress(xml.encode("utf-8")) + compressor.flush()
@@ -295,28 +294,26 @@ def redirect_binding_url(
 ) -> str:
     """Put a SAML message in a URL, the way the redirect binding wants it.
 
-    Same shape as login_redirect_url, but for logout, where the message can be either
-    a request or a response depending on who started it.
+    Same shape as login_redirect_url, but for logout, where the message can
+    be either a request or a response depending on who started it.
 
-    Signed when a key is given, and that is not optional in practice any more. Okta
-    refuses an unsigned LogoutRequest outright, so single logout silently did nothing:
-    our session ended, theirs did not, and the next login walked straight back in
-    without asking for a password. Which is the opposite of what somebody pressing
-    sign out believes they have done.
+    Signed when a key is given, and that's effectively required now: Okta
+    refuses an unsigned LogoutRequest outright, so single logout used to do
+    nothing — our session ended, theirs didn't, and the next login walked
+    straight back in without a password, the opposite of what pressing sign
+    out is supposed to do.
 
-    The signing is not XML signing
-    ------------------------------
+    This signs the query string, not the document. The rule is exact: build
+    ``SAMLRequest=…&RelayState=…&SigAlg=…`` in that order, each value
+    URL-encoded, sign those bytes, and append ``Signature=``. Not the decoded
+    XML, not a different parameter order, not the string after the provider
+    re-encodes it — get any of that wrong and the signature just fails with
+    "invalid signature" and no clue why.
 
-    This binding signs the *query string*, not the document. The rule is exact and
-    unforgiving: build ``SAMLRequest=…&RelayState=…&SigAlg=…`` in that order, with
-    each value URL-encoded, sign those bytes, and append ``Signature=``. Not the
-    decoded XML, not a different parameter order, not the string after the provider
-    re-encodes it. Get any of that wrong and the signature verifies against nothing,
-    with an error that says only "invalid signature".
-
-    RelayState is included only when we send one, because the octet string is what we
-    actually put on the wire — adding an empty parameter to the signature that is not
-    in the URL breaks it just as thoroughly as omitting a real one.
+    RelayState is included only when we send one: the octet string signed has
+    to match what's actually on the wire, and an empty parameter in the
+    signature that's absent from the URL breaks it just as much as a real one
+    that's missing.
     """
     parameters: dict[str, str] = {}
     if saml_request is not None:
@@ -328,9 +325,9 @@ def redirect_binding_url(
 
     if private_key_pem is not None:
         parameters["SigAlg"] = RSA_SHA256
-        # urlencode with the dict in insertion order gives exactly the octet string
-        # the specification asks to be signed, which is also exactly what goes in the
-        # URL. Building the two separately is how the two drift apart.
+        # urlencode with the dict in insertion order gives exactly the octet
+        # string the spec asks to be signed, which is also exactly what goes
+        # in the URL. Building the two separately is how they'd drift apart.
         signed_part = urlencode(parameters)
         signature = urlencode({"Signature": _sign_query(signed_part, private_key_pem)})
         joiner = "&" if "?" in endpoint else "?"
@@ -343,9 +340,9 @@ def redirect_binding_url(
 def _sign_query(octets: str, private_key_pem: str) -> str:
     """Sign the redirect binding's query string, base64 for putting back in a URL.
 
-    Uses cryptography rather than xmlsec on purpose: there is no XML here, and xmlsec
-    only installs in the container — signing a query string is the one part of SAML
-    that can be tested on any machine.
+    Uses cryptography instead of xmlsec: there's no XML here, and xmlsec only
+    installs in the container, so this is the one part of SAML signing that
+    can be tested on any machine.
     """
     key = serialization.load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
     if not isinstance(key, rsa.RSAPrivateKey):
@@ -358,9 +355,9 @@ def _sign_query(octets: str, private_key_pem: str) -> str:
 def is_safe_return_path(path: str) -> bool:
     """Whether it's safe to send someone here after they log in.
 
-    Only paths within this site. Without this check, anyone could hand out a login
-    link that sends people to their own site afterwards, and the link would look
-    completely legitimate because it starts at a real login page.
+    Only paths within this site. Without this check, anyone could hand out a
+    login link that redirects to their own site afterward, and it would look
+    like a completely legitimate link since it starts at a real login page.
 
     The double-slash case is the one people miss: "//evil.example" is a URL
     pointing at another host, not a path on this one.

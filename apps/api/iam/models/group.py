@@ -1,8 +1,7 @@
 """Groups, and who's in them.
 
-Membership is its own class rather than a plain link table so we can store when
-someone joined. The access reviews in P4 need to ask how long someone has had
-something.
+Membership is its own class, not a plain link table, so we can record when
+someone joined (access reviews need to ask how long they've had it).
 """
 
 from __future__ import annotations
@@ -44,8 +43,8 @@ class Group(UUIDPrimaryKey, Timestamps, Base):
 
     hrms_role: Mapped[str | None] = mapped_column(
         String(64),
-        comment="What role being in this group gives you in the HRMS. Set on the "
-        "group, not per person, so you manage access by changing membership.",
+        comment="The HRMS role membership in this group grants. Set on the "
+        "group, not per person.",
     )
 
     member_links: Mapped[list[GroupMember]] = relationship(
@@ -74,10 +73,8 @@ class Group(UUIDPrimaryKey, Timestamps, Base):
 class GroupMember(Base):
     """One person being in one group, and why.
 
-    The `source` column is what lets an access rule take back only what it granted.
-    Three things add memberships — the provider, somebody in the console, and a
-    rule — and a rule that removed the provider's rows would fight the next sync
-    forever. See MembershipSource.
+    The `source` column lets an access rule remove only the memberships it
+    granted, not ones added by the provider or a person. See MembershipSource.
     """
 
     __tablename__ = "group_members"
@@ -96,19 +93,17 @@ class GroupMember(Base):
         nullable=False,
         default=MembershipSource.MANUAL,
         server_default=MembershipSource.MANUAL.value,
-        comment="Why they are in this group. Only 'rule' rows are ever removed by "
+        comment="Why they are in this group. Only 'rule' rows are removed by "
         "the rule engine.",
     )
 
     added_by_rule_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("access_rules.id", ondelete="SET NULL"),
-        comment="Which rule put them here, when source is 'rule'. Goes null if the "
-        "rule is deleted, which leaves the membership in place rather than "
-        "quietly removing somebody's access as a side effect.",
+        comment="Which rule put them here, when source is 'rule'. Goes null "
+        "if the rule is deleted, leaving the membership in place.",
     )
 
-    # No updated_at. You're either in a group or you're not; there's nothing here
-    # to edit.
+    # No updated_at: membership is either there or not, nothing to edit.
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -119,12 +114,11 @@ class GroupMember(Base):
     user: Mapped[User] = relationship(back_populates="group_links")
 
     __table_args__ = (
-        # The primary key already answers "who's in this group". This index answers
-        # the other way round, "what groups is this person in", which the user page
-        # asks every time it loads.
+        # The primary key covers "who's in this group"; this covers the
+        # reverse lookup, "what groups is this user in".
         Index("ix_group_members_user_id", "user_id"),
-        # The rule engine reconciles one person's rule-granted memberships and
-        # needs to find exactly those without scanning everything they are in.
+        # Lets the rule engine find one user's rule-granted memberships
+        # without scanning all of their memberships.
         Index("ix_group_members_user_source", "user_id", "source"),
     )
 

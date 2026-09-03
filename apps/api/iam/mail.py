@@ -1,29 +1,15 @@
 """Sending email, for the access request notifications.
 
-Best effort, on purpose
------------------------
-
 Nothing here is allowed to fail a request. If somebody approves an access grant
 and the mail server is down, the grant still happens and the approval is still
-recorded — the notification is a courtesy, and losing it must not lose the
-decision. So every function catches its own errors and reports whether it managed
-to send, and no caller is expected to handle a failure.
+recorded — the notification is a courtesy. So every function catches its own
+errors and returns whether it managed to send, instead of raising. That's the
+opposite of the audit log, where a failure has to abort since the audit entry
+is the record itself, not a copy of one.
 
-That is the opposite of how the audit log works, and the difference is
-deliberate: the audit entry *is* the record, so a failure there has to abort. An
-email is a copy of a record that already exists.
-
-Blocking sockets in an async handler
-------------------------------------
-
-``smtplib`` is synchronous. Called directly from a request handler it would block
-the event loop for as long as the mail server takes to answer, which on a
-misbehaving server means every other request waits too. So sending runs in a
-worker thread via ``asyncio.to_thread``.
-
-The alternative is an async SMTP library, which is one more dependency for a
-handful of messages a day. If this ever becomes a queue, it should become a real
-background job rather than a faster socket.
+``smtplib`` is synchronous, so sending runs in a worker thread via
+``asyncio.to_thread`` instead of blocking the event loop for as long as the mail
+server takes to answer.
 """
 
 from __future__ import annotations
@@ -41,8 +27,8 @@ logger = logging.getLogger(__name__)
 SEND_TIMEOUT_SECONDS = 10
 """How long to wait on the mail server before giving up.
 
-Short. A notification nobody is waiting for is not worth holding a worker thread
-for, and the failure is already harmless.
+Kept short since a notification nobody is waiting for isn't worth holding a
+worker thread for.
 """
 
 
@@ -58,9 +44,9 @@ class Mail:
     def recipients(self) -> tuple[str, ...]:
         """Addresses with the obvious rubbish removed.
 
-        An address list assembled from user records will contain blanks and
-        duplicates — somebody with no email, two people sharing one. Sending to a
-        blank address is an error from the server; sending twice is just rude.
+        Drops blanks (somebody with no email) and de-duplicates (two people
+        sharing one address), since sending to a blank address errors and
+        sending twice is just annoying.
         """
         seen: dict[str, None] = {}
         for address in self.to:
@@ -94,13 +80,11 @@ def _send_blocking(message: EmailMessage, settings: Settings) -> None:
 async def send(mail: Mail, settings: Settings) -> bool:
     """Try to send one message. Returns whether it went.
 
-    Never raises. A caller that cares can look at the return value; a caller that
-    doesn't can ignore it, which is the common case and the reason this signature
-    is a bool rather than an exception.
+    Never raises. A caller that cares can check the return value; most don't.
     """
     if not mail.recipients:
-        # Worth a warning rather than silence: "nobody to notify" usually means
-        # the approvers have no email addresses, which somebody should fix.
+        # "Nobody to notify" usually means the approvers have no email
+        # addresses, which somebody should fix.
         logger.warning("mail.no_recipients", extra={"subject": mail.subject})
         return False
 
@@ -118,8 +102,8 @@ async def send(mail: Mail, settings: Settings) -> bool:
     try:
         await asyncio.to_thread(_send_blocking, _build(mail, settings), settings)
     except (OSError, smtplib.SMTPException) as exc:
-        # Caught, not raised. The decision this message describes has already been
-        # made and recorded; failing here would undo something that worked.
+        # Caught, not raised: the decision this message describes is already
+        # recorded, so failing here would undo nothing but lose the notice.
         logger.warning(
             "mail.send_failed",
             extra={

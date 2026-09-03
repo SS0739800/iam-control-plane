@@ -1,31 +1,22 @@
 """Reading a provider's metadata document.
 
-This is how a provider gets registered. Their metadata says four things we need:
-what they call themselves, where to send people to log in, where to send them to
-log out, and the certificate every login from them has to be signed with. Typing
-those in by hand is how you end up trusting the wrong key.
+This is how a provider gets registered. Their metadata says four things we
+need: what they call themselves, where to send people to log in, where to send
+them to log out, and the certificate every login from them has to be signed
+with. Typing those in by hand is how you end up trusting the wrong key.
 
-Why this parses XML with the standard library when reader.py uses lxml
--------------------------------------------------------------------
+This uses xml.etree from the standard library instead of the lxml + xmlsec
+setup reader.py uses, because the threat model is different. A login response
+is attacker-supplied and has to be verified cryptographically, so it needs
+lxml, xmlsec, and the container xmlsec requires. Metadata is pasted in once by
+an administrator setting up a provider; there's no signature to check, since
+trusting it is the decision being made here. So there's nothing to gain from
+xmlsec, and using the standard library instead means registering a provider is
+covered by tests on a laptop and in CI, not just in the container.
 
-Different documents, different threat model, and the difference is the reason
-the whole file exists.
-
-A login response is attacker-supplied. It arrives on every sign-in, through the
-browser of whoever is trying to get in, and it has to be verified
-cryptographically. That one gets lxml, a locked-down parser, and xmlsec — and
-because xmlsec doesn't install on Windows, it can only run in the container.
-
-Metadata is different. An administrator pastes it in once, deliberately, while
-setting up a provider. There's no signature to check, because trusting it is the
-decision being made: whatever certificate this document names becomes the thing
-every future login is checked against. Nothing is gained by cryptography here.
-
-So this uses xml.etree from the standard library, which installs everywhere, and
-that means registering a provider is covered by tests that run on a laptop and in
-CI rather than only in a container. The two risks that come with it are dealt with
-directly: a size cap, and a flat refusal to parse anything carrying a DOCTYPE,
-which is what an entity expansion attack needs.
+The two risks that come with a laxer parser are handled directly: a size cap,
+and a flat refusal to parse anything with a DOCTYPE (what an entity expansion
+attack needs).
 
 We do not fetch metadata URLs from the server. See ADR 0006.
 """
@@ -70,25 +61,23 @@ def certificate_body(pem_or_base64: str) -> str:
 def certificate_fingerprint(pem_or_base64: str) -> str:
     """SHA-256 fingerprint of a certificate, in the form every other tool shows it.
 
-    The same value `openssl x509 -fingerprint -sha256` prints, and the same one
-    authentik and Okta show in their own consoles, so an administrator can compare
-    the two and see they match. That's the whole job: making "is this the key I
-    think it is" answerable without diffing two blocks of base64.
+    Same value `openssl x509 -fingerprint -sha256` prints, and the same one
+    authentik and Okta show in their consoles, so an administrator can compare
+    the two without diffing two blocks of base64.
 
-    It hashes the certificate itself, not the text around it. An earlier version of
-    this took the first and last few characters of the PEM block, which meant every
-    certificate on earth had the same fingerprint — they all start with
-    "-----BEGIN CERTIFICATE-----". A test comparing two different certificates is
-    what caught it, and that test is still there.
+    Hashes the certificate itself, not the text around it. An earlier version
+    hashed the first and last few characters of the PEM block, which gave
+    every certificate the same fingerprint since they all start with
+    "-----BEGIN CERTIFICATE-----". There's still a test comparing two
+    different certificates that catches this.
     """
     body = certificate_body(pem_or_base64)
     try:
         der = base64.b64decode(body, validate=True)
     except (binascii.Error, ValueError):
-        # Not decodable, so there is no DER to hash and this won't match openssl.
-        # Hashing the text keeps the one property that matters — it changes when
-        # the certificate changes — rather than raising over a value we were only
-        # ever going to display.
+        # Not decodable, so this won't match openssl, but hashing the raw text
+        # still changes when the certificate changes, which is all we need
+        # since this is only for display.
         der = body.encode("utf-8")
 
     digest = hashlib.sha256(der).hexdigest().upper()
@@ -117,10 +106,9 @@ class IdpMetadata:
 def _as_pem(base64_body: str) -> str:
     """Wrap a bare certificate from metadata in PEM markers.
 
-    Metadata carries the base64 on its own, usually with the whitespace and line
-    breaks of whatever generated it. python3-saml wants a PEM block, and it wants
-    the body in 64-character lines, so this normalises both. Handing it the raw
-    text works often enough to be misleading and then fails on one provider.
+    Metadata carries the base64 on its own, with whatever whitespace and line
+    breaks the generator used. python3-saml wants a PEM block with the body in
+    64-character lines, so this normalises both.
     """
     body = _PEM_BODY.sub("", base64_body)
     lines = [body[index : index + 64] for index in range(0, len(body), 64)]
@@ -136,9 +124,7 @@ def _parse(xml: str) -> ElementTree.Element:
         raise UnreadableMetadata(f"the document is larger than {MAX_METADATA_BYTES} bytes")
 
     # Refused outright rather than parsed carefully. A DOCTYPE is what an entity
-    # expansion attack needs, real metadata never has one, and "no DOCTYPE" is a
-    # rule with no edge cases. Being clever with the parser instead would mean
-    # relying on it staying clever.
+    # expansion attack needs, and real metadata never has one.
     if "<!DOCTYPE" in raw.upper():
         raise UnreadableMetadata("the document declares a DOCTYPE, which we refuse to parse")
 
@@ -151,12 +137,11 @@ def _parse(xml: str) -> ElementTree.Element:
 def _descriptor(root: ElementTree.Element) -> ElementTree.Element:
     """Find the part of the document describing the provider's login service.
 
-    Metadata can describe several roles at once — the same document can say "here
-    is how I act as an identity provider" and "here is how I act as an
-    application". We want the first of those specifically. A document that only
-    describes the second one is somebody's application metadata pasted in by
-    mistake, which is a confusing thing to debug if it's reported as generic
-    failure.
+    Metadata can describe several roles at once: the same document can say
+    "here is how I act as an identity provider" and "here is how I act as an
+    application". We want the first. A document that only describes the
+    second is somebody's application metadata pasted in by mistake, so we say
+    that plainly instead of just failing generically.
     """
     if root.tag == f"{{{NS['md']}}}IDPSSODescriptor":
         return root
@@ -208,14 +193,13 @@ def _service_url(
 ) -> str | None:
     """The address for one service, in order of binding preference.
 
-    Redirect first by default, because that's what we send people over: a login
-    request goes in a query string. A provider that only offers POST is unusual but
-    valid, so it's taken rather than refused.
+    Redirect first by default, since that's what we send people over: a login
+    request goes in a query string. A provider that only offers POST is
+    unusual but valid, so it's taken rather than refused.
 
-    The preference is a parameter because it genuinely flips. An application's
-    assertion consumer must be the POST address — an assertion is far too long for a
-    query string — and taking its redirect address instead would send every login
-    somewhere that cannot read it.
+    The preference is a parameter because it flips for one case: an
+    application's assertion consumer must be the POST address, since an
+    assertion is too long for a query string.
     """
     services = descriptor.findall(f"./md:{element_name}", NS)
 
@@ -241,13 +225,13 @@ def _service_url(
 def _signing_cert(descriptor: ElementTree.Element) -> str:
     """The certificate logins from this provider must be signed with.
 
-    This is the single most important value in the document. Everything about
-    trusting a login reduces to "was it signed with the key matching this".
+    The single most important value in the document: trusting a login comes
+    down to "was it signed with the key matching this".
 
-    A provider can list several certificates, and can mark them for signing, for
-    encryption, or for both. We want a signing one. Taking the first certificate
-    in the document regardless would eventually pick up an encryption-only key and
-    fail every login with a signature error that points nowhere near the cause.
+    A provider can list several certificates, marked for signing, encryption,
+    or both. We want a signing one. Taking the first certificate regardless
+    would eventually pick up an encryption-only key and fail every login with
+    a confusing signature error.
     """
     fallback: str | None = None
 
@@ -295,7 +279,7 @@ def read_idp_metadata(xml: str) -> IdpMetadata:
 class SpMetadata:
     """What we take from an application's metadata, ready to store.
 
-    The mirror of IdpMetadata, and the field names match the applications columns so
+    The mirror of IdpMetadata; field names match the applications columns so
     registering is a copy rather than a translation.
     """
 
@@ -305,29 +289,27 @@ class SpMetadata:
     signing_cert: str | None = None
     """The application's own certificate, when it publishes one.
 
-    Optional, and that asymmetry with IdpMetadata is deliberate. A provider's
-    certificate is compulsory because everything about trusting a login reduces to
-    checking a signature against it. An application's is only needed if it signs the
-    requests it sends us, and most do not — so a missing one is normal here, and
-    demanding it would refuse perfectly ordinary metadata.
+    Optional, unlike IdpMetadata's. A provider's certificate is compulsory
+    since checking a login's signature depends on it. An application's is
+    only needed if it signs the requests it sends us, and most don't, so a
+    missing one is normal here.
     """
 
     want_assertions_signed: bool = True
     """Whether the application asks for the assertion itself to be signed.
 
-    Read for completeness. We sign the assertion either way, because signing only
-    the response wrapper leaves the claims swappable — see signer.py — so an
-    application asking for less than that gets more than it asked for.
+    Read for completeness. We sign the assertion either way, since signing
+    only the response wrapper would leave the claims swappable (see
+    signer.py).
     """
 
 
 def _sp_descriptor(root: ElementTree.Element) -> ElementTree.Element:
     """Find the part of the document describing the application.
 
-    The mirror of _descriptor. Same shapes, same order, and the same courtesy in
-    reverse: a document that only describes an identity provider says so rather
-    than failing generically, because pasting the wrong side's metadata in is an
-    easy mistake and a confusing one to debug.
+    The mirror of _descriptor: a document that only describes an identity
+    provider says so rather than failing generically, since pasting in the
+    wrong side's metadata is an easy mistake to make.
     """
     if root.tag == f"{{{NS['md']}}}SPSSODescriptor":
         return root
@@ -370,10 +352,9 @@ def read_sp_metadata(xml: str) -> SpMetadata:
         "AssertionConsumerService",
         required=True,
         label="assertion consumer",
-        # POST, not redirect, and this is the one place the preference has to flip.
-        # An assertion is delivered as a form POST — it is far too long for a query
-        # string — so the redirect-binding address, if the application publishes
-        # one, is not where a login can be sent.
+        # POST, not redirect: an assertion is delivered as a form POST since
+        # it's too long for a query string, so a redirect-binding address here
+        # wouldn't be usable even if the application publishes one.
         prefer=(POST_BINDING, REDIRECT_BINDING),
     )
 
@@ -392,9 +373,9 @@ def read_sp_metadata(xml: str) -> SpMetadata:
 def _optional_signing_cert(descriptor: ElementTree.Element) -> str | None:
     """An application's signing certificate, if it publishes one.
 
-    Returns None rather than raising, which is the whole difference from
-    _signing_cert. Most applications never sign anything they send us, so refusing
-    metadata without a certificate would refuse the common case.
+    Returns None instead of raising, unlike _signing_cert. Most applications
+    never sign anything they send us, so refusing metadata without a
+    certificate would refuse the common case.
     """
     try:
         return _signing_cert(descriptor)

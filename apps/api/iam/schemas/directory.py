@@ -1,9 +1,7 @@
 """Users, groups and apps, as the API sends them.
 
-Two shapes each: a Summary for lists and a Detail for a single record. Keeping
-them apart means the list query doesn't have to join membership and access tables
-it isn't going to show. With 1,284 users that's the difference between a fast page
-and a slow one.
+Two shapes each: a Summary for lists and a Detail for a single record, so
+the list query doesn't have to join membership and access tables it won't show.
 """
 
 from __future__ import annotations
@@ -53,19 +51,17 @@ class UserDetail(UserSummary):
 
     groups: list[GroupRef]
     applications: list[AppRef] = Field(
-        description=(
-            "Everything they can actually get into: given to them directly plus "
-            "anything that comes from a group they're in."
-        )
+        description="Everything they can get into: direct grants plus "
+        "anything from a group they're in."
     )
 
 
 class UserUpdate(BaseModel):
-    """The fields you're allowed to change. Leave a field out and it stays as is.
+    """The fields you're allowed to change. A field left out stays as is.
 
-    A short list on purpose. Login name, email and external id belong to the
-    identity provider for anyone it created, so editing them here would just get
-    undone on the next sync.
+    Login name, email, and external id come from the identity provider for
+    SCIM-created users, so editing them here would just be undone by the
+    next sync.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -74,11 +70,10 @@ class UserUpdate(BaseModel):
     department: str | None = None
     job_title: str | None = None
 
-    # platform_role is deliberately absent. It used to be here, and it was a hole:
-    # helpdesk holds users:write, so editing a user was a way around roles:write
-    # and straight to admin. It would also write the cached role with no grant
-    # behind it, which is the drift the grant table exists to prevent. Roles are
-    # granted at POST /api/users/{id}/role-grants and nowhere else.
+    # platform_role is not editable here. It used to be, which let helpdesk
+    # (who has users:write) grant themselves admin without roles:write, and
+    # would set the cached role with no grant behind it. Roles are granted
+    # only at POST /api/users/{id}/role-grants.
 
 
 # --------------------------------------------------------------------- groups
@@ -102,10 +97,8 @@ class GroupDetail(GroupSummary):
 
     applications: list[AppRef]
     members: list[UserRef] = Field(
-        description=(
-            "Only the first page of members. Use /api/groups/{id}/members to page "
-            "through a big group."
-        )
+        description="First page of members only. Use /api/groups/{id}/members "
+        "to page through a big group."
     )
 
 
@@ -127,10 +120,9 @@ class ApplicationSummary(BaseModel):
 class ApplicationDetail(ApplicationSummary):
     """Everything on the app page, including its SAML settings.
 
-    The SAML fields are what iam/routers/idp.py reads to answer a login, so they are
-    shown rather than hidden: a mistyped entity id is much easier to spot on a page
-    than by reading the database, and it is the difference between an application
-    working and every login for it being refused as an unknown issuer.
+    The SAML fields are shown, not hidden, because iam/routers/idp.py reads
+    them to answer logins, and a mistyped entity id is easier to spot here
+    than in the database.
     """
 
     entity_id: str | None
@@ -139,8 +131,7 @@ class ApplicationDetail(ApplicationSummary):
     nameid_format: str | None
     signing_cert: str | None = Field(
         default=None,
-        description="The SP's public certificate. Public by definition — it is "
-        "published in SAML metadata — so this is not a secret being leaked.",
+        description="The SP's public certificate, from its SAML metadata. Not a secret.",
     )
     created_at: dt.datetime
     updated_at: dt.datetime
@@ -152,9 +143,9 @@ class ApplicationDetail(ApplicationSummary):
 class ApplicationRegistration(BaseModel):
     """Register an application, or update one that already exists.
 
-    The metadata document carries the entity id, the addresses and the certificate,
-    so none of those are fields here. Letting somebody type them separately is how an
-    assertion ends up posted to an address the application never published — see
+    Entity id, addresses, and certificate come from the pasted metadata
+    document rather than being typed separately, since a typed address
+    could be wrong in a way that misdirects an assertion. See
     docs/adr/0006-paste-metadata-do-not-fetch-it.md.
     """
 
@@ -162,10 +153,8 @@ class ApplicationRegistration(BaseModel):
         min_length=1,
         max_length=64,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
-        description=(
-            "Short name used in links, e.g. /idp/sso/expenses. Lowercase, digits "
-            "and dashes, because it goes in a URL."
-        ),
+        description="Short name used in links, e.g. /idp/sso/expenses. "
+        "Lowercase, digits, and dashes only.",
     )
     name: str = Field(min_length=1, max_length=255, description="What to call it in the console.")
     description: str | None = Field(default=None, max_length=500)
@@ -175,8 +164,6 @@ class ApplicationRegistration(BaseModel):
     )
     enabled: bool = Field(
         default=True,
-        description=(
-            "Turn an application off to stop issuing logins for it without losing "
-            "its settings or who had access."
-        ),
+        description="Turn off to stop issuing logins without losing settings "
+        "or access history.",
     )

@@ -8,8 +8,8 @@ sessions.py      keeping them signed in afterwards.
 
 reader.py is the only one of these that needs xmlsec, so it's the only one that
 can't run on Windows. Everything else is plain comparisons and database work and
-is tested anywhere. The split is on purpose: see
-docs/adr/0005-validate-assertions-ourselves.md.
+runs anywhere. See docs/adr/0005-validate-assertions-ourselves.md for why it's
+split this way.
 """
 
 from __future__ import annotations

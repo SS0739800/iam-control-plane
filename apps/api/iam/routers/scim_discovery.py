@@ -1,20 +1,17 @@
 """The three documents a provider reads before it sends anything.
 
-ServiceProviderConfig says what this server can do. ResourceTypes says what kinds
-of thing live here. Schemas says what attributes those have.
+ServiceProviderConfig says what this server can do. ResourceTypes says what
+kinds of thing live here. Schemas says what attributes those have.
 
-Being honest in these is the point. A provider reads ServiceProviderConfig and
-plans its sync around the answers: claim ``patch: false`` and it will use PUT for
-everything, claim ``filter: supported`` and it will send filters expecting them to
-work. Overstating what we support does not get us more functionality, it gets us
-a provider confidently doing something we then refuse.
-
-So ``filter`` says supported — because it is, for the subset in filters.py — and
-``sort``, ``etag`` and ``bulk`` all say false, because they are.
+These need to be accurate: a provider plans its sync around the answers.
+Claim `patch: false` and it uses PUT for everything; claim `filter:
+supported` and it sends filters expecting them to work. So `filter` says
+supported (true for the subset in filters.py), and `sort`, `etag`, and
+`bulk` all say false, because they are.
 
 These are readable with a valid token but describe nothing about anybody, so
-they are the one part of the SCIM surface where being wrong is embarrassing
-rather than dangerous.
+this is the one part of the SCIM surface where being wrong is just
+embarrassing, not dangerous.
 """
 
 from __future__ import annotations
@@ -43,12 +40,12 @@ router = APIRouter(prefix=SCIM_PREFIX, tags=["scim"])
 async def service_provider_config(settings: SettingsDep, client: ScimClientDep) -> Response:
     """What we can do, answered honestly.
 
-    ``patch`` is true and it matters more than the rest: it is how deprovisioning
-    arrives. A provider told patch is unsupported falls back to PUT, which means
-    sending a whole resource to change one boolean.
+    `patch` is true - this is how deprovisioning arrives. A provider told
+    patch is unsupported falls back to PUT, sending a whole resource to
+    change one boolean.
 
-    ``bulk`` is false. A provider that believes otherwise will post a bundle of
-    operations to an endpoint that does not exist.
+    `bulk` is false. A provider that thinks otherwise would post a bundle of
+    operations to an endpoint that doesn't exist.
     """
     root = settings.base_url.rstrip("/")
     return scim_json(
@@ -156,8 +153,8 @@ USER_ATTRIBUTES = [
         sub=[_attribute("value"), _attribute("type"), _attribute("primary", kind="boolean")],
     ),
     _attribute("active", kind="boolean"),
-    # Read-only, and that is the load-bearing part of this whole document: it is
-    # how a provider is told that membership is written on the group, not here.
+    # Read-only: tells a provider that membership is written on the group,
+    # not here.
     _attribute("groups", kind="complex", multi=True, mutability="readOnly"),
 ]
 

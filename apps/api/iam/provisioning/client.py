@@ -1,39 +1,16 @@
 """Speaking SCIM to somebody else's system.
 
-The mirror of iam/routers/scim_users.py, which is the server side. Writing both ends
-of the same protocol has one useful consequence: every awkward thing the server side
-had to tolerate is a thing this side must avoid doing.
+This is the mirror of iam/routers/scim_users.py, which is our server side.
 
-Deactivating, never deleting
-----------------------------
-
-Removing somebody sends ``active: false``. It never sends DELETE, even though the
-protocol has one and some downstreams implement it.
-
-That is the same decision our own server made, from the other side. A deactivated
-account keeps its history — who they were, what they had, when it stopped — and a
-deleted one takes that with it. It also means a rehire revives an account instead of
-creating a second one that looks identical and shares none of the past.
-
-What "it worked" means
-----------------------
-
-Only a 2xx. Not "no exception raised", which is the mistake this kind of client
-usually makes: a 401 is a perfectly successful HTTP request that provisioned nothing.
-So every response is checked, and the failure carries the status and the body,
-because a downstream's own error message is almost always the fastest way to the
-cause.
-
-Redirects are not followed, per ADR 0007. A target that answers 302 is a failure
-rather than a second request to wherever it pointed.
-
-No retries in here
-------------------
-
-This makes one request and reports what happened. Deciding whether to try again is
-the sync's business, because it is the thing that knows how many attempts a link has
-already had and whether an account exists out there — and a retry loop buried in a
-transport function is a retry loop nobody can see or stop.
+A few rules this client follows:
+- Removing somebody sends `active: false`, never DELETE. Same as our own
+  server: a deactivated account keeps its history, and a rehire can revive it
+  instead of creating a duplicate.
+- "Worked" means a 2xx, not just "no exception". A 401 is a successful HTTP
+  request that provisioned nothing, so every response status is checked.
+- Redirects are not followed (ADR 0007) - a 302 is treated as a failure.
+- This module makes one request and reports what happened. Retries are the
+  sync's job, since it knows how many attempts a link has already had.
 """
 
 from __future__ import annotations
@@ -55,25 +32,26 @@ SCIM_CONTENT_TYPE = "application/scim+json"
 REQUEST_TIMEOUT = 15.0
 """Seconds to wait on a downstream.
 
-Longer than the mail timeout because this one matters — a push that times out leaves
-a link in a state somebody has to resolve — and short enough that one unresponsive
-target cannot hold a sync open indefinitely.
+Longer than the mail timeout since a timed-out push leaves a link that someone
+has to resolve. Still short enough that one unresponsive target can't hold up
+a whole sync.
 """
 
 MAX_ERROR_BODY = 500
 """How much of a downstream's error to keep.
 
-Enough for a SCIM error document, which is small. A downstream that answers with an
-HTML error page should not put a stack trace in our audit log.
+Enough for a SCIM error document. Caps it so an HTML error page doesn't dump
+a stack trace into our audit log.
 """
 
 
 class PushFailed(Exception):
     """One request to a downstream did not work.
 
-    Carries the status when there was one. ``status`` being None means the request
-    never got an answer — a connection refused, a timeout, DNS — which is a different
-    problem from a rejected one and usually a different person's to fix.
+    Carries the status when there was one. `status` being None means the
+    request never got an answer at all (connection refused, timeout, DNS) -
+    a different problem than a rejected request, usually for a different
+    person to fix.
     """
 
     def __init__(self, message: str, *, status: int | None = None) -> None:
@@ -84,9 +62,9 @@ class PushFailed(Exception):
     def is_authentication(self) -> bool:
         """Whether the token is the problem.
 
-        Worth telling apart: every push to this target will fail the same way until
-        somebody re-enters it, so a sync should stop rather than work through a
-        thousand people collecting the same 401.
+        Every push to this target will fail the same way until someone
+        re-enters it, so a sync should stop here instead of retrying the same
+        401 for every person.
         """
         return self.status in (401, 403)
 
@@ -94,10 +72,10 @@ class PushFailed(Exception):
     def is_conflict(self) -> bool:
         """Something with this userName is already there.
 
-        Not a retryable failure and not a fatal one — it means the account exists and
-        we do not know its id, so the answer is to look it up and adopt it. This is
-        what onboarding a downstream that already has people looks like, and treating
-        it as an ordinary failure means every one of them fails forever.
+        Not a retryable failure and not fatal either. The account exists, we
+        just don't know its id yet, so the fix is to look it up and adopt it.
+        This is what onboarding a downstream that already has people looks
+        like.
         """
         return self.status == 409
 
@@ -105,8 +83,8 @@ class PushFailed(Exception):
     def is_missing(self) -> bool:
         """The account we tried to update is not there.
 
-        Recoverable, and specifically: it means creating rather than updating, which
-        is what a link with a stale remote_id needs.
+        Recoverable: it means we should create instead of update, which is
+        what a link with a stale remote_id needs.
         """
         return self.status == 404
 
@@ -134,12 +112,12 @@ def user_payload(
 ) -> dict[str, Any]:
     """Build the SCIM document for one person.
 
-    Only the attributes a downstream can actually use. Every extra field is one more
-    thing to keep true and one more thing that can be rejected by a system with a
-    stricter schema — and a rejected create is a person with no account.
+    Only includes attributes a downstream can actually use - extra fields
+    risk rejection by a stricter schema, and a rejected create leaves someone
+    with no account.
 
-    externalId is our own id, which is what lets a downstream match its account back
-    to us. It is the field our own server side leans on for exactly the same reason.
+    externalId is our own id, so a downstream can match its account back to
+    us. Our server side uses the same field for the same reason.
     """
     document: dict[str, Any] = {
         "schemas": [USER_SCHEMA],
@@ -167,11 +145,11 @@ def user_payload(
 
 
 def deactivate_patch() -> dict[str, Any]:
-    """The one operation that matters most in this whole phase.
+    """Deactivate a user via PATCH.
 
-    PATCH rather than PUT, because PUT means "this is the whole resource" and would
-    blank every attribute the downstream holds that we do not send. A leaver should
-    lose their access, not their record.
+    Not PUT: PUT means "this is the whole resource" and would blank every
+    attribute the downstream holds that we don't send. A leaver should lose
+    access, not their whole record.
     """
     return {
         "schemas": [PATCH_SCHEMA],
@@ -191,8 +169,8 @@ class OutboundScim:
     """One downstream, and the requests we make to it.
 
     Takes the decrypted token rather than the target row, so nothing here can
-    accidentally log a whole model with a secret in it, and so a test needs no
-    database.
+    accidentally log a whole model with a secret in it, and tests don't need
+    a database.
     """
 
     def __init__(self, *, base_url: str, token: str, client: httpx.AsyncClient | None = None):
@@ -221,17 +199,16 @@ class OutboundScim:
         owned = self._client is None
         client = self._client or httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT,
-            # Per ADR 0007. Following one would move the destination away from the
-            # address somebody reviewed.
+            # No redirects, per ADR 0007 - following one would move the
+            # destination away from the address somebody reviewed.
             follow_redirects=False,
         )
 
         try:
             response = await client.request(method, url, headers=self._headers, json=json)
         except httpx.HTTPError as exc:
-            # No status, because there was no answer. The distinction matters: this is
-            # usually the network or the target being down rather than anything about
-            # the request.
+            # No status here since there was no answer - usually the network
+            # or the target being down, not something about the request.
             raise PushFailed(f"could not reach {url}: {exc}") from exc
         finally:
             if owned:
@@ -249,13 +226,12 @@ class OutboundScim:
     async def find_user(self, user_name: str) -> RemoteAccount | None:
         """Look for an account by userName.
 
-        Used when adopting a downstream that already has accounts, so a first sync
-        links to what is there instead of creating a second copy of everybody. Not
-        used on the normal path — that is what the links table is for.
+        Used when adopting a downstream that already has accounts, so a first
+        sync links to what's there instead of creating duplicates. Not used
+        on the normal path - that's what the links table is for.
 
-        The filter value is quoted with the SCIM escaping rules: a userName containing
-        a quote would otherwise change the filter's meaning, which on somebody else's
-        server is their injection bug and our fault.
+        The filter value is escaped per SCIM rules, since a userName
+        containing a quote would otherwise change the filter's meaning.
         """
         escaped = user_name.replace("\\", "\\\\").replace('"', '\\"')
         response = await self._request("GET", f'/Users?filter=userName eq "{escaped}"')
@@ -266,8 +242,8 @@ class OutboundScim:
             return None
 
         if len(resources) > 1:
-            # Ambiguous, so refused rather than guessed. Picking one would link us to
-            # an account at random and the wrong choice is invisible afterwards.
+            # Ambiguous - refuse instead of guessing. Picking wrong here would
+            # link us to the wrong account with no way to notice later.
             raise PushFailed(
                 f"{len(resources)} accounts downstream have userName {user_name!r}. "
                 "Refusing to guess which one is theirs."
@@ -288,9 +264,8 @@ class OutboundScim:
 
         remote_id = document.get("id")
         if not remote_id:
-            # A downstream that creates an account and does not say what its id is has
-            # left us unable to ever update or deactivate it. Better to fail loudly
-            # now than to discover it during somebody's leaver process.
+            # Without an id we can never update or deactivate this account.
+            # Fail now instead of discovering it during someone's leaver process.
             raise PushFailed(
                 "the account was created but the response carried no id, so there "
                 "would be no way to update or deactivate it later",
@@ -307,10 +282,10 @@ class OutboundScim:
     async def replace_user(self, remote_id: str, payload: dict[str, Any]) -> RemoteAccount:
         """Update an account to match what we hold.
 
-        PUT here rather than PATCH, deliberately, and it is the opposite choice from
-        deactivation. This is the path that says "our directory is the truth for these
-        fields", so sending the whole resource is the point — a PATCH would leave a
-        stale value in place whenever we stopped sending an attribute.
+        Uses PUT, not PATCH - the opposite choice from deactivation. Our
+        directory is the source of truth for these fields, so we send the
+        whole resource; a PATCH would leave stale values for any attribute
+        we stopped sending.
         """
         response = await self._request("PUT", f"/Users/{remote_id}", json=payload)
         document = response.json()
@@ -324,8 +299,8 @@ class OutboundScim:
     async def set_active(self, remote_id: str, *, active: bool) -> None:
         """Deactivate or reactivate one account.
 
-        The leaver path, and PATCH rather than PUT so nothing else about their record
-        is touched — see deactivate_patch.
+        Uses PATCH, not PUT, so nothing else about their record is touched.
+        See deactivate_patch.
         """
         patch = reactivate_patch() if active else deactivate_patch()
         await self._request("PATCH", f"/Users/{remote_id}", json=patch)
@@ -338,19 +313,19 @@ class OutboundScim:
     async def probe(self) -> str:
         """Check the target answers and the token works, without changing anything.
 
-        Reads ServiceProviderConfig, which every SCIM server publishes and which
-        describes nothing about anybody. That makes it the right thing to call when
-        somebody registers a target: it proves the address and the token before the
-        first person depends on them.
+        Reads ServiceProviderConfig, which every SCIM server publishes and
+        which describes nothing about anybody. Good to call when someone
+        registers a target, to confirm the address and token work before
+        anyone depends on them.
         """
         response = await self._request("GET", "/ServiceProviderConfig")
         document = response.json()
 
         supports_patch = bool((document.get("patch") or {}).get("supported"))
         if not supports_patch:
-            # Worth saying out loud rather than discovering during a leaver process.
-            # Without PATCH, deactivating means PUT, which blanks anything we do not
-            # send.
+            # Log this now rather than discovering it during a leaver process.
+            # Without PATCH, deactivating means PUT, which blanks anything we
+            # don't send.
             logger.warning(
                 "provisioning.no_patch_support",
                 extra={

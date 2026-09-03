@@ -1,14 +1,11 @@
 """Every enum column is constrained in the database, not just in the ORM.
 
-This file exists because the opposite was true for three phases while a docstring
-claimed otherwise. SQLAlchemy validated values on the way in, so nothing written
-through the ORM was ever wrong — and Postgres would accept anything, so a
-migration, a psql session, or a background job writing SQL directly had nothing
-stopping it.
+SQLAlchemy validates values on the way in, so nothing written through the ORM
+is ever wrong — but Postgres accepts anything, so a migration, a psql session,
+or a background job writing SQL directly had nothing stopping it.
 
-The test below is generated from the model metadata rather than a hand-written
-list, so a new enum column is covered the moment it is added. That is the whole
-point: a list somebody has to remember to update is how this happened.
+Generated from the model metadata rather than a hand-written list, so a new
+enum column is covered the moment it's added.
 
 Needs Postgres and skips without IAM_TEST_DATABASE_URL.
 """
@@ -67,11 +64,9 @@ async def test_the_constraint_lists_every_value_and_no_others(
 ) -> None:
     """The constraint covers the right column and exactly the right values.
 
-    Reading the definition rather than trying a bad write, because most of these
-    tables are empty in a test database and `UPDATE ... SET col = 'rubbish'` on an
-    empty table changes no rows and so violates nothing. That version of this test
-    passed for the two tables that happened to have data and quietly proved nothing
-    about the other ten.
+    Reads the definition rather than trying a bad write, since most of these
+    tables are empty in a test database and `UPDATE ... SET col = 'rubbish'`
+    on an empty table changes no rows and violates nothing.
     """
     definition = await db_session.scalar(
         text(
@@ -103,13 +98,11 @@ async def test_the_constraint_lists_every_value_and_no_others(
 async def test_a_bad_value_is_actually_rejected(db_session: AsyncSession) -> None:
     """One end-to-end proof: write a value Postgres should refuse.
 
-    The definition tests above are thorough but indirect, and this is the direct
-    version — the exact UPDATE that succeeded before the constraints existed.
+    The definition tests above are thorough but indirect; this is the direct
+    version, the exact UPDATE that succeeded before the constraints existed.
 
-    It creates its own row first, and that detail is the whole reason the earlier
-    attempt was worthless. The test database is not seeded, so `UPDATE users SET
-    ...` with no rows changes nothing and violates nothing: the assertion passed by
-    testing an empty table. Only the production database has an admin in it.
+    Creates its own row first, since the test database isn't seeded — an
+    UPDATE against zero rows changes nothing and violates nothing.
     """
     import uuid
 

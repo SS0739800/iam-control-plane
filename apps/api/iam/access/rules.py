@@ -1,34 +1,22 @@
 """Working out which groups somebody's attributes put them in.
 
-The joiner and mover half of the lifecycle. Somebody arrives in Engineering and
-lands in the Engineering group; somebody moves to Sales and stops being in it.
+The joiner and mover half of the lifecycle. Somebody arrives in Engineering
+and lands in the Engineering group; somebody moves to Sales and stops being
+in it.
 
-Reconciling, not adding
------------------------
+``reconcile`` computes the full set of groups the rules want for one person
+and makes the database match — adding and removing, not just adding. A
+function that only added memberships would handle joiners fine but get
+movers wrong, leaving someone who transferred out of Engineering stuck in
+its group forever.
 
-``reconcile`` computes the whole set of groups the rules want for one person and
-makes the database match. That matters more than it sounds: a function that only
-added memberships would handle the joiner and get the mover exactly wrong,
-leaving somebody who transferred out of Engineering still in its group forever.
-Movers are the case that goes unnoticed, so the operation is "make it match", not
-"grant".
-
-Only touching what it owns
---------------------------
-
-It adds and removes rows with ``source = rule`` and nothing else. Memberships the
-provider sent, or that somebody added by hand, are read but never removed.
-
-That is not politeness, it is the difference between working and looping. Delete a
-membership authentik believes in and the next sync recreates it, then the next
-reconcile removes it again, forever — with an audit entry each way. The
-``source`` column on GroupMember exists for exactly this.
-
-The other half of the same rule: if somebody is already in a group because the
-provider put them there, and a rule also wants them in it, nothing happens. The
-primary key stops a second row, and when the rule stops applying their
-provider-granted membership is still there — which is right, because the provider
-still wants it.
+It only touches rows with ``source = rule``. Memberships the provider sent,
+or that someone added by hand, are read but never removed — deleting a
+membership the provider believes in would just have the next sync recreate
+it, forever, with an audit entry each time. If a rule and the provider both
+want someone in the same group, nothing happens either way: the primary key
+blocks a duplicate row, and when the rule stops applying, the
+provider-granted membership stays because the provider still wants it.
 """
 
 from __future__ import annotations
@@ -71,8 +59,8 @@ def validate(attribute: str, operator: RuleOperator, value: str | None) -> None:
         raise RuleRefused(f"{operator} needs a value to compare against.")
 
     if not needs_value and (value or "").strip():
-        # Refused rather than ignored. A rule reading "job title is set: Manager"
-        # looks like it checks for Manager, and silently doesn't.
+        # Refused, not ignored — a rule reading "job title is set: Manager"
+        # looks like it checks for Manager, but wouldn't.
         raise RuleRefused(
             f"{operator} takes no value, but one was given. Leave it empty, or the "
             "rule will read as though it checks for that value."
@@ -82,11 +70,9 @@ def validate(attribute: str, operator: RuleOperator, value: str | None) -> None:
 def matches(rule: AccessRule, user: User) -> bool:
     """Whether this rule applies to this person.
 
-    Comparisons are case-insensitive and ignore surrounding spaces, because these
-    values arrive from an HR system by way of a provider and "Engineering",
-    "engineering" and " Engineering " all mean the same department. Being strict
-    here would mean rules that work for most of a company and silently skip the
-    people whose record was typed slightly differently.
+    Comparisons are case-insensitive and trim spaces, since values come from
+    an HR system through a provider and "Engineering", "engineering", and
+    " Engineering " all mean the same department.
     """
     actual = getattr(user, rule.attribute, None)
     present = actual is not None and str(actual).strip() != ""
@@ -97,9 +83,9 @@ def matches(rule: AccessRule, user: User) -> bool:
         return not present
 
     if not present:
-        # Nothing to compare. Notably this makes NOT_EQUALS false for somebody with
-        # no department at all, rather than true — "department is not Sales" should
-        # describe people who have a department, not people who have none.
+        # Nothing to compare, so NOT_EQUALS is false here too — "department is
+        # not Sales" should mean people who have a department, not people
+        # with none.
         return False
 
     left = str(actual).strip().casefold()
@@ -114,11 +100,9 @@ def matches(rule: AccessRule, user: User) -> bool:
     if rule.operator == RuleOperator.STARTS_WITH:
         return left.startswith(right)
 
-    # Unreachable, and mypy proves it: every operator above is handled, so this
-    # line only becomes reachable if somebody adds one to the enum. assert_never
-    # then fails the type check rather than letting a new operator quietly match
-    # nobody — or, worse, everybody. A runtime log here would have found that out
-    # in production instead.
+    # Unreachable — every operator is handled above. assert_never turns adding
+    # a new operator into a type error instead of a silent bug where it
+    # matches nobody, or everybody.
     assert_never(rule.operator)
 
 
@@ -145,13 +129,12 @@ class Reconciliation:
 def touches_rules(fields: Iterable[str]) -> bool:
     """Whether a change to these fields could alter what the rules want.
 
-    The gate on the update paths. A provider re-syncs everybody on a schedule, and
-    most of those writes touch a display name or a timestamp — running the engine
-    for each one would be three extra queries per person per sync to reach the same
-    answer. Changing a field no rule reads cannot change the outcome.
+    Used to skip re-running the engine on syncs that only touch a display
+    name or timestamp — those can't change the outcome, so there's no need
+    for extra queries per person.
 
-    A rule being created or edited is the other way round, and does not come
-    through here: nobody's attributes changed, so use ``reconcile_group``.
+    When a rule itself is created or edited, use ``reconcile_group``
+    instead — nobody's attributes changed here.
     """
     return bool(set(fields) & set(ATTRIBUTES))
 
@@ -159,10 +142,9 @@ def touches_rules(fields: Iterable[str]) -> bool:
 async def matching_rules(db: AsyncSession, user: User) -> list[AccessRule]:
     """Every enabled rule that applies to this person.
 
-    Loads the rules and compares in Python rather than building SQL conditions.
-    There are a handful of rules and the matching is string comparison, so the
-    clarity is worth more than the query — and `matches` stays a plain function
-    that a test can call with two objects.
+    Loads the rules and compares in Python rather than building SQL
+    conditions — there are only a handful, and this keeps `matches` a plain
+    function a test can call directly.
     """
     rules = (await db.scalars(select(AccessRule).where(AccessRule.enabled))).all()
     return [rule for rule in rules if matches(rule, user)]
@@ -171,22 +153,20 @@ async def matching_rules(db: AsyncSession, user: User) -> list[AccessRule]:
 async def reconcile(db: AsyncSession, user: User) -> Reconciliation:
     """Make this person's rule-granted group membership match the rules.
 
-    Adds what the rules now want, removes what they no longer want, and leaves
-    everything it doesn't own alone.
+    Adds what the rules now want, removes what they no longer want, and
+    leaves everything else alone.
 
-    A deactivated person gets nothing added. Their rule-granted memberships are
-    still removed, so somebody who has left stops appearing in the group listings
-    a reviewer reads — but see iam/access/lifecycle.py, which deliberately leaves
-    provider-granted membership in place for a leaver.
+    A deactivated person gets nothing added, and their rule-granted
+    memberships are removed (provider-granted ones stay — see
+    lifecycle.py).
 
-    Reactivating somebody does let the rules grant again, which looks like it
-    contradicts lifecycle.py saying nothing comes back. It doesn't, and the
-    difference is worth being precise about. A role grant and a direct application
-    assignment were decisions somebody made once, and a rehire should not silently
-    inherit a decision made about a different job two years ago. A rule is not a
-    past decision — it is a standing statement that anybody with this attribute
-    belongs in this group. If they still have the attribute, the rule still means
-    it, and refusing would make the rule inconsistent with itself.
+    Reactivating someone lets rules grant access again, which isn't the
+    same as lifecycle.py's "nothing comes back automatically." A role grant
+    or direct assignment was a one-time decision, and a rehire shouldn't
+    silently inherit one made for a different job years ago. A rule isn't a
+    past decision, though — it's a standing statement ("anyone with this
+    attribute belongs in this group"), so if the attribute is still true,
+    the rule still applies.
     """
     applicable = await matching_rules(db, user)
     wanted: set[uuid.UUID] = set() if not user.active else {rule.group_id for rule in applicable}
@@ -203,9 +183,8 @@ async def reconcile(db: AsyncSession, user: User) -> Reconciliation:
         ).all()
     )
 
-    # Groups they are in for any reason at all. A rule wanting one of these has
-    # nothing to do: they are already in it, and the primary key would refuse a
-    # second row anyway.
+    # Groups they're already in for any reason — a rule wanting one of these
+    # is a no-op, and the primary key would block a duplicate row anyway.
     already_in = set(
         (await db.scalars(select(GroupMember.group_id).where(GroupMember.user_id == user.id))).all()
     )
@@ -215,11 +194,10 @@ async def reconcile(db: AsyncSession, user: User) -> Reconciliation:
 
     names = await _group_names(db, to_add | to_remove)
 
-    # One row per group, not per rule. Two rules can point at the same group —
-    # that is how conditions compose without a boolean language — and iterating
-    # over the rules would try to insert the same membership twice and hit the
-    # primary key. The membership records the first rule that wanted it, and stays
-    # while any of them still does, because `wanted` is a set.
+    # One row per group, not per rule. Two rules can point at the same group,
+    # so iterating over rules directly would try to insert the same
+    # membership twice. It records the first rule that wanted it and stays
+    # as long as any rule still does, since `wanted` is a set.
     attributed_to: dict[uuid.UUID, uuid.UUID] = {}
     for rule in applicable:
         attributed_to.setdefault(rule.group_id, rule.id)
@@ -239,9 +217,8 @@ async def reconcile(db: AsyncSession, user: User) -> Reconciliation:
             delete(GroupMember).where(
                 GroupMember.user_id == user.id,
                 GroupMember.group_id.in_(to_remove),
-                # Belt and braces. to_remove is already only rule-sourced rows, and
-                # this makes it impossible for a future edit to widen that by
-                # accident.
+                # Extra safety: to_remove is already rule-sourced only, this
+                # just guards against a future edit widening it by accident.
                 GroupMember.source == MembershipSource.RULE,
             )
         )
@@ -268,17 +245,15 @@ async def _group_names(db: AsyncSession, group_ids: set[uuid.UUID]) -> dict[uuid
     if not group_ids:
         return {}
     rows = await db.execute(select(Group.id, Group.name).where(Group.id.in_(group_ids)))
-    # .tuples() rather than .all(): it gives the rows a real tuple type, which is
-    # what lets this be a plain dict() that both ruff and mypy are happy with.
+    # .tuples() gives a real tuple type, so dict() works cleanly for both
+    # ruff and mypy.
     return dict(rows.tuples().all())
 
 
 async def affected_by(db: AsyncSession, rule: AccessRule) -> list[User]:
-    """Everybody a rule currently applies to.
-
-    For the console's "who would this affect" preview, which is the difference
-    between writing a rule confidently and writing one and hoping. Reads active
-    people only, since a rule grants nothing to somebody who has left.
+    """Everybody a rule currently applies to. Used for the console's "who
+    would this affect" preview. Reads active people only, since a rule
+    grants nothing to somebody who has left.
     """
     users = (await db.scalars(select(User).where(User.active))).all()
     return [user for user in users if matches(rule, user)]
@@ -287,10 +262,9 @@ async def affected_by(db: AsyncSession, rule: AccessRule) -> list[User]:
 async def reconcile_group(db: AsyncSession, rule: AccessRule) -> Reconciliation:
     """Bring one rule's group into line for everybody, after the rule changed.
 
-    Writing a rule should take effect without waiting for each person's next
-    attribute change, and disabling one should take back what it granted. This
-    walks everybody, which is fine at this size and is honest about being a full
-    pass rather than pretending to be incremental.
+    A new or edited rule should take effect immediately rather than waiting
+    for each person's next attribute change. This walks every user, which
+    is fine at this scale.
     """
     users = (await db.scalars(select(User))).all()
 

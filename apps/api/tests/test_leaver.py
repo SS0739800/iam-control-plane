@@ -1,13 +1,12 @@
 """Someone left. Did anything actually stop?
 
-The test at the bottom of this file is the one the whole project is for: sign in
-over SAML, get given admin, be switched off by the provider over SCIM, and then
-find that the session is dead, the admin is gone, the application access has gone,
-and the audit log says all of it.
+The test at the bottom is the main one: sign in over SAML, get given admin,
+get switched off by the provider over SCIM, and check the session is dead,
+the admin role is gone, app access is gone, and the audit log says so.
 
-Everything else here checks one piece of that at a time, and checks the pieces
-that should *not* move — group membership stays, the person's record stays, and
-nothing comes back when they are reactivated.
+Everything else here checks one piece at a time, including the pieces that
+should *not* move — group membership stays, the record stays, and nothing
+comes back on reactivation.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -94,8 +93,8 @@ async def make_leaver(
 
 
 async def test_every_session_ends_not_just_one(db_session: AsyncSession) -> None:
-    """The failure this whole design exists to prevent: a flag flipped while they
-    stay signed in for the next eight hours."""
+    """Guards against a flag being flipped while they stay signed in for
+    hours."""
     user = await make_leaver(db_session)
     tokens = []
     for index in range(3):
@@ -148,9 +147,9 @@ async def test_direct_application_access_goes(db_session: AsyncSession) -> None:
 
 
 async def test_group_membership_stays(db_session: AsyncSession) -> None:
-    """Deliberate. An inactive person can't authenticate so it grants them nothing,
-    and the provider owns these rows — deleting them means fighting the next sync
-    forever. What they were in is recorded instead."""
+    """An inactive person can't authenticate, so membership grants nothing,
+    and the provider owns these rows — deleting them would just fight the
+    next sync. What they were in gets recorded instead."""
     user = await make_leaver(db_session, with_group=True)
     user_id = user.id
 
@@ -233,15 +232,13 @@ def test_signed_in_then_deactivated_upstream_loses_everything(
     console: ConsoleUsers,
     saml_reader: StubReader,
 ) -> None:
-    """The one that matters.
+    """End-to-end: sign in over SAML, get given a console role, then get
+    switched off by the provider over SCIM — all through the real code
+    paths (a real assertion, a real grant via the API, a real SCIM PATCH
+    with a real token).
 
-    Somebody signs in over SAML, an admin gives them a console role, and then the
-    provider switches them off over SCIM. Every part of that is the real code path:
-    a real assertion through /saml/acs, a real grant through the API, a real SCIM
-    PATCH from a real provisioning token.
-
-    Afterwards the session cookie must be dead, the role must be gone, and the
-    audit log must say so. If this test passes, deprovisioning works.
+    Afterwards the session cookie must be dead, the role gone, and the
+    audit log must say so.
     """
     # 1. They sign in for real, and hold a session cookie.
     sign_in(saml_client, scenario, saml_reader)
@@ -252,10 +249,9 @@ def test_signed_in_then_deactivated_upstream_loses_everything(
 
     user_id = console.id_of(scenario.user_name)
 
-    # The client is holding Ada's cookie now, and a real session beats the
-    # development header — that is the P2 rule and it is working. So the cookie has
-    # to come off before this client can act as somebody else, or every admin call
-    # below runs as Ada and gets a 403.
+    # A real session beats the dev header (the P2 rule), so the cookie has
+    # to come off before this client can act as someone else, or the admin
+    # calls below run as Ada and get a 403.
     saml_client.cookies.clear()
 
     # 2. An admin gives them a console role.

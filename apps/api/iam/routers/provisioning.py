@@ -1,18 +1,15 @@
 """Managing the systems that provision into us, from the console.
 
-A credential nobody can see or revoke without opening a database client is not
-really being managed. This is the screen that makes a SCIM token a thing with a
-lifecycle: issued by somebody, visible in a list, revocable, and with a record of
-when it was last used.
+This is the screen that makes a SCIM token a thing with a lifecycle: issued
+by somebody, visible in a list, revocable, and with a record of when it was
+last used.
 
-Guarded by the same permission as registering an identity provider, and for the
-same reason. Both answer "which outside system do we believe about who people
-are" — one at the moment somebody logs in, the other continuously. Whoever can
-decide that can decide who exists here.
+Guarded by the same permission as registering an identity provider, since
+both answer "which outside system do we believe about who people are" - one
+at login, the other continuously.
 
-Revoking marks the row rather than deleting it. "That sync stopped on the 3rd
-because we revoked it" is a question somebody asks later, and it is unanswerable
-if the row is gone.
+Revoking marks the row rather than deleting it, so "that sync stopped on the
+3rd because we revoked it" is still answerable later.
 """
 
 from __future__ import annotations
@@ -95,9 +92,9 @@ def _summary(client: ScimClient) -> ScimClientSummary:
 async def overview(session: SessionDep) -> ProvisioningOverview:
     """The numbers that say whether the sync is doing its job.
 
-    ``users_from_login`` is the one worth watching. Somebody arriving by logging
-    in means SCIM had not told us about them yet, which is fine occasionally and a
-    sign of a broken or narrow sync if it keeps happening.
+    `users_from_login` is worth watching: someone arriving by login means
+    SCIM hadn't told us about them yet. Fine occasionally, a sign of a
+    broken or narrow sync if it keeps happening.
     """
     users_from_scim = (
         await session.scalar(
@@ -149,8 +146,8 @@ async def overview(session: SessionDep) -> ProvisioningOverview:
 async def list_clients(session: SessionDep) -> list[ScimClientSummary]:
     """Every client, revoked ones included.
 
-    Not filtered to the usable ones. A revoked token is exactly what somebody is
-    looking for when they are working out why a sync stopped.
+    Not filtered to usable ones - a revoked token is exactly what someone
+    is looking for when working out why a sync stopped.
     """
     rows = (await session.scalars(select(ScimClient).order_by(ScimClient.created_at.desc()))).all()
     return [_summary(client) for client in rows]
@@ -169,11 +166,11 @@ async def issue_client(
 ) -> ScimClientIssued:
     """Create a client and hand back its token, once.
 
-    The token is in this response and nowhere else, ever. We keep only its hash,
-    so there is nothing to show later even if the screen offered to.
+    The token is in this response and nowhere else. We keep only its hash,
+    so there's nothing to show later even if the screen offered to.
 
-    The audit entry records that a token was issued and by whom. It does not
-    record the token, which would rather defeat the point of not storing it.
+    The audit entry records that a token was issued and by whom, not the
+    token itself.
     """
     name = payload.name.strip()
 
@@ -232,12 +229,11 @@ async def revoke_client(
 ) -> ScimClientSummary:
     """Stop a token working, and record why.
 
-    Marked rather than deleted. Revoking one is the thing you do when you think it
-    has leaked, and that is precisely when you want the row to survive so the
-    audit log's references to it still resolve.
+    Marked rather than deleted, so the audit log's references to it still
+    resolve - useful since revoking usually means you think it leaked.
 
-    Revoking an already-revoked client leaves the original reason and timestamp
-    alone. When it was cut off is the fact that matters.
+    Revoking an already-revoked client leaves the original reason and
+    timestamp alone; when it was cut off is the fact that matters.
     """
     client = await session.scalar(select(ScimClient).where(ScimClient.id == client_id))
     if client is None:
@@ -287,9 +283,9 @@ async def activity(
 ) -> list[ProvisioningActivity]:
     """Recent directory writes that came from a SCIM client.
 
-    A view over the audit log, filtered to entries a provisioning system made. It
-    answers the question this screen exists for — "is anything actually arriving,
-    and what" — without making somebody scroll the whole log looking for it.
+    A view over the audit log, filtered to entries a provisioning system
+    made, so someone doesn't have to scroll the whole log to see what's
+    actually arriving.
     """
     rows = (
         await session.scalars(
@@ -306,8 +302,8 @@ async def activity(
 def _activity(event: AuditEvent) -> ProvisioningActivity:
     detail: dict[str, Any] = event.detail if isinstance(event.detail, dict) else {}
 
-    # "SCIM client <authentik>" -> "authentik". Read from the detail when it's
-    # there, because that survives any change to how the label is formatted.
+    # "SCIM client <authentik>" -> "authentik". Prefer the detail field when
+    # present, since that survives any change to how the label is formatted.
     client = detail.get("scim_client")
     if not client and event.actor_label.startswith(SCIM_ACTOR_PREFIX):
         client = event.actor_label[len(SCIM_ACTOR_PREFIX) :].rstrip(">")
@@ -350,34 +346,29 @@ def _describe(detail: dict[str, Any]) -> str | None:
 
 # ==================================================== the systems we push into
 #
-# Guarded by apps:write, reused rather than invented. A provisioning target is
-# configuration belonging to one application — it is unique per application and
-# cascade-deleted with it — so registering one is the same act as registering that
-# application's SAML wiring, which is also apps:write. Both are admin-only.
+# Guarded by apps:write, same as registering an application's SAML wiring - a
+# provisioning target is config that belongs to one application (unique per
+# application, cascade-deleted with it). Contrast with idp:write, which is
+# about outside systems we *believe* about identity; this is about outside
+# systems that *receive* our identity data.
 #
-# Worth contrasting with idp:write, which is about which outside systems we *believe*
-# about identity. This is the other direction: which outside systems *receive* our
-# identity data. Similar gravity, and it lands on apps:write because the thing being
-# configured is an application rather than a trust relationship of its own.
+# Nothing here returns the token. It's stored encrypted, not hashed, so we
+# could return it - that's exactly why there's no field for it.
 #
-# Nothing here returns the token. It is stored encrypted rather than hashed, so we
-# could — and that is exactly why there is no field for it.
-#
-# There is no hook on granting access. Somebody clicking "give this person access"
-# should not wait on a downstream, and should not have their grant fail because
-# somebody else's server is down. So access changes are recorded and the accounts
-# follow on the next sync, which is either the button below or a scheduled call. This
-# system has no background worker, and pretending otherwise by blocking a request for
-# fifteen seconds would be worse than being honest about it.
+# There's no hook on granting access. Someone clicking "give this person
+# access" shouldn't wait on a downstream or have their grant fail because
+# another server is down. So access changes are recorded and the accounts
+# follow on the next sync (the button below, or a scheduled call) - this
+# system has no background worker, so it doesn't pretend a request can push
+# instantly.
 
 
 async def _target_or_404(session: SessionDep, target_id: uuid.UUID) -> ProvisioningTarget:
     """One target, with its application already loaded.
 
-    Eager-loaded rather than fetched and refreshed. The summary reads
-    ``target.application.name``, and a lazy load there is a MissingGreenlet under
-    async — the error names greenlets rather than the relationship, which makes it a
-    slow one to place.
+    Eager-loaded because the summary reads `target.application.name`, and a
+    lazy load there raises MissingGreenlet under async - a confusing error
+    that names greenlets, not the relationship, so it's slow to place.
     """
     target = await session.scalar(
         select(ProvisioningTarget)
@@ -425,8 +416,8 @@ async def _target_summary(
         created_at=target.created_at,
         updated_at=target.updated_at,
         **await _counts(session, target.id),
-        # Asked separately from the state counts because it is a different question:
-        # those describe what the links are, this describes what a sync would do.
+        # Separate from the state counts - those describe what the links
+        # are, this describes what a sync would do.
         accounts_waiting_to_push=await count_waiting(session, target),
     )
 
@@ -457,7 +448,7 @@ def _check_address(url: str, settings: Settings) -> str | None:
 async def list_targets(session: SessionDep) -> list[ProvisioningTargetSummary]:
     """Every target, switched off ones included.
 
-    A disabled target is exactly what somebody is looking for when they are working
+    A disabled target is exactly what someone is looking for when working
     out why a downstream stopped receiving people.
     """
     rows = await session.scalars(
@@ -483,10 +474,9 @@ async def create_target(
 ) -> ProvisioningTargetSummary:
     """Register a downstream, after checking we are willing to talk to it.
 
-    The address is checked here rather than on every push. That is the trade ADR 0007
-    describes: a hostname that later resolves somewhere private is not caught, and
-    resolving before every request would be slower, still racy, and would feel like it
-    had solved that. The row being reviewable is the actual control.
+    The address is checked here, not on every push - see ADR 0007. A
+    hostname that later resolves somewhere private isn't caught by this, but
+    the row being reviewable is the actual control, not the resolve check.
 
     Raises:
         HTTPException: 400 for an address we refuse, 404 for a missing application,
@@ -509,7 +499,7 @@ async def create_target(
             status.HTTP_409_CONFLICT,
             detail=(
                 f"{application.name} already has a provisioning target. Two would race "
-                "each other writing the same accounts — update that one instead."
+                "each other writing the same accounts - update that one instead."
             ),
         )
 
@@ -542,8 +532,8 @@ async def create_target(
                 "application": application.slug,
                 "base_url": target.base_url,
                 "enabled": target.enabled,
-                # Recorded because a relaxed rule should be findable later, not just
-                # visible on a page somebody may never open.
+                # Recorded so a relaxed rule is findable later, not just
+                # visible on a page someone may never open.
                 "address_concession": concession,
             },
         ),
@@ -584,7 +574,7 @@ async def update_target(
 
     if payload.token is not None:
         target.token_encrypted = encrypt(payload.token, settings)
-        # A new token means the old failure is probably stale, so it stops being shown.
+        # A new token means the old failure is probably stale - stop showing it.
         target.last_error = None
 
     if payload.enabled is not None:
@@ -604,8 +594,7 @@ async def update_target(
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
             detail={
-                # The token itself is never recorded, only that it changed — which is
-                # the reviewable fact.
+                # The token itself is never recorded, only that it changed.
                 "token_rotated": payload.token is not None,
                 "changed": sorted(key for key in changes if key != "token"),
                 "base_url": target.base_url,
@@ -615,12 +604,11 @@ async def update_target(
     )
     await session.commit()
 
-    # Re-fetched rather than reused. updated_at has a server-side onupdate, so the
-    # UPDATE leaves that column expired, and reading it would lazy load — which under
-    # async is a MissingGreenlet naming greenlets rather than the column. The same
-    # bug bit iam/routers/users.py, so this is the third time the pattern has come up:
-    # after an UPDATE, re-read through a query that eager loads what the response
-    # needs.
+    # Re-fetched rather than reused: updated_at has a server-side onupdate,
+    # so the UPDATE leaves that column expired, and reading it would lazy
+    # load - MissingGreenlet under async. Same bug hit iam/routers/users.py,
+    # so after an UPDATE, always re-read through a query that eager loads
+    # what the response needs.
     return await _target_summary(session, await _target_or_404(session, target_id))
 
 
@@ -638,15 +626,13 @@ async def delete_target(
 ) -> None:
     """Remove a target and forget which account belonged to whom.
 
-    It does not deactivate anybody downstream, and that is deliberate rather than
-    lazy: deleting a target is what somebody does when a system is being
-    decommissioned or was registered by mistake, and silently switching off a few
-    hundred accounts on the way out would be a much bigger action than the button
-    suggests. Disable the target and run one more sync to deprovision people, then
-    delete it.
+    Does not deactivate anybody downstream. Silently switching off a few
+    hundred accounts on the way out would be a much bigger action than the
+    button suggests - disable the target and run one more sync to
+    deprovision people first, then delete it.
 
-    The audit entry says how many links were forgotten, because that is the number
-    somebody will want afterwards.
+    The audit entry records how many links were forgotten, since that's the
+    number someone will want afterwards.
     """
     target = await _target_or_404(session, target_id)
 
@@ -669,7 +655,6 @@ async def delete_target(
             detail={
                 "application": target.application.slug,
                 "links_forgotten": sum(counts.values()),
-                # The part worth flagging: these accounts still exist out there.
                 "accounts_left_active_downstream": still_live,
                 "note": (
                     "Deleting a target does not deactivate anybody. Accounts left "
@@ -705,8 +690,8 @@ async def probe_target(
 ) -> ProbeResult:
     """Read the target's ServiceProviderConfig, which describes nobody.
 
-    The right thing to call after registering one: it proves the address and the token
-    before the first person depends on them, and changes nothing either way.
+    Good to call right after registering a target - it proves the address
+    and token work before anyone depends on them, and changes nothing.
     """
     target = await _target_or_404(session, target_id)
 
@@ -743,10 +728,9 @@ async def sync_target(
 ) -> SyncResult:
     """Reconcile the target's accounts with who is entitled to them.
 
-    Runs in the request, which is honest about there being no background worker: the
-    response is the result rather than a job id that never gets polled. It means a
-    large first sync takes a while, and the alternative — a queue nothing drains —
-    would be worse.
+    Runs in the request rather than a background job, so a large first sync
+    takes a while. There's no worker to drain a queue, so a job id nobody
+    could poll would be worse.
     """
     target = await _target_or_404(session, target_id)
 
@@ -755,8 +739,8 @@ async def sync_target(
             session, target, settings, now=dt.datetime.now(dt.UTC), force=force
         )
     except AlreadyRunning as busy:
-        # The background sweep has it, or another admin pressed this a moment ago.
-        # 409 rather than 500: the request is fine, the state of the world says wait.
+        # The background sweep has it, or another admin just pressed this.
+        # 409, not 500: the request is fine, it just needs to wait.
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(busy)) from busy
 
     logger.info(
@@ -800,8 +784,8 @@ async def target_accounts(
 ) -> list[ProvisioningLinkOut]:
     """The links, newest problems first.
 
-    Ordered so failures and orphans come before the accounts that are working, because
-    a list of two hundred working accounts is not what anybody opens this for.
+    Ordered so failures and orphans come before working accounts - a list of
+    two hundred working accounts isn't what anyone opens this for.
     """
     await _target_or_404(session, target_id)
 
@@ -814,7 +798,7 @@ async def target_accounts(
         .join(User, User.id == ProvisioningLink.user_id)
         .where(*conditions)
         .order_by(
-            # Orphaned first: somebody still has access we meant to remove.
+            # Orphaned first: someone still has access we meant to remove.
             case(
                 (ProvisioningLink.state == LinkState.ORPHANED, 0),
                 (ProvisioningLink.state == LinkState.FAILED, 1),

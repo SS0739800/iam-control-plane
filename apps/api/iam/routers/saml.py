@@ -6,14 +6,14 @@
 /saml/logout    ends the session, and asks the provider to end theirs
 /saml/sls       single logout, in both directions
 
-These live outside /api on purpose. A provider posts to them directly from the
-person's browser, so they're part of the site rather than part of the JSON API,
-and Caddy proxies them separately. See docs/adr/0003-single-origin.md.
+These live outside /api. A provider posts to them directly from the person's
+browser, so they're part of the site rather than the JSON API, and Caddy
+proxies them separately. See docs/adr/0003-single-origin.md.
 
-None of what we send is signed, here or at login. That's the same position most
-service providers take and it works with a provider that doesn't insist. One that
-does needs a key of ours, and that arrives in P5 when we start issuing logins
-ourselves and need a key anyway.
+None of what we send is signed, here or at login. That's the same position
+most service providers take, and works with a provider that doesn't insist.
+One that does needs a key of ours, which arrives in P5 when we start issuing
+logins ourselves and need a key anyway.
 """
 
 from __future__ import annotations
@@ -78,16 +78,16 @@ SAML_METADATA_MEDIA_TYPE = "application/samlmetadata+xml"
 MAX_STORED_RESPONSE_CHARS = 32 * 1024
 """How much of a failed login's response to keep for the inspector.
 
-A real one is a few kilobytes, so this keeps all of anything genuine and refuses to
-let a deliberately enormous one bloat the audit log.
+A real one is a few kilobytes, so this keeps all of anything genuine while
+refusing to let an oversized one bloat the audit log.
 """
 
 ASSERTION_MEMORY_FALLBACK = dt.timedelta(hours=12)
 """How long to remember a login that never said when it expires.
 
-Longer than a normal assertion's lifetime, not shorter, and that's the right way
-round: a login with no stated expiry never fails the timing check, so forgetting
-it early is exactly when a replay would start working again.
+Longer than a normal assertion's lifetime, not shorter: a login with no
+stated expiry never fails the timing check, so forgetting it early is
+exactly when a replay would start working again.
 """
 
 
@@ -96,9 +96,10 @@ def _service_provider(
 ) -> ServiceProvider:
     """Who we are, worked out from the address we're served on.
 
-    Carries the signing certificate so /saml/metadata can publish it. The keypair is
-    built once at startup and lives on app.state — the same one P5 signs assertions
-    with, because there is one identity here, not one per direction.
+    Carries the signing certificate so /saml/metadata can publish it. The
+    keypair is built once at startup and lives on app.state — the same one
+    P5 signs assertions with, since there's one identity here, not one per
+    direction.
     """
     keypair = getattr(request.app.state, "saml_keypair", None)
     return ServiceProvider.from_base_url(
@@ -119,16 +120,16 @@ def _response_reader() -> ResponseReader:
     A dependency rather than a plain import, for two reasons.
 
     reader.py is the only module that needs xmlsec, which doesn't install on
-    Windows, so importing it at the top of this file would stop the whole app
-    being importable on a developer's laptop. Importing it in here defers that to
-    the one request that actually needs it. See ADR 0004.
+    Windows, so importing it at the top of this file would stop the whole
+    app being importable on a developer's laptop. Importing it here defers
+    that to the one request that actually needs it. See ADR 0004.
 
-    It also means a test can swap in a reader that returns prepared facts, so
+    It also lets a test swap in a reader that returns prepared facts, so
     everything after the signature check — the checks, creating the person,
-    issuing the session, the cookie, the redirect — is covered on any machine and
-    in CI, where xmlsec isn't installed either. Nothing about the real
-    cryptography is faked away: verifying signatures stays reader.py's job and is
-    exercised in the container.
+    issuing the session, the cookie, the redirect — is covered on any
+    machine and in CI, where xmlsec isn't installed either. Verifying
+    signatures itself stays reader.py's job and is still exercised in the
+    container, nothing about the real cryptography is faked.
     """
     from iam.saml.reader import read_response
 
@@ -169,9 +170,9 @@ LogoutResponseReaderDep = Annotated[LogoutResponseReader, Depends(_logout_respon
 async def metadata(sp: SpDep) -> Response:
     """Hand this to whoever runs the identity provider.
 
-    Deliberately not behind a login. It contains nothing secret — just our name and
-    the address to send answers to — and needing to be signed in to fetch the thing
-    you need in order to sign in would be an awkward loop.
+    Not behind a login. It contains nothing secret, just our name and the
+    address to send answers to, and needing to sign in to fetch the thing
+    you need in order to sign in would be a loop.
     """
     return Response(content=sp.metadata_xml(), media_type=SAML_METADATA_MEDIA_TYPE)
 
@@ -179,8 +180,8 @@ async def metadata(sp: SpDep) -> Response:
 @router.get(
     "/login",
     summary="Start signing in",
-    # Has to match what the handler actually returns, or the published schema lies
-    # about it. 303 rather than 307 because 307 keeps the method and body, and the
+    # Has to match what the handler actually returns, or the published schema
+    # lies. 303 rather than 307: 307 keeps the method and body, and the
     # provider's login page is a plain GET.
     status_code=status.HTTP_303_SEE_OTHER,
     response_class=RedirectResponse,
@@ -194,13 +195,14 @@ async def login(
 ) -> RedirectResponse:
     """Send someone to their provider to sign in.
 
-    Three things happen before the redirect: we check the provider is one we know,
-    we check where they've asked to be sent afterwards, and we write down the
-    request so the answer can be matched to it later.
+    Three things happen before the redirect: check the provider is one we
+    know, check where they've asked to be sent afterwards, and write down
+    the request so the answer can be matched to it later.
 
     That last part is why this can't be stateless. The answer arrives as a
-    cross-site form POST and browsers don't send our cookies on those, so the
-    request has to be remembered server-side, keyed by a token that travels with it.
+    cross-site form POST, and browsers don't send our cookies on those, so
+    the request has to be remembered server-side, keyed by a token that
+    travels with it.
     """
     provider = await session.scalar(
         select(IdentityProvider).where(
@@ -214,9 +216,9 @@ async def login(
             detail=f"No identity provider called {idp!r} is set up and enabled.",
         )
 
-    # Refuse to be turned into a redirect service. A login link that sends people
-    # somewhere else afterwards looks completely legitimate, because it starts at a
-    # real login page on a real domain.
+    # Refuse to be turned into a redirect service. A login link that sends
+    # people somewhere else afterwards looks completely legitimate, since it
+    # starts at a real login page on a real domain.
     if not is_safe_return_path(return_to):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -225,9 +227,8 @@ async def login(
 
     now = dt.datetime.now(dt.UTC)
 
-    # Clear out requests nobody ever finished. Doing it here rather than on a timer
-    # keeps the table small without needing a scheduled job, and there's no reason
-    # to hurry: an expired row is harmless, just useless.
+    # Clear out requests nobody ever finished. Doing it here keeps the table
+    # small without a scheduled job; an expired row is harmless, just useless.
     await session.execute(delete(SamlRequestState).where(SamlRequestState.expires_at < now))
 
     request_id = new_request_id()
@@ -277,9 +278,8 @@ async def login(
         extra={"idp": provider.slug, "request_id": request_id},
     )
 
-    # 303 rather than 307. A 307 tells the browser to keep the method and body,
-    # which is wrong here: the provider's login page is a GET, and sending anything
-    # else confuses some providers.
+    # 303 rather than 307: a 307 tells the browser to keep the method and
+    # body, which is wrong here since the provider's login page is a GET.
     return RedirectResponse(
         url=login_redirect_url(
             idp_sso_url=provider.sso_url,
@@ -302,19 +302,19 @@ async def _refuse_login(
 ) -> NoReturn:
     """Write down why a login was turned away, then turn it away.
 
-    Every rejection goes through here so none of them can be silent. A login that
-    fails and leaves no trace is the worst case for whoever has to work out why
-    somebody can't get in, and it's also how a sustained attempt to forge logins
+    Every rejection goes through here so none of them are silent. A login
+    that fails with no trace is the worst case for debugging why somebody
+    can't get in, and it's also how a sustained attempt to forge logins
     would go unnoticed.
 
-    The entry is committed on its own. The login it describes is being thrown
-    away, so there's nothing else to keep it company in the transaction.
+    The entry is committed on its own since the login it describes is being
+    thrown away regardless.
 
-    The response itself is kept on failures, and only on failures. It's the thing
-    you actually need when a login stops working against a new provider, and the
-    inspector shows it beside the check results. Successes don't get it: every
-    check passed, so there's nothing to look at, and storing an assertion per login
-    forever is a lot of somebody's personal data for no reason.
+    The raw response is kept on failures only. It's what you need when a
+    login stops working against a new provider, shown beside the check
+    results in the inspector. Successes don't get it: every check passed,
+    so there's nothing to look at, and keeping an assertion per login
+    forever is unnecessary personal data.
     """
     detail_payload: dict[str, Any] = {"reason": detail, **(extra or {})}
 
@@ -345,9 +345,9 @@ async def _refuse_login(
 @router.post(
     "/acs",
     summary="Where the provider posts the answer",
-    # 303 because what a browser gets back from a successful login is a redirect
-    # onwards, not a document. 307 would keep the method and re-POST the
-    # assertion at whatever page they were heading for.
+    # 303 because a successful login gets a redirect onwards, not a document.
+    # 307 would keep the method and re-POST the assertion at whatever page
+    # they were heading for.
     status_code=status.HTTP_303_SEE_OTHER,
     response_class=RedirectResponse,
 )
@@ -363,21 +363,21 @@ async def assertion_consumer_service(
     """Accept a login from the provider, or refuse it and say which check failed.
 
     This is the endpoint that has to be right. Everything the provider sends
-    arrives through the person's own browser, so all of it is under the control of
-    whoever is trying to get in. Nothing here is trusted until it has been through
-    every check in checks.py, and nothing is trusted a second time because the
-    request it answers is consumed whether the login is accepted or not.
+    arrives through the person's own browser, so all of it is under the
+    control of whoever is trying to get in. Nothing here is trusted until it
+    has passed every check in checks.py, and the request it answers is
+    consumed either way so it can't be retried.
 
-    The order is: find the request this is answering, work out which provider that
-    was, read and verify the document, run every check, and only then look up a
-    person. Reading identity out of a document before checking it is the mistake
-    that makes all the other checks pointless.
+    Order: find the request this is answering, work out which provider that
+    was, read and verify the document, run every check, and only then look
+    up a person. Reading identity out of a document before checking it would
+    make all the other checks pointless.
 
-    Only replies to logins we started. A provider can also start one by itself,
-    from a tile in its own dashboard, and that has no request to match against —
-    which means giving up the check that stops someone posting a login at us out
-    of the blue. checks.py handles that case, so turning it on later is a small
-    change, but it stays off until there's a reason to want it.
+    Only replies to logins we started. A provider can also start one itself,
+    from a tile in its own dashboard, with no request to match against —
+    which means giving up the check that stops someone posting a login at us
+    out of the blue. checks.py handles that case already, so turning it on
+    is a small change, but it stays off until there's a reason to want it.
 
     Raises:
         HTTPException: 400 for a login that can't be matched, read, or identified.
@@ -413,15 +413,15 @@ async def assertion_consumer_service(
             ),
         )
 
-    # Copied out now, because the row is deleted below and we still need them.
+    # Copied out now since the row is deleted below and we still need them.
     idp_slug = state.idp_slug
     expected_request_id = state.request_id
     return_to = state.return_to
 
-    # One answer per request, accepted or not. Removing it here rather than after
-    # the checks is what stops the same assertion being retried until something
-    # lines up — a captured login is otherwise good for as long as the request
-    # state sits there.
+    # One answer per request, accepted or not. Removing it here rather than
+    # after the checks stops the same assertion being retried until
+    # something lines up — a captured login is otherwise good for as long as
+    # the request state sits there.
     await session.execute(
         delete(SamlRequestState).where(SamlRequestState.relay_state == relay_state)
     )
@@ -487,8 +487,8 @@ async def assertion_consumer_service(
         already_seen=already_seen,
     )
     # Stored on every outcome, not just failures. This list is the login
-    # inspector: nine named results say "the clock is off", where a single
-    # pass/fail says "invalid assertion" and leaves you guessing.
+    # inspector: ten named results say "the clock is off", where a single
+    # pass/fail just says "invalid assertion" and leaves you guessing.
     checks = [result.as_dict() for result in results]
 
     if not all_passed(results):
@@ -518,9 +518,9 @@ async def assertion_consumer_service(
 
     outcome = await provision_user(session, claims)
 
-    # A provider will happily sign someone in who we've switched off here. Ours is
-    # the answer that counts, and this is the check P4's "someone left" flow
-    # depends on holding.
+    # A provider will happily sign someone in who we've switched off here.
+    # Ours is the answer that counts, and P4's "someone left" flow depends
+    # on this check holding.
     if not outcome.user.active:
         await _refuse_login(
             session=session,
@@ -532,10 +532,9 @@ async def assertion_consumer_service(
             raw_response=saml_response,
         )
 
-    # Somebody arriving by logging in is a joiner too, and somebody whose
-    # department changed at the provider brings that change in with their next
-    # login. Both are the same question — what do the rules want now — so both run
-    # the same reconcile. Skipped when nothing a rule reads moved, which is the
+    # Somebody arriving by logging in is a joiner too, and a department
+    # change at the provider comes in with their next login. Both run the
+    # same reconcile. Skipped when nothing a rule reads has moved, the
     # common case for a returning user.
     if outcome.created or touches_rules(outcome.updated_fields):
         rules_outcome = await reconcile(session, outcome.user)
@@ -548,9 +547,9 @@ async def assertion_consumer_service(
                 },
             )
 
-    # Remember the assertion so it can't be used again. Written before the session
-    # exists, so the two go into the same transaction and there's no window where
-    # somebody is signed in by a login we've forgotten.
+    # Remember the assertion so it can't be used again. Written before the
+    # session exists, so the two go into the same transaction and there's no
+    # window where somebody is signed in by a login we've forgotten.
     session.add(
         SamlAssertionSeen(
             assertion_id=facts.assertion_id,
@@ -565,8 +564,8 @@ async def assertion_consumer_service(
         )
     )
 
-    # Same reasoning as the cleanup in login(): once a remembered login is past its
-    # expiry it fails the timing check anyway, so there's nothing left to protect.
+    # Same cleanup as in login(): once a remembered login is past its expiry
+    # it fails the timing check anyway, so there's nothing left to protect.
     await session.execute(delete(SamlAssertionSeen).where(SamlAssertionSeen.not_on_or_after < now))
 
     saml_session, token = await create_session(
@@ -639,9 +638,9 @@ async def assertion_consumer_service(
         },
     )
 
-    # Checked again on the way out, even though login() checked it on the way in.
-    # It's one comparison, and it means a tampered-with row in the database can't
-    # turn a successful login into a redirect to somebody else's site.
+    # Checked again on the way out, even though login() checked it going in.
+    # It's one comparison, and it means a tampered-with row in the database
+    # can't turn a successful login into a redirect to somebody else's site.
     destination = return_to if is_safe_return_path(return_to) else "/"
 
     response = RedirectResponse(url=destination, status_code=status.HTTP_303_SEE_OTHER)
@@ -663,32 +662,30 @@ async def logout(
 ) -> RedirectResponse:
     """End this session, clear the cookie, and tell the provider.
 
-    A POST, not a GET. A sign-out you can trigger with a link means any page on
-    the internet can sign our users out with an image tag pointed at it. Annoying
-    rather than dangerous, but it costs nothing to get right, and the Lax cookie
-    means a cross-site POST doesn't carry the session anyway.
+    A POST, not a GET: a sign-out triggerable by a link means any page on the
+    internet could sign our users out with an image tag. Annoying rather
+    than dangerous, but costs nothing to get right, and the Lax cookie means
+    a cross-site POST doesn't carry the session anyway.
 
-    If the provider has a logout address, this ends with a redirect to it carrying
-    a LogoutRequest, and the provider signs them out too. Without that step,
-    clicking login again puts them straight back in without a password prompt,
-    because the provider still thinks they're signed in — which is a surprising
-    thing to watch happen right after pressing "sign out".
+    If the provider has a logout address, this ends with a redirect to it
+    carrying a LogoutRequest, so the provider signs them out too. Without
+    that step, clicking login again puts them straight back in without a
+    password prompt, since the provider still thinks they're signed in.
 
-    Our own session is ended before the redirect, not after. If the provider is
-    down or never answers, the person is still signed out here, which is the part
-    we're responsible for.
+    Our own session ends before the redirect, not after — if the provider is
+    down or never answers, the person is still signed out here, which is the
+    part we're responsible for.
 
-    Always succeeds. No cookie, an unknown one, one that expired an hour ago:
-    they all end with the person signed out and the cookie gone, which is what
-    they asked for. Reporting an error for "you were already signed out" would be
-    technically accurate and useless.
+    Always succeeds. No cookie, an unknown one, one that expired an hour
+    ago: they all end with the person signed out and the cookie gone, which
+    is what they asked for.
     """
     now = dt.datetime.now(dt.UTC)
     token = request.cookies.get(settings.session_cookie_name)
 
-    # find_by_token rather than lookup_session: somebody whose session went idle
-    # an hour ago still clicked the button, and their row should be marked ended
-    # rather than left open until it expires on its own.
+    # find_by_token rather than lookup_session: somebody whose session went
+    # idle an hour ago can still click the button, and their row should be
+    # marked ended rather than left open until it expires on its own.
     existing = await find_by_token(session, token) if token else None
 
     if existing is not None and existing.revoked_at is None:
@@ -748,14 +745,14 @@ async def _single_logout_url(
 ) -> str | None:
     """Where to send someone so the provider signs them out too, if it can.
 
-    Returns None when there's nothing to do — the provider has no logout address,
-    or we never recorded a NameID for this session and so have no way to say who to
-    sign out. Both are ordinary, and both just mean the person stays signed in over
-    there until that session expires on its own.
+    Returns None when there's nothing to do — the provider has no logout
+    address, or we never recorded a NameID for this session and have no way
+    to say who to sign out. Both are ordinary, and both just mean the person
+    stays signed in over there until that session expires on its own.
 
     The request is written down the same way a login request is, in
-    saml_request_state, so the answer can be matched to it when it comes back to
-    /saml/sls. Same table, same expiry sweep, same reasoning.
+    saml_request_state, so the answer can be matched to it when it comes
+    back to /saml/sls. Same table, same expiry sweep.
     """
     provider = await session.scalar(
         select(IdentityProvider).where(
@@ -795,9 +792,9 @@ async def _single_logout_url(
         extra={"idp": provider.slug, "request_id": request_id},
     )
 
-    # Signed, because Okta refuses an unsigned LogoutRequest outright — which is how
-    # single logout came to silently do nothing: our session ended, theirs did not,
-    # and the next login walked back in without a password.
+    # Signed, since Okta refuses an unsigned LogoutRequest outright — that's
+    # how single logout used to silently do nothing: our session ended,
+    # theirs didn't, and the next login walked back in without a password.
     return redirect_binding_url(
         provider.slo_url,
         saml_request=logout_request,
@@ -813,17 +810,17 @@ async def _identify_logout_sender(
 ) -> tuple[IdentityProvider, LogoutRequestFacts] | None:
     """Work out which provider sent this logout request, by whose key signed it.
 
-    Every enabled provider's certificate is tried, and the one that verifies is the
-    sender. That's deliberately not "read the Issuer and look it up" — the issuer is
-    a field in an unverified document, so believing it means letting the document
-    say who it's from. Trying keys instead means the signature is what identifies
-    the sender, which is the only thing here that can.
+    Every enabled provider's certificate is tried, and the one that verifies
+    is the sender. Not "read the Issuer and look it up": the issuer is a
+    field in an unverified document, so believing it means letting the
+    document say who it's from. The signature is the only thing here that
+    can actually identify the sender.
 
-    There are three providers at most, so trying each is cheaper than the round trip
-    it would replace.
+    There are three providers at most, so trying each is cheaper than the
+    round trip it would replace.
 
-    Returns None when nothing verified, which covers both an unsigned request and
-    one signed by a key we don't know.
+    Returns None when nothing verified: an unsigned request and one signed
+    by a key we don't know look the same from here.
     """
     providers = (
         await session.scalars(select(IdentityProvider).where(IdentityProvider.enabled.is_(True)))
@@ -841,10 +838,10 @@ async def _identify_logout_sender(
     return None
 
 
-# Registered twice rather than as one api_route with both methods, because that
-# gives the two operations the same id and the generated TypeScript then has a
-# name collision. Providers differ on which method they use and the message is
-# identical either way, so both point at one handler.
+# Registered twice rather than as one api_route with both methods, since that
+# gives the two operations the same id and the generated TypeScript ends up
+# with a name collision. Providers differ on which method they use, and the
+# message is identical either way, so both point at one handler.
 @router.get(
     "/sls",
     summary="Single logout, in both directions",
@@ -869,29 +866,29 @@ async def single_logout_service(
 ) -> RedirectResponse:
     """Handle a logout, whichever side started it.
 
-    Two different things arrive here and they are told apart by which parameter is
+    Two different things arrive here, told apart by which parameter is
     present, not by the method:
 
-    A `SAMLResponse` is the provider confirming it signed somebody out because we
-    asked. Our session was already ended before we sent that request, so there's
-    nothing left to do but check it and send the person home.
+    A `SAMLResponse` is the provider confirming it signed somebody out
+    because we asked. Our session already ended before we sent that
+    request, so there's nothing left to do but check it and send the person
+    home.
 
-    A `SAMLRequest` is the provider telling us somebody signed out somewhere else,
-    or was signed out by an administrator. That one matters: it's the message that
-    makes "remove their access" actually remove their access, everywhere, rather
-    than only in the places they happen to visit next.
+    A `SAMLRequest` is the provider telling us somebody signed out somewhere
+    else, or was signed out by an administrator. This one matters: it's the
+    message that makes "remove their access" actually remove access
+    everywhere, not just in places they happen to visit next.
 
-    Accepts GET and POST because providers differ on which they use, and the message
-    is the same either way.
+    Accepts GET and POST since providers differ on which they use; the
+    message is the same either way.
 
-    We don't sign our answer. A provider that insists on signed logout messages
-    won't accept it, and that needs a key of ours, which arrives in P5. authentik
-    doesn't insist, so this works today; Okta and Entra may not, and that's a known
-    limit rather than a surprise.
+    We don't sign our answer. A provider that insists on signed logout
+    messages won't accept it, and that needs a key of ours, arriving in P5.
+    authentik doesn't insist, so this works today; Okta and Entra may not.
 
-    Unsigned requests are refused. We can't tell who sent one, and accepting it
-    would let anybody sign out anybody whose NameID they can guess. That's only a
-    nuisance rather than a way in, but refusing costs nothing.
+    Unsigned requests are refused. We can't tell who sent one, and accepting
+    it would let anybody sign out anybody whose NameID they can guess —
+    a nuisance rather than a way in, but refusing costs nothing.
     """
     now = dt.datetime.now(dt.UTC)
     parameters = dict(request.query_params)
@@ -937,8 +934,8 @@ async def single_logout_service(
             extra={"idp": provider.slug if provider else None, "confirmed": confirmed},
         )
 
-        # Home either way. Our session ended before the request went out, so a
-        # provider that says no changes nothing on this side.
+        # Home either way. Our session ended before the request went out, so
+        # a provider saying no changes nothing on this side.
         response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
         clear_session_cookie(response, settings=settings)
         return response
@@ -990,8 +987,8 @@ async def single_logout_service(
             now=now,
         )
     elif facts.name_id:
-        # No session index: the provider means every session this person has with
-        # us. That's what the spec says an absent index asks for, and it's the right
+        # No session index: the provider means every session this person has
+        # with us, which is what an absent index asks for and the right
         # reading for "this account is gone".
         ended = await revoke_by_name_id(
             session,
@@ -1036,9 +1033,9 @@ async def single_logout_service(
         issued_at=now,
     )
 
-    # Back to the provider if it gave us somewhere to answer, home otherwise. A
-    # provider with no logout address that sends logout requests anyway is odd, but
-    # dropping the person on a blank page over it would be worse.
+    # Back to the provider if it gave us somewhere to answer, home otherwise.
+    # A provider with no logout address that sends logout requests anyway is
+    # odd, but dropping the person on a blank page would be worse.
     destination = (
         redirect_binding_url(
             provider.slo_url, saml_response=logout_response, relay_state=relay_state

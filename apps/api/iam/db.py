@@ -1,8 +1,7 @@
 """Sets up the database connection and hands sessions to requests.
 
-The pooler-mode branch below is the reason this file needs a comment at all. Get it
-wrong on a pooled connection and things break only sometimes, only under load,
-which is horrible to track down later.
+Getting the pooler mode wrong causes intermittent failures under load that are
+hard to reproduce locally. See build_engine below.
 """
 
 from __future__ import annotations
@@ -26,15 +25,13 @@ from iam.config import Settings
 
 
 def build_engine(settings: Settings) -> AsyncEngine:
-    """Build the database connection, set up for however we're reaching Postgres.
+    """Build the database engine for however we're reaching Postgres.
 
-    A pooler in transaction mode — Supabase on port 6543, Neon's `-pooler` host —
-    shares a small number of real database connections between many clients.
-    asyncpg gives its prepared statements names that only make sense on one
-    connection, so a reused name can land on a connection that's never seen it. You
-    get an occasional DuplicatePreparedStatementError under load and never once
-    while testing locally. Turning both caches off fixes it, and we mustn't pool on
-    top of something that's already pooling.
+    In transaction-mode pooling (Supabase port 6543, Neon's `-pooler` host), asyncpg's
+    prepared statement names can collide across connections since the pool hands out
+    shared connections. That causes rare DuplicatePreparedStatementError failures under
+    load that never show up locally. Turning off both statement caches fixes it. We
+    also skip our own pool since the upstream pooler already pools connections.
     """
     kwargs: dict[str, Any] = {"echo": settings.db_echo}
 
@@ -66,8 +63,8 @@ def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     """FastAPI dependency yielding a session bound to this request.
 
-    The sessionmaker is built once in the app lifespan and stored on app.state,
-    so tests can swap it without touching module globals.
+    The sessionmaker is stored on app.state so tests can swap it without touching
+    module globals.
     """
     factory: async_sessionmaker[AsyncSession] = request.app.state.sessionmaker
     async with factory() as session:

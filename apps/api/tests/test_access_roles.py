@@ -150,8 +150,8 @@ async def test_an_expiry_in_the_past_is_refused(db_session: AsyncSession) -> Non
 async def test_a_deactivated_person_cannot_be_granted_anything(
     db_session: AsyncSession,
 ) -> None:
-    """Either a mistake or the first half of an attack. Reactivating is a separate,
-    deliberate act."""
+    """Either a mistake or the first half of an attack. Reactivating is a
+    separate step."""
     user = await make_user(db_session, active=False)
 
     with pytest.raises(RoleGrantRefused, match="deactivated"):
@@ -165,8 +165,8 @@ async def test_the_database_refuses_two_live_grants(db_session: AsyncSession) ->
     user = await make_user(db_session)
     await grant_role(db_session, user, role=PlatformRole.HELPDESK, granter=ADMIN, now=NOW)
 
-    # Going around the service layer on purpose. This is what a second request
-    # racing the first would do.
+    # Bypasses the service layer — this is what a second request racing the
+    # first would do.
     db_session.add(
         RoleGrant(
             user_id=user.id,
@@ -368,8 +368,8 @@ async def test_nothing_in_the_database_has_drifted(db_session: AsyncSession) -> 
 
 @pytest.mark.integration
 async def test_the_drift_check_actually_catches_drift(db_session: AsyncSession) -> None:
-    """A safety net that reports nothing because it looks nowhere is worse than
-    none, so this breaks the cache on purpose and expects to be caught."""
+    """A safety net that always reports nothing is worse than none, so this
+    breaks the cache and checks that it gets caught."""
     user = await make_user(db_session)
     user.platform_role = PlatformRole.ADMIN
     await db_session.flush()

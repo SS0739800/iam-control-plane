@@ -1,21 +1,8 @@
 /**
- * The frame every page sits in: title, navigation, and who you are — or, for somebody
- * who is not signed in, a sign-in page and nothing else.
- *
- * The gate is the outer decision. /api/me answers 401 when there is no session, and
- * that is the whole of it: no navigation, no panels, no shell. It used to render the
- * console regardless, so a stranger saw every section name and a grid of red "missing
- * permission" boxes. Nothing leaked — the API refuses those calls — but it advertised
- * the shape of the system and looked broken doing it.
- *
- * Worth being clear that this is presentation, not access control. Every endpoint
- * behind it checks permissions itself, which is the part somebody editing the frontend
- * cannot switch off.
- *
- * The banner is the other interesting part. Outside production a request with no
- * session cookie is answered by the development stand-in, and that is impersonation
- * rather than authentication — so /api/me reports which of the two happened and the
- * banner says so, instead of a fixed warning nobody rereads.
+ * The app shell: top bar, nav, and whoever is signed in. Signed out, you get only
+ * the sign-in page — no nav, no panels. That's just to avoid showing a stranger the
+ * whole console with permission errors everywhere; the API still enforces access on
+ * its own regardless of what this file renders.
  */
 
 import { useState } from 'react'
@@ -25,14 +12,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 
 import { fetchMe, fetchSignInOptions } from './lib/api'
 
-/**
- * The left rail, grouped the way the portal groups things.
- *
- * Eleven flat entries across the top was a lot to scan. Entra splits its navigation
- * into headed sections — who exists, what they can reach, how it is governed — and
- * that grouping is doing real work rather than decoration: "Requests" and "Review"
- * mean nothing next to "Users" and everything next to each other.
- */
+/** Left nav, grouped into sections instead of one flat list of 11 links. */
 const NAV: { heading: string; items: { to: string; label: string; end?: boolean }[] }[] = [
   {
     heading: 'Overview',
@@ -56,8 +36,7 @@ const NAV: { heading: string; items: { to: string; label: string; end?: boolean 
   },
   {
     heading: 'Provisioning',
-    // Two entries rather than one, because the two directions are not variations on
-    // a theme: one manages who may write to us, the other manages where we write.
+    // In and out are separate pages, not one page with a toggle.
     items: [
       { to: '/provisioning', label: 'Provisioning in' },
       { to: '/provisioning-out', label: 'Provisioning out' },
@@ -72,15 +51,7 @@ const NAV: { heading: string; items: { to: string; label: string; end?: boolean 
   },
 ]
 
-/**
- * The sign-in links, built from the providers actually registered.
- *
- * These used to be one hard-coded `?idp=authentik`, which worked locally and pointed
- * at a provider that does not exist in production — so the first person to deploy this
- * had to be handed a URL by hand to get in at all. The list now comes from the one
- * unauthenticated endpoint, because a sign-in screen cannot ask for a permission:
- * whoever is reading it has no session, which is precisely why they are reading it.
- */
+/** Sign-in links, one per identity provider actually registered. */
 function SignInLinks({ className }: { className?: string }) {
   const options = useQuery({
     queryKey: ['sign-in-options'],
@@ -90,9 +61,7 @@ function SignInLinks({ className }: { className?: string }) {
 
   if (options.isPending) return null
 
-  // Nothing registered, or the request failed. Saying so beats offering a dead link:
-  // on a fresh deployment this is the true state of affairs, and the fix is a command
-  // somebody runs rather than anything on this page.
+  // No providers, or the request failed — either way there's no link to offer.
   if (options.isError || (options.data?.length ?? 0) === 0) {
     return (
       <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -137,13 +106,9 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 /**
- * The left rail's sections, each one collapsible the way Entra's are.
- *
- * Collapsing only applies from `sm` up. Below that the sections flatten into one
- * horizontal scrolling strip (see the comment on NAV above) with the headings already
- * hidden, so there is nothing there to collapse — every link stays reachable by
- * scrolling. On the rail, closing a section keeps its links in the DOM and only hides
- * them past `sm`, so the mobile strip is never affected by rail state.
+ * Left nav with collapsible sections, like Entra's.
+ * Collapsing only applies at `sm` and up — on mobile it's a flat scroll strip with no
+ * headings, so there's nothing to collapse there.
  */
 function SectionNav() {
   const [closed, setClosed] = useState<Record<string, boolean>>({})
@@ -174,11 +139,7 @@ function SectionNav() {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  /* Selected is a tint, plus a left bar once there is a rail to
-                     put it against. The portal marks position rather than shouting
-                     about it — a solid dark chip in a rail this size reads as a
-                     button somebody should press. Closed sections hide their links
-                     from `sm` up only — the mobile strip never reads `isOpen`. */
+                  // sm:hidden only, so a closed section never touches the mobile strip.
                   `rounded-fluent px-3 py-1.5 text-sm whitespace-nowrap sm:rounded-none sm:border-l-2 ${
                     isOpen ? 'sm:block' : 'sm:hidden'
                   } ${
@@ -198,26 +159,18 @@ function SectionNav() {
   )
 }
 
-/** Who the API thinks we are, and how it worked that out. */
+/** Who's signed in, shown in the top bar. */
 function WhoAmI() {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
 
-  // Both branches are unreachable in practice: App does not render this until the same
-  // query has resolved, and shares its cache. Kept as a guard rather than an assertion,
-  // because a component that throws on a null is a worse failure than one that renders
-  // nothing for a moment.
+  // App already waits for this query before rendering the shell, so it's resolved by now.
   if (me.isPending || me.isError) return null
 
   const who = me.data
 
-  // Sits in the dark top bar, so this is light-on-dark in both colour schemes rather
-  // than the bordered panel it used to be.
   return (
     <span className="flex flex-wrap items-center gap-3 text-sm">
       {!who.via_saml_session ? (
-        /* Still loud, because it is still impersonation rather than authentication —
-           but it has to be loud against a dark bar now, so it is an amber chip rather
-           than a tinted box. */
         <span className="rounded-fluent bg-amber-400 px-2 py-0.5 text-xs font-semibold text-neutral-190">
           development stand-in, not a login
         </span>
@@ -225,8 +178,7 @@ function WhoAmI() {
       <span className="text-neutral-30">
         {who.display_name} <span className="text-neutral-90">({who.role})</span>
       </span>
-      {/* A form, not a link. A sign-out you can trigger with a link means any page
-          on the internet can sign our users out with an image tag. */}
+      {/* Form, not a link — a link would let any page on the web sign users out via an img tag. */}
       <form method="post" action="/saml/logout">
         <button type="submit" className="text-sm text-neutral-30 hover:underline">
           Sign out
@@ -236,19 +188,7 @@ function WhoAmI() {
   )
 }
 
-/**
- * What a signed-out visitor gets: this, and nothing else.
- *
- * No navigation, no panels, no shell. The frame used to render regardless of whether
- * anybody was signed in, so a stranger saw the whole console — every section name, the
- * dashboard layout, and a row of red "Missing required permission" boxes where the data
- * would be. Nothing sensitive leaked, because the API refuses every one of those calls,
- * but it advertised the shape of the system and looked broken while doing it.
- *
- * The API is still the thing that enforces this. Hiding a screen is not access control
- * and this component is not load-bearing for security — every endpoint behind it checks
- * permissions on its own, which is what a person editing the frontend cannot switch off.
- */
+/** What a signed-out visitor sees — no nav, no panels, just this. */
 function SignInPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-6 py-10">
@@ -278,35 +218,23 @@ function SignInPage() {
 export default function App() {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
 
-  // Nothing at all while we find out. A flash of the full console followed by a login
-  // page is worse than a blank moment, and this request is fast.
+  // Render nothing while we check — a flash of the console before the login page is worse.
   if (me.isPending) return null
 
-  // 401 from /api/me. Outside production the development stand-in answers instead, so
-  // this branch is only reached when there is genuinely no session — which is every
-  // visitor in production and anybody who has signed out.
+  // 401 means no session (outside production, the dev stand-in answers instead of this).
   if (me.isError) return <SignInPage />
 
   return (
     <div className="min-h-screen">
-      {/* The top bar. Thin, dark, and always there — in the portal it is where the
-          product name and your account live, and it is the thing that makes the page
-          feel like part of a suite rather than a standalone app. */}
       <header className="flex items-center justify-between gap-4 bg-neutral-160 px-4 py-2 text-white dark:bg-black">
         <span className="text-sm font-semibold">IAM Control Plane</span>
         <WhoAmI />
       </header>
 
       <div className="flex">
-        {/* The left rail. The single most recognisable thing about the portal, and
-            the reason this redesign is a layout change rather than a repaint.
-
-            One nav, two shapes. The first version rendered a rail and a separate
-            horizontal strip, hiding one with CSS — which put every link in the
-            document twice and read as two identical menus to a screen reader. So the
-            sections use `display: contents` on small screens: the headings hide, the
-            wrappers stop being boxes, and the links become direct children of a
-            scrolling row. Same DOM, same order, one menu. */}
+        {/* One nav, not two — on mobile the same links become a horizontal scroll strip
+            via `display: contents`, rather than rendering a second hidden copy for
+            screen readers to trip over. */}
         <SectionNav />
 
         <main className="min-w-0 flex-1 px-6 py-6">

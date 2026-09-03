@@ -1,29 +1,16 @@
 """What an access review should actually look at.
 
-The obvious version of this screen is a list of who has what. That is a directory
-listing, it is already available on the Users page, and nobody finds anything by
-reading it — with a thousand people and four thousand memberships, the eye slides
-off.
+A directory listing of who has what already exists on the Users page, and
+nobody finds anything by scanning it. This looks for things worth a
+question instead — each finding says what it found, who it's about, and
+why it matters.
 
-So this looks for the things that warrant a question. Each finding says what it
-found, who it is about, and why somebody should care. A review that produces a
-short list of specific concerns gets worked through; one that produces a spreadsheet
-gets filed.
+Every finding names an action: put an end date on it, record a reason,
+revoke it, or run the sweep. A finding nobody can act on just gets ignored.
 
-Every finding here is answerable
---------------------------------
-
-Each one names something a person can do about it: put an end date on it, record a
-reason, revoke it, or run the sweep. A finding with no available action is a
-complaint, and after the second review nobody reads those.
-
-What is deliberately not flagged
---------------------------------
-
-Seeded demo data, and memberships the provider owns. Both would be noise: the
-first is not real, and the second is authentik's business rather than something an
-auditor here can act on. Flagging things nobody can fix is how a review screen
-teaches people to ignore it.
+Not flagged: seeded demo data, and memberships the provider owns. The demo
+data isn't real, and provider-owned membership isn't something an admin
+here can act on — flagging it would just be noise on every review.
 """
 
 from __future__ import annotations
@@ -75,11 +62,8 @@ class Finding:
 
 
 async def standing_privilege(db: AsyncSession, *, now: dt.datetime) -> list[Finding]:
-    """Console roles with no end date.
-
-    Not wrong — plenty of people genuinely need permanent access — but it is the
-    single most common way somebody ends up an admin years after the reason
-    expired. An end date turns that into a decision somebody has to make again.
+    """Console roles with no end date. Not wrong on its own, but it's the
+    most common way someone stays an admin long after the reason expired.
     """
     rows = (
         await db.execute(
@@ -97,9 +81,7 @@ async def standing_privilege(db: AsyncSession, *, now: dt.datetime) -> list[Find
     return [
         Finding(
             kind="standing_privilege",
-            # Admin with no end date is a different question from auditor with no
-            # end date, and a review that treats them alike buries the one that
-            # matters.
+            # Admin with no end date matters more than auditor with no end date.
             severity="high" if grant.role == PlatformRole.ADMIN else "medium",
             subject=f"{user.display_name} <{user.user_name}>",
             subject_user_id=user.id,
@@ -115,12 +97,9 @@ async def standing_privilege(db: AsyncSession, *, now: dt.datetime) -> list[Find
 
 
 async def unexplained_roles(db: AsyncSession, *, now: dt.datetime) -> list[Finding]:
-    """Roles nobody can account for.
-
-    Grants marked 'migrated' predate this table, so who decided them and when was
-    never recorded. That is not somebody's fault and it is exactly what a review
-    exists to clear: each one needs a person to say "yes, still needed" and become a
-    real decision.
+    """Roles nobody can account for. Grants marked 'migrated' predate this
+    table, so who decided them and when was never recorded. Each one needs
+    someone to confirm it's still needed.
     """
     rows = (
         await db.execute(
@@ -154,11 +133,8 @@ async def unexplained_roles(db: AsyncSession, *, now: dt.datetime) -> list[Findi
 
 
 async def access_without_a_reason(db: AsyncSession, *, now: dt.datetime) -> list[Finding]:
-    """Live grants with an empty reason field.
-
-    The reason is the part of a review that cannot be reconstructed afterwards.
-    Everything else — who, what, when — is in the row; why is only ever there if
-    somebody typed it.
+    """Live grants with an empty reason field. Who, what, and when are
+    always in the row; why only exists if someone typed it in.
     """
     rows = (
         await db.execute(
@@ -190,15 +166,13 @@ async def access_without_a_reason(db: AsyncSession, *, now: dt.datetime) -> list
 
 
 async def access_held_by_leavers(db: AsyncSession, *, now: dt.datetime) -> list[Finding]:
-    """Deactivated people who still hold something.
+    """Deactivated people who still hold something. Not an open door since
+    they can't sign in, but it usually means the leaver flow didn't run, or
+    someone was deactivated straight in the database.
 
-    They cannot sign in, so this is not an open door — but it is how a group
-    listing stops being trustworthy, and it usually means the leaver flow did not
-    run or somebody was deactivated straight in the database.
-
-    Provider-owned memberships are excluded. The leaver flow deliberately leaves
-    those alone, so flagging them would report our own intended behaviour as a
-    problem, every time, forever.
+    Provider-owned memberships are excluded, since the leaver flow always
+    leaves those alone — flagging them would just report normal behavior as
+    a problem every time.
     """
     role_rows = (
         await db.execute(
@@ -258,11 +232,10 @@ async def access_held_by_leavers(db: AsyncSession, *, now: dt.datetime) -> list[
 
 
 async def lapsed_but_not_swept(db: AsyncSession, *, now: dt.datetime) -> list[Finding]:
-    """Grants past their end date that nothing has revoked yet.
-
-    Harmless in itself — the expiry is checked on the request path, so an expired
-    admin is not an admin — but it means the sweep is not running, and the sweep is
-    what keeps the cached role on the user row honest.
+    """Grants past their end date that nothing has revoked yet. Harmless by
+    itself since expiry is checked on every request, but it means the sweep
+    isn't running, and the sweep is what keeps the cached role on the user
+    row correct.
     """
     rows = (
         await db.execute(
@@ -297,10 +270,8 @@ async def lapsed_but_not_swept(db: AsyncSession, *, now: dt.datetime) -> list[Fi
 async def stale_requests(
     db: AsyncSession, *, now: dt.datetime, older_than_days: int = 14
 ) -> list[Finding]:
-    """Requests nobody has answered.
-
-    Somebody is waiting, and an approval queue that grows without being worked is
-    how people learn to route around the process and ask an admin directly.
+    """Requests nobody has answered. An approval queue that doesn't get
+    worked teaches people to route around it and ask an admin directly.
     """
     cutoff = now - dt.timedelta(days=older_than_days)
     rows = (
@@ -330,11 +301,9 @@ async def stale_requests(
 
 
 async def groups_nobody_is_in(db: AsyncSession, *, now: dt.datetime) -> list[Finding]:
-    """Empty groups that still grant application access.
-
-    An empty group is usually harmless clutter. One with an application attached is
-    a door with nobody behind it, and the moment somebody is added they get access
-    nobody remembers deciding.
+    """Empty groups that still grant application access — a door with
+    nobody behind it, until someone gets added and inherits access nobody
+    remembers deciding on.
     """
     rows = (
         await db.execute(
@@ -378,11 +347,9 @@ class Review:
 
 
 async def run(db: AsyncSession, *, now: dt.datetime) -> Review:
-    """Look for everything, worst first.
-
-    Each check is a separate function and a separate query rather than one clever
-    join. They run rarely, and a reviewer who does not believe a finding needs to be
-    able to read the one function that produced it.
+    """Run every check, worst findings first. Each check is its own function
+    and query rather than one big join, so a reviewer can go read the
+    function behind any finding they don't trust.
     """
     collected: list[Finding] = []
     for check in (

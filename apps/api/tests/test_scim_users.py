@@ -1,11 +1,11 @@
-"""Tests for /scim/v2/Users — the provider writing people into the directory.
+"""Tests for /scim/v2/Users - the provider writing people into the directory.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 
-The documents are shaped the way real providers send them, including Entra's
-pathless PATCH and authentik's enterprise extension. The two tests worth reading
-first are the one that says a deactivation ends somebody's sessions, and the one
-that says SCIM cannot set what a person is allowed to do in this console.
+The documents are shaped the way real providers send them, including
+Entra's pathless PATCH and authentik's enterprise extension. Worth reading
+first: the test that a deactivation ends somebody's sessions, and the one
+that SCIM can't set what a person is allowed to do in this console.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def fetch_user(user_name: str) -> User | None:
 
 
 def test_no_token_is_refused_in_scim_shape(db_client: TestClient) -> None:
-    """A provider reading FastAPI's {"detail": ...} learns nothing it can act on."""
+    """A provider reading FastAPI's {"detail": ...} can't act on that."""
     response = db_client.get(USERS)
 
     assert response.status_code == 401
@@ -80,14 +80,14 @@ def test_a_token_nobody_issued_is_refused(db_client: TestClient) -> None:
 
 
 def test_the_scheme_is_case_insensitive(db_client: TestClient, caller: ScimCaller) -> None:
-    """RFC 7235 says so, and providers send both spellings."""
+    """Per RFC 7235, and providers send both spellings."""
     response = db_client.get(USERS, headers={"Authorization": f"bearer {caller.token}"})
 
     assert response.status_code == 200
 
 
 def test_a_disabled_client_stops_working(db_client: TestClient, caller: ScimCaller) -> None:
-    """Turning the sync off has to actually turn it off."""
+    """Disabling the client has to actually stop the sync."""
 
     async def disable(session: AsyncSession) -> None:
         client = await session.scalar(select(ScimClient).where(ScimClient.name == caller.name))
@@ -114,8 +114,8 @@ def test_a_revoked_client_stops_working(db_client: TestClient, caller: ScimCalle
 def test_an_unknown_and_a_revoked_token_are_told_apart_only_in_the_log(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """Both answer the same thing. Saying "that token was revoked" out loud tells
-    somebody holding a list of candidates which ones were once real."""
+    """Both answer the same thing - saying "that token was revoked" out
+    loud would tell somebody holding a list of candidates which were once real."""
 
     async def revoke(session: AsyncSession) -> None:
         client = await session.scalar(select(ScimClient).where(ScimClient.name == caller.name))
@@ -146,9 +146,9 @@ def test_the_list_comes_back_in_scims_envelope(db_client: TestClient, caller: Sc
 def test_paging_is_one_based(db_client: TestClient, caller: ScimCaller) -> None:
     """startIndex 1 is the first record, not the second.
 
-    Off by one here either skips whoever is first in the directory or makes a
-    provider request the same page forever. The test makes its own two rows
-    rather than assuming the database already has any.
+    Off by one here either skips whoever is first in the directory or makes
+    a provider request the same page forever. The test makes its own two
+    rows instead of assuming the database already has any.
     """
     create(db_client, caller)
     create(db_client, caller, userName=caller.other_user_name, externalId=None)
@@ -168,7 +168,7 @@ def test_paging_is_one_based(db_client: TestClient, caller: ScimCaller) -> None:
 def test_asking_past_the_end_returns_nothing_rather_than_wrapping(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """A provider walking pages has to be able to tell when it has finished."""
+    """A provider walking pages has to be able to tell when it's finished."""
     total = db_client.get(USERS, params={"count": 1}, headers=caller.headers).json()["totalResults"]
 
     response = db_client.get(
@@ -182,7 +182,7 @@ def test_asking_past_the_end_returns_nothing_rather_than_wrapping(
 def test_the_question_a_provider_asks_before_creating(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """ "Do you already have this one?" — a single eq on userName."""
+    """"Do you already have this one?" - a single eq on userName."""
     before = db_client.get(
         USERS, params={"filter": f'userName eq "{caller.user_name}"'}, headers=caller.headers
     )
@@ -199,7 +199,7 @@ def test_the_question_a_provider_asks_before_creating(
 def test_a_username_matches_whatever_case_it_was_sent_in(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """Providers are not consistent about the case of an email address, and
+    """Providers aren't consistent about the case of an email address, and
     matching exactly would create a second account for the same person."""
     create(db_client, caller)
 
@@ -215,8 +215,8 @@ def test_a_username_matches_whatever_case_it_was_sent_in(
 def test_a_filter_we_cannot_read_is_an_error_not_everybody(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The dangerous one. Answering an unparseable filter with the whole directory
-    hands the provider somebody else's account to write to."""
+    """Answering an unparseable filter with the whole directory would hand
+    the provider somebody else's account to write to."""
     response = db_client.get(
         USERS, params={"filter": 'userName eq "a" and active eq true'}, headers=caller.headers
     )
@@ -234,8 +234,8 @@ def test_asking_for_somebody_who_is_not_there(db_client: TestClient, caller: Sci
 def test_an_id_that_could_never_exist_is_a_404_not_a_crash(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The id is whatever the provider put in the URL, so a malformed one has to
-    answer rather than raise on the UUID parse."""
+    """The id is whatever the provider put in the URL, so a malformed one
+    should answer 404 instead of raising on the UUID parse."""
     response = db_client.get(f"{USERS}/not-a-uuid", headers=caller.headers)
 
     assert response.status_code == 404
@@ -266,8 +266,8 @@ def test_creating_somebody_stores_what_the_provider_sent(
 def test_creating_the_same_person_twice_says_uniqueness(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The code a provider reads to mean "already there, update instead". A bare
-    400 makes it report a failed sync forever over somebody who exists."""
+    """The code a provider reads to mean "already there, update instead".
+    A bare 400 would make it report a failed sync forever over somebody who exists."""
     create(db_client, caller)
 
     again = db_client.post(USERS, json=body(caller), headers=caller.headers)
@@ -292,8 +292,8 @@ def test_two_people_cannot_share_an_external_id(db_client: TestClient, caller: S
 def test_a_provider_cannot_decide_what_somebody_may_do_here(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The important one. Nothing upstream should be able to grant itself an admin
-    in this console by editing a directory record."""
+    """Nothing upstream should be able to grant itself an admin in this
+    console by editing a directory record."""
     create(db_client, caller, platform_role="admin", source="manual")
 
     stored = fetch_user(caller.user_name)
@@ -304,9 +304,8 @@ def test_a_provider_cannot_decide_what_somebody_may_do_here(
 def test_creating_somebody_is_recorded_against_the_client_not_the_person(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """ "authentik created this account at 02:14" is the sentence somebody needs
-    later, and it isn't available if this is logged as the user acting on
-    themselves."""
+    """Someone needs to find "authentik created this account at 02:14" later,
+    which isn't possible if this gets logged as the user acting on themselves."""
     create(db_client, caller)
 
     async def work(session: AsyncSession) -> AuditEvent | None:
@@ -330,8 +329,8 @@ def test_creating_somebody_is_recorded_against_the_client_not_the_person(
 def test_replacing_does_not_blank_what_the_document_leaves_out(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """A partial resource on PUT must not read as "set the rest to null", or one
-    tidy-up sync blanks everybody's department."""
+    """A partial resource on PUT shouldn't read as "set the rest to null",
+    or one tidy-up sync blanks everybody's department."""
     created = create(db_client, caller, **{ENTERPRISE_USER_SCHEMA: {"department": "Engineering"}})
 
     db_client.put(
@@ -349,7 +348,7 @@ def test_replacing_does_not_blank_what_the_document_leaves_out(
 def test_deprovisioning_is_a_patch_of_one_boolean(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """What a leaver actually looks like on the wire."""
+    """Deprovisioning is one PATCH replacing `active`."""
     created = create(db_client, caller)
 
     response = db_client.patch(
@@ -372,8 +371,9 @@ def test_deprovisioning_is_a_patch_of_one_boolean(
 def test_the_pathless_patch_entra_sends_also_works(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """No path, and the value is a partial resource. Handling only the other shape
-    works against authentik and then ignores every deactivation Entra sends."""
+    """No path, and the value is a partial resource. Handling only the
+    other shape works against authentik and silently ignores every
+    deactivation Entra sends."""
     created = create(db_client, caller)
 
     response = db_client.patch(
@@ -388,8 +388,8 @@ def test_the_pathless_patch_entra_sends_also_works(
 def test_a_patch_path_we_cannot_act_on_is_refused_not_ignored(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """A PATCH that answers 200 and changes nothing tells the provider somebody was
-    deactivated when they were not."""
+    """A PATCH that answers 200 and changes nothing would tell the provider
+    somebody was deactivated when they weren't."""
     created = create(db_client, caller)
 
     response = db_client.patch(
@@ -405,9 +405,9 @@ def test_a_patch_path_we_cannot_act_on_is_refused_not_ignored(
 def test_a_login_created_person_becomes_scim_managed_when_the_provider_writes(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """Somebody who arrived by logging in is a bare username. Once the directory
-    upstream owns them, the console should stop offering to hand-edit fields the
-    next sync would overwrite."""
+    """Somebody who arrived by logging in is a bare username. Once the
+    directory upstream owns them, the console should stop offering to
+    hand-edit fields the next sync would overwrite."""
 
     async def make_jit(session: AsyncSession) -> str:
         person = User(
@@ -441,8 +441,8 @@ def test_a_login_created_person_becomes_scim_managed_when_the_provider_writes(
 def test_deactivating_ends_every_session_they_have(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The point of the whole phase. Setting a flag while leaving somebody signed
-    in for the next eight hours is the failure this design exists to avoid."""
+    """Setting a flag while leaving somebody signed in for the next eight
+    hours would defeat the point of deprovisioning."""
     created = create(db_client, caller)
     user_id = uuid.UUID(str(created["id"]))
 
@@ -481,8 +481,8 @@ def test_deactivating_ends_every_session_they_have(
 
 
 def test_delete_deactivates_and_keeps_the_row(db_client: TestClient, caller: ScimCaller) -> None:
-    """A provider sending DELETE means "this person has left". Erasing the record
-    of what they had access to is the opposite of what an audit log is for."""
+    """A provider sending DELETE means "this person has left" - erasing
+    the record of what they had access to defeats the point of an audit log."""
     created = create(db_client, caller)
 
     response = db_client.delete(f"{USERS}/{created['id']}", headers=caller.headers)
@@ -495,8 +495,8 @@ def test_delete_deactivates_and_keeps_the_row(db_client: TestClient, caller: Sci
 
 
 def test_deleting_twice_is_not_an_error(db_client: TestClient, caller: ScimCaller) -> None:
-    """A provider retrying a delete it already sent should not be punished for
-    being thorough."""
+    """A provider retrying a delete it already sent shouldn't get an error
+    for being thorough."""
     created = create(db_client, caller)
 
     first = db_client.delete(f"{USERS}/{created['id']}", headers=caller.headers)
@@ -509,8 +509,8 @@ def test_deleting_twice_is_not_an_error(db_client: TestClient, caller: ScimCalle
 def test_re_sending_an_unchanged_record_writes_no_audit_entry(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """Providers re-send constantly during a full sync. Logging every one would
-    bury the changes that matter."""
+    """Providers re-send constantly during a full sync; logging every one
+    would bury the changes that matter."""
     created = create(db_client, caller)
 
     async def newest_id(session: AsyncSession) -> int:

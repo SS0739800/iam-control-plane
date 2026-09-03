@@ -1,27 +1,25 @@
 """Works out who is making the request.
 
-The real answer comes from the session cookie. It holds a random token, we look
-up its hash, and that gives us a session row and the person it belongs to. A
-session that's been revoked, has expired, or has sat idle too long is the same as
-no session at all.
+The real answer comes from the session cookie. It holds a random token, we
+look up its hash, and that gives us a session row and the person it belongs
+to. A session that's been revoked, has expired, or has sat idle too long
+counts as no session at all.
 
-There is still a development stand-in behind it, and it's worth being precise
-about what it is. With no session cookie, a request outside production can say
-who it is with an X-Dev-Actor header naming a user, falling back to
-DEV_ACTOR_USER_NAME. That is not authentication, it's asking nicely.
+There's also a development stand-in behind it. With no session cookie, a
+request outside production can say who it is with an X-Dev-Actor header
+naming a user, falling back to DEV_ACTOR_USER_NAME. That is not
+authentication, it's just asking nicely. It stays until an identity provider
+is registered, since the console would otherwise be unusable before then; it
+goes away once authentik is wired up.
 
-It's still here because the console would otherwise be unusable until an identity
-provider is registered and its certificate stored, and that's the next piece of
-work rather than this one. It goes when authentik is wired up.
+What keeps it from being dangerous meanwhile:
 
-Four things stop it being dangerous in the meantime:
-
-- The cookie is checked first. A real session always wins, so the stand-in can
-  never override or downgrade somebody who is properly signed in.
-- Production never reaches it. Not "switched off by a setting" — the branch
-  returns before it, and there is no configuration that changes that.
-- The app logs a warning on startup while it's switched on.
-- There's a test for the production refusal, so CI fails if someone deletes it.
+- The cookie is checked first, so a real session always wins and the
+  stand-in can never override or downgrade someone properly signed in.
+- Production never reaches it — the code branches around it entirely, not
+  behind a setting that could be flipped.
+- The app logs a warning on startup while it's active.
+- There's a test for the production refusal, so CI fails if it's deleted.
 """
 
 from __future__ import annotations
@@ -82,14 +80,14 @@ class Actor:
 async def _drop_expired_role(db: AsyncSession, user: User, *, now: dt.datetime) -> None:
     """Take away a role whose end date has passed, before we act on it.
 
-    The cached role on the user's row is only refreshed when somebody writes a
-    grant, and expiry is the one change that happens with nobody writing anything.
-    A nightly sweep would leave a window where an expired admin is still an admin,
-    and that window is exactly the thing the expiry date was meant to close.
+    The cached role on the user's row only refreshes when somebody writes a
+    grant, and expiry happens with nobody writing anything. A nightly sweep
+    would leave a window where an expired admin is still an admin, which is
+    exactly what the expiry date was meant to prevent.
 
-    Only runs for people the cache says are privileged. Everybody else is already
-    an employee, so there is nothing an expiry could take away, and skipping them
-    keeps this off the hot path for almost every request.
+    Only runs for people the cache says are privileged. Everybody else is
+    already an employee with nothing an expiry could take away, so skipping
+    them keeps this off the hot path for most requests.
     """
     if user.platform_role == PlatformRole.EMPLOYEE:
         return
@@ -122,9 +120,9 @@ async def _actor_from_cookie(
 ) -> Actor | None:
     """Who the session cookie says this is, or None if it doesn't say.
 
-    Returning None rather than raising is deliberate for everything except a
-    deactivated account. A missing or dead session means "not signed in", and it's
-    the caller's job to decide whether that's an error or just the anonymous case.
+    Returns None instead of raising for everything except a deactivated
+    account. A missing or dead session means "not signed in", and it's the
+    caller's job to decide whether that's an error or just the anonymous case.
 
     Raises:
         HTTPException: 403 if the account has been switched off.
@@ -213,8 +211,8 @@ async def _actor_from_dev_header(
             detail="This account is deactivated.",
         )
 
-    # Expiry applies here too. The stand-in is a way to skip logging in, not a way
-    # to keep a role somebody's grant already gave back.
+    # Expiry applies here too: the stand-in skips logging in, not a way to
+    # keep a role somebody's grant already gave back.
     await _drop_expired_role(db, user, now=now)
 
     return _actor_for(user)
@@ -227,8 +225,8 @@ async def resolve_actor(
 ) -> Actor:
     """Figure out who is calling.
 
-    The cookie first, always. The development stand-in only gets a look in when
-    there is no session to be had, and only outside production.
+    The cookie first, always. The development stand-in only gets a look in
+    when there's no session to be had, and only outside production.
 
     Raises:
         HTTPException: 401 if we can't tell who's calling. 403 if the account is

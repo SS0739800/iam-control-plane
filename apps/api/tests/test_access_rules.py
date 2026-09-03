@@ -1,18 +1,11 @@
 """Tests for rules that grant group membership from somebody's attributes.
 
-Three things are being checked, in rising order of how much they matter.
-
-That the comparisons work — including the awkward ones, like what "department is
-not Sales" should mean for somebody with no department at all.
-
-That the mover case works. A rule engine that only adds memberships passes every
-joiner test and leaves somebody who transferred out of Engineering in its group
-forever.
-
-That it never touches a membership it doesn't own. Delete a row the provider
-believes in and the next sync recreates it, then the next reconcile removes it
-again, forever. The test at the end runs both directions and checks the row
-survives.
+Three things get checked: that comparisons work (including edge cases like
+what "department is not Sales" means for someone with no department);
+that the mover case works (an add-only engine would pass every joiner test
+but leave a transferred-out person stuck in their old group); and that it
+never touches a membership it doesn't own (deleting a provider-owned row
+would just have the next sync recreate it, forever).
 
 The matching tests need no database. The rest do, and skip without
 IAM_TEST_DATABASE_URL.
@@ -78,9 +71,8 @@ def test_equals_matches() -> None:
 
 
 def test_equals_ignores_case_and_spaces() -> None:
-    """These values come from an HR system by way of a provider. Being strict would
-    mean rules that work for most of a company and silently skip whoever's record
-    was typed with a trailing space."""
+    """Values come from an HR system through a provider, so a trailing
+    space or different casing shouldn't make a rule silently skip someone."""
     rule = make_rule(value="engineering")
 
     assert matches(rule, make_person(department="  Engineering  "))
@@ -125,9 +117,9 @@ def test_is_set_and_is_not_set() -> None:
 
 
 def test_not_equals_does_not_match_somebody_with_no_value() -> None:
-    """The awkward one. "Department is not Sales" should describe people who have a
-    department, not people who have none — otherwise a rule aimed at everybody
-    outside Sales also catches every record with a blank field."""
+    """"Department is not Sales" should describe people who have a
+    department, not people who have none — otherwise it would also catch
+    every blank record."""
     rule = make_rule(operator=RuleOperator.NOT_EQUALS, value="Sales")
 
     assert matches(rule, make_person(department="Engineering"))
@@ -352,13 +344,11 @@ async def test_a_membership_somebody_added_by_hand_is_left_alone(
 
 @pytest.mark.integration
 async def test_the_engine_does_not_fight_the_sync(db_session: AsyncSession) -> None:
-    """The loop this whole design exists to avoid.
-
-    Somebody is in a group because the provider put them there, and a rule wants
-    them in it too. Nothing should be added — they are already in it — and when the
-    rule stops applying, the provider's row must still be there. Otherwise:
-    reconcile removes it, the sync recreates it, reconcile removes it again, with
-    an audit entry each way, forever.
+    """Checks the loop this design exists to avoid: when a provider-owned
+    membership and a rule both want the same group, nothing gets added
+    since they're already in it, and when the rule stops applying, the
+    provider's row must stay. Otherwise reconcile and the sync would keep
+    undoing each other.
     """
     group = await setup_group(db_session, "engineering")
     person = await setup_person(db_session, department="Engineering")

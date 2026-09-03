@@ -27,9 +27,8 @@ router = APIRouter(tags=["dashboard"])
 async def dashboard(session: SessionDep) -> DashboardCounts:
     """Every count in one trip to the database.
 
-    Little subqueries inside one SELECT, instead of one query each. This is the first
-    thing that loads on every visit, and that many round trips to a hosted database
-    over the internet is a delay you can see. One isn't.
+    One SELECT with subqueries instead of one query each, since this loads on
+    every visit and several round trips to a hosted database is a visible delay.
     """
     stmt = select(
         select(func.count()).select_from(User).scalar_subquery().label("users"),
@@ -46,9 +45,9 @@ async def dashboard(session: SessionDep) -> DashboardCounts:
         .scalar_subquery()
         .label("sso_applications"),
         select(func.count()).select_from(AuditEvent).scalar_subquery().label("audit_events"),
-        # Counted here rather than read from users.platform_role, which is a cache.
-        # This number is the difference between "somebody can fix this" and "somebody
-        # needs a shell", so it should not depend on a cache being right.
+        # Counted directly rather than read from users.platform_role, which is
+        # just a cache — this number decides whether an admin can still fix
+        # things, so it shouldn't depend on the cache being right.
         select(func.count())
         .select_from(RoleGrant)
         .join(User, User.id == RoleGrant.user_id)

@@ -1,18 +1,18 @@
 """Making a provider's connection URL usable by asyncpg.
 
-Every managed Postgres hands out a URL ending ``?sslmode=require``, because that is
-what libpq wants and psycopg understands. asyncpg takes ``ssl`` instead, has no
+Every managed Postgres hands out a URL ending ``?sslmode=require``, since
+that's what libpq and psycopg want. asyncpg takes ``ssl`` instead, has no
 ``**kwargs`` to absorb the difference, and SQLAlchemy passes query parameters
-straight through without translating them.
+straight through untranslated.
 
-So pasting a URL from a dashboard raises ``TypeError: connect() got an unexpected
-keyword argument 'sslmode'`` on the first query — and the readiness endpoint hides
-exception messages on purpose, because they can contain the connection string, so
-production reports ``{"detail": "TypeError"}`` and nothing else.
+So pasting a URL from a dashboard raises ``TypeError: connect() got an
+unexpected keyword argument 'sslmode'`` on the first query. The readiness
+endpoint hides exception messages since they can contain the connection
+string, so production reports only ``{"detail": "TypeError"}``.
 
-These tests exist because that is the single most likely mistake when deploying, and
-because the fix is a string rewrite that is easy to get subtly wrong: catching the
-first query parameter but not a later one, or mangling a URL that was already fine.
+These tests cover this because it's the single most likely deploy mistake,
+and the fix is a string rewrite that's easy to get subtly wrong — catching
+the first query parameter but not a later one, or mangling an already-fine URL.
 """
 
 from __future__ import annotations
@@ -33,8 +33,8 @@ NEON = "postgresql+asyncpg://user:pw@ep-cool-name-123456-pooler.us-east-2.aws.ne
 def connect_kwargs(url: str) -> dict[str, Any]:
     """What SQLAlchemy's asyncpg dialect would actually hand to asyncpg.connect().
 
-    Going through the dialect rather than parsing the string ourselves is the point:
-    the whole bug is that SQLAlchemy passes query parameters through untranslated, so
+    Goes through the dialect rather than parsing the string ourselves, since
+    the bug is that SQLAlchemy passes query parameters through untranslated —
     only the dialect's own output is convincing evidence either way.
     """
     _, kwargs = pg_asyncpg.dialect().create_connect_args(make_url(url))  # type: ignore[no-untyped-call]
@@ -103,9 +103,8 @@ def test_the_word_sslmode_elsewhere_in_the_url_is_not_rewritten() -> None:
 def test_the_rewritten_url_reaches_asyncpg_with_ssl() -> None:
     """The test that would have caught this before it shipped.
 
-    Goes through SQLAlchemy's own dialect rather than trusting the string: the whole
-    bug was that SQLAlchemy hands query parameters to asyncpg untranslated, so the
-    only convincing check is what the dialect actually produces.
+    Goes through SQLAlchemy's own dialect rather than trusting the string,
+    since the only convincing check is what the dialect actually produces.
     """
     assert connect_kwargs(for_asyncpg(f"{NEON}?sslmode=require"))["ssl"] == "require"
     assert "sslmode" not in connect_kwargs(for_asyncpg(f"{NEON}?sslmode=require"))
@@ -114,9 +113,9 @@ def test_the_rewritten_url_reaches_asyncpg_with_ssl() -> None:
 def test_the_unrewritten_url_is_the_thing_that_breaks() -> None:
     """Proof the problem is real and not a precaution against nothing.
 
-    asyncpg's connect() takes no **kwargs, so sslmode arriving here is a TypeError
-    at connection time. If a future SQLAlchemy starts translating it, this test
-    fails and the rewrite can go.
+    asyncpg's connect() takes no **kwargs, so sslmode arriving here is a
+    TypeError at connection time. If a future SQLAlchemy starts translating
+    it, this test fails and the rewrite can go.
     """
     untouched = connect_kwargs(f"{NEON}?sslmode=require")
     assert "sslmode" in untouched, "SQLAlchemy now translates this; the rewrite is obsolete"
@@ -133,10 +132,9 @@ def test_the_unrewritten_url_is_the_thing_that_breaks() -> None:
 
 
 def test_the_app_url_is_rewritten() -> None:
-    # _env_file=None throughout this section: Settings reads .env by default, and a
-    # developer's ALEMBIC_DATABASE_URL would otherwise decide the outcome of the
-    # fallback test below. That is exactly how this was first written, and it failed
-    # against a real .env rather than against the code.
+    # _env_file=None throughout this section: Settings reads .env by default,
+    # and a developer's ALEMBIC_DATABASE_URL would otherwise decide the
+    # outcome of the fallback test below.
     settings = Settings(_env_file=None, database_url=f"{NEON}?sslmode=require")
 
     assert settings.app_url == f"{NEON}?ssl=require"
@@ -163,14 +161,10 @@ def test_the_migration_url_falls_back_to_the_app_url_and_is_still_rewritten(
 ) -> None:
     """What local development does: one server, one URL.
 
-    The environment has to be cleared as well as the .env file, and that is the whole
-    lesson of this test's history. It was written reading a developer's .env, which
-    _env_file=None fixed. It then failed in CI, which sets ALEMBIC_DATABASE_URL as a
-    job-level variable — a second source _env_file says nothing about.
-
-    Both had the same shape: the test asserted a fallback while something upstream
-    quietly supplied the value it was meant to fall back from. Deleting the variable
-    is the only way to ask the question honestly.
+    The environment has to be cleared as well as the .env file. CI sets
+    ALEMBIC_DATABASE_URL as a job-level variable, a second source _env_file
+    says nothing about, so deleting it is the only way to test the fallback
+    honestly.
     """
     monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
     settings = Settings(_env_file=None, database_url=f"{NEON}?sslmode=require")
@@ -184,9 +178,8 @@ def test_the_migration_url_falls_back_to_the_app_url_and_is_still_rewritten(
 def test_channel_binding_is_dropped() -> None:
     """Neon's current connection strings include it, and asyncpg has no equivalent.
 
-    Left in place it would fail identically to sslmode — same TypeError, same
-    {"detail": "TypeError"} in production — so fixing only sslmode would have moved
-    the problem rather than solved it.
+    Left in place it fails identically to sslmode (same TypeError), so fixing
+    only sslmode would just move the problem.
     """
     given = f"{NEON}?sslmode=require&channel_binding=require"
 
@@ -199,8 +192,8 @@ def test_channel_binding_on_its_own_leaves_a_clean_url() -> None:
 
 
 def test_channel_binding_really_would_have_broken_it() -> None:
-    """Same shape as the sslmode proof: evidence the drop is necessary, and a tripwire
-    if asyncpg ever gains support and the drop should go."""
+    """Same shape as the sslmode proof: evidence the drop is necessary, and a
+    tripwire for if asyncpg ever gains support and the drop should go."""
     forwarded = connect_kwargs(f"{NEON}?channel_binding=require")
     assert "channel_binding" in forwarded, "SQLAlchemy no longer forwards this"
 
@@ -208,11 +201,11 @@ def test_channel_binding_really_would_have_broken_it() -> None:
 
 
 def test_a_parameter_we_do_not_know_about_is_left_alone() -> None:
-    """Deliberately not a whitelist.
+    """Not a whitelist.
 
-    Silently discarding an unrecognised parameter would throw away somebody's
-    deliberate intent without telling them. Better to leave it and let it fail
-    somewhere with a name attached.
+    Silently discarding an unrecognized parameter would throw away somebody's
+    intent without telling them. Better to leave it and let it fail somewhere
+    with a name attached.
     """
     given = f"{NEON}?sslmode=require&target_session_attrs=read-write"
 

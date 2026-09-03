@@ -29,9 +29,9 @@ demo data and sending all of them every time is wasteful, so the console asks
 def _member_count_subquery() -> Label[int]:
     """Count the members of each group.
 
-    A small subquery per row rather than a join with GROUP BY. Once you add other
-    filters to the query, the grouping and the filtering start interfering and it's
-    easy to end up with counts that are quietly wrong.
+    A subquery per row rather than a join with GROUP BY, so adding other filters
+    to the query later can't make the grouping and filtering interfere and
+    quietly produce wrong counts.
     """
     return (
         select(func.count())

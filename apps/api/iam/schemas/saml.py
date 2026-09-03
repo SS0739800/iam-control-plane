@@ -1,8 +1,7 @@
 """Shapes for registering and listing identity providers.
 
-The certificate is deliberately not in the summary. It's a wall of base64 that
-makes a list unreadable, and there's a fingerprint instead for the thing people
-actually want to know from a list: whether the key is still the one they expect.
+The certificate is left out of the summary (it's a wall of base64) in
+favor of a short fingerprint, enough to tell if the key changed.
 """
 
 from __future__ import annotations
@@ -16,20 +15,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class IdentityProviderRegistration(BaseModel):
     """Register a provider, or update one that already exists.
 
-    The metadata document carries the entity id, the addresses and the
-    certificate, so none of those are fields here. Letting somebody type them
-    separately is how you end up trusting a key the provider never published.
-    See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+    Entity id, addresses, and certificate come from the pasted metadata
+    document, not typed fields, so we never trust a key the provider didn't
+    actually publish. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
     """
 
     slug: str = Field(
         min_length=1,
         max_length=64,
         pattern=r"^[a-z0-9][a-z0-9-]*$",
-        description=(
-            "Short name used in the login URL, e.g. /saml/login?idp=authentik. "
-            "Lowercase, digits and dashes, because it goes in a query string."
-        ),
+        description="Short name used in the login URL, e.g. "
+        "/saml/login?idp=authentik. Lowercase, digits, and dashes only.",
     )
     name: str = Field(min_length=1, max_length=255, description="What to call it in the console.")
     metadata_xml: str = Field(
@@ -42,26 +38,18 @@ class IdentityProviderRegistration(BaseModel):
     )
     want_signed_assertions: bool = Field(
         default=True,
-        description=(
-            "Insist the assertion itself is signed, not just the response wrapped "
-            "around it. Only turn this off for a provider that genuinely cannot do "
-            "it, because signing only the wrapper leaves the contents swappable."
-        ),
+        description="Require the assertion itself to be signed, not just "
+        "the response wrapper. Turn off only if the provider can't sign it.",
     )
 
 
 class SignInOption(BaseModel):
-    """One way to sign in, for the screen shown to somebody who is not signed in yet.
+    """One way to sign in, shown to someone not yet signed in.
 
-    Deliberately thin. This is the only unauthenticated view of the provider table, so
-    it carries what a button needs and nothing else: a name to print and a URL to send
-    them to. No entity id, no certificate, no timestamps, no enabled flag — a disabled
-    provider simply is not in the list.
-
-    Publishing the names of the providers we accept is not a leak. Every login page on
-    the internet does it, and it has to: somebody who cannot see "Sign in with Okta"
-    cannot sign in with Okta. What would be a leak is the SSO URL, the entity id or the
-    certificate, and none of those are here.
+    Only carries a name and a URL — no entity id, certificate, timestamps,
+    or enabled flag (a disabled provider is just absent from the list).
+    Publishing provider names isn't a leak; every login page does it. The
+    SSO URL, entity id, and certificate would be, and aren't included.
     """
 
     slug: str
@@ -87,11 +75,8 @@ class IdentityProviderSummary(BaseModel):
 
     login_url: str = Field(description="Where to send somebody to sign in with this provider.")
     certificate_fingerprint: str = Field(
-        description=(
-            "The first and last few characters of the signing certificate. Enough "
-            "to see at a glance that the key has changed, which is otherwise a "
-            "diff of two blocks of base64."
-        )
+        description="First and last few characters of the signing "
+        "certificate, enough to spot at a glance if the key changed."
     )
 
 
@@ -99,8 +84,5 @@ class IdentityProviderDetail(IdentityProviderSummary):
     """One provider, including the certificate in full."""
 
     signing_cert: str = Field(
-        description=(
-            "The certificate every login from this provider is checked against. "
-            "This is the whole basis of trust for it."
-        )
+        description="The certificate every login from this provider is checked against."
     )

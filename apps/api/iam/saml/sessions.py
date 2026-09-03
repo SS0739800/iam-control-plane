@@ -1,14 +1,14 @@
 """Keeping someone signed in after they've logged in.
 
-Sessions are rows in a table, not signed tokens handed to the browser. That's a
-deliberate trade: a signed token means no database lookup on every request, but you
-can't take one back once you've issued it. P4 has to cut someone off the moment
-they're deactivated, and you can't un-issue a token — you can delete a row.
+Sessions are rows in a table, not signed tokens handed to the browser. A
+signed token means no database lookup on every request, but you can't take
+one back once issued. P4 has to cut someone off the moment they're
+deactivated, and you can delete a row but you can't un-issue a token.
 
 The browser gets a long random string in a cookie. We store only its hash, so
-someone who reads this table still can't sign in as anybody. The issuing and
-hashing live in iam/tokens.py, shared with the SCIM tokens, because it
-is the same problem twice and the reasoning belongs in one place.
+someone who reads this table still can't sign in as anybody. Issuing and
+hashing live in iam/tokens.py, shared with the SCIM tokens since it's the
+same problem twice.
 
 No xmlsec here, so this is testable anywhere.
 """
@@ -37,9 +37,9 @@ SESSION_IDLE_TIMEOUT = dt.timedelta(hours=1)
 SESSION_TOUCH_INTERVAL = dt.timedelta(minutes=1)
 """How stale the last-seen time has to be before we bother writing a new one.
 
-Updating it on literally every request would mean a write for every page load,
-every poll, every image. The idle timeout is an hour, so being up to a minute
-behind costs nothing and turns a per-request write into an occasional one.
+Updating it on every request would mean a write for every page load, poll,
+and image. The idle timeout is an hour, so being up to a minute behind costs
+nothing and turns a per-request write into an occasional one.
 """
 
 
@@ -98,9 +98,9 @@ async def create_session(
 async def find_by_token(db: AsyncSession, token: str) -> SamlSession | None:
     """Find whatever session a cookie value points at, alive or not.
 
-    Signing out wants this one rather than lookup_session: somebody whose session
-    went idle an hour ago still clicked the button, and their row should still be
-    marked as ended rather than left open forever.
+    Signing out wants this one rather than lookup_session: somebody whose
+    session went idle an hour ago can still click the button, and their row
+    should get marked ended rather than left open forever.
     """
     found: SamlSession | None = await db.scalar(
         select(SamlSession).where(SamlSession.token_hash == hash_token(token))
@@ -148,8 +148,7 @@ async def revoke_session(
     """End one session.
 
     Marked rather than deleted, so "signed out at 14:32, because they were
-    deactivated" is still answerable afterwards. An audit log that loses the thing
-    it's describing isn't much of an audit log.
+    deactivated" is still answerable afterwards.
     """
     await db.execute(
         update(SamlSession)
@@ -163,10 +162,10 @@ async def revoke_all_for_user(
 ) -> int:
     """End every live session belonging to one person.
 
-    This is the function P4's "someone left, cut their access" flow calls. It is
-    the reason sessions are rows in the first place: with signed tokens there would
-    be nothing here to do, and the person would stay signed in until their token
-    ran out on its own.
+    What P4's "someone left, cut their access" flow calls. It's the reason
+    sessions are rows in the first place: with signed tokens there'd be
+    nothing here to do, and the person would stay signed in until their token
+    expired on its own.
 
     Returns how many were ended, so the audit entry can say.
     """
@@ -183,10 +182,10 @@ async def revoke_by_name_id(
 ) -> int:
     """End every session this provider knows this person by.
 
-    What a logout request with no SessionIndex is asking for: not one session, all
-    of them. The spec reads that way, and it's the right reading for the case that
-    actually produces one — an administrator removing somebody, rather than a person
-    clicking sign out on one device.
+    What a logout request with no SessionIndex is asking for: not one session,
+    all of them. That matches the case that actually produces such a request,
+    an administrator removing somebody, rather than a person signing out on
+    one device.
     """
     result = await db.execute(
         update(SamlSession)
@@ -227,20 +226,20 @@ async def revoke_by_session_index(
 def set_session_cookie(response: Response, token: str, *, settings: Settings) -> None:
     """Put the session token in a cookie on this response.
 
-    Every flag here is doing something:
+    Every flag here does something:
 
-    ``httponly`` keeps JavaScript from reading it, so a cross-site scripting bug
-    somewhere in the console doesn't hand out live sessions.
+    ``httponly`` keeps JavaScript from reading it, so a cross-site scripting
+    bug in the console can't hand out live sessions.
 
-    ``samesite="lax"`` is what stops another site making a request as the signed-in
-    person. Lax rather than Strict because the login itself ends in a redirect back
-    from the provider, and a Strict cookie isn't sent on that first arrival — the
+    ``samesite="lax"`` stops another site making a request as the signed-in
+    person. Lax rather than Strict because login ends in a redirect back from
+    the provider, and a Strict cookie isn't sent on that first arrival — the
     person would land on the page still looking logged out.
 
-    Note that this is set on the response to a cross-site POST from the provider,
-    which is fine: SameSite governs when a cookie is *sent*, not whether it can be
-    set. The redirect that follows is a normal top-level navigation to our own
-    site, and Lax sends the cookie on those.
+    This gets set on the response to a cross-site POST from the provider,
+    which is fine: SameSite governs when a cookie is sent, not whether it can
+    be set. The redirect that follows is a normal top-level navigation to our
+    own site, and Lax sends the cookie on those.
 
     ``secure`` follows the address we're served on, so local http development
     works while anything real gets an https-only cookie.
@@ -259,8 +258,8 @@ def set_session_cookie(response: Response, token: str, *, settings: Settings) ->
 def clear_session_cookie(response: Response, *, settings: Settings) -> None:
     """Remove the session cookie.
 
-    The flags have to match the ones it was set with, or the browser treats it as
-    a different cookie and quietly leaves the original in place.
+    The flags have to match the ones it was set with, or the browser treats it
+    as a different cookie and leaves the original in place.
     """
     response.delete_cookie(
         key=settings.session_cookie_name,

@@ -1,27 +1,19 @@
 """A downstream SCIM server that keeps accounts in a dictionary.
 
-Why this exists rather than pointing the sync at our own SCIM server
--------------------------------------------------------------------
+The client's own tests point at our real SCIM server, to prove a real SCIM
+2.0 implementation accepts what we send. The sync's tests ask a different
+question — does it push the right things to the right people — and pointing
+those at our own app makes them fight the database: both sides write audit
+entries through the same transaction-scoped advisory lock, so a sync holding
+a transaction open while our own app waits on that lock deadlocks instead of
+just running slow. So the two kinds of test need different downstreams.
 
-The client's tests do point at our own server, deliberately, because that proves a
-real SCIM 2.0 implementation accepts what we send. That is interoperability and it is
-worth the cost.
-
-The sync's tests are asking a different question — does it push the right things to
-the right people — and pointing those at our own app makes them fight the database.
-Both sides write audit entries, the audit log is a hash chain guarded by one
-transaction-scoped advisory lock, and a sync holding a transaction open while our own
-app tries to take that lock is a deadlock rather than a slow test. Chasing that cost
-me most of an afternoon, and the answer was that the two kinds of test want different
-downstreams.
-
-So this is a stub in the one place a stub is right: it replaces "somebody else's
-system" and nothing about our own decisions. Every request still goes through the real
-``OutboundScim`` — the real headers, filter escaping, status handling and error
-parsing — because this is an ASGI app rather than a fake client object.
-
-It also does things our own server cannot be asked to do on command: answer 401,
-answer 500 for one particular person, or return two accounts for one userName.
+This stub replaces "somebody else's system," not our own decisions. Every
+request still goes through the real ``OutboundScim`` (real headers, filter
+escaping, status handling, error parsing), since this is an ASGI app rather
+than a fake client object. It also does things our own server can't be
+asked to do on command: answer 401, answer 500 for one person, or return two
+accounts for one userName.
 """
 
 from __future__ import annotations

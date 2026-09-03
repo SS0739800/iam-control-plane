@@ -1,35 +1,22 @@
 """Being the identity provider: the documents we publish and the logins we issue.
 
-P2 made us a service provider — we validate what somebody else signs. This is the
-other direction, and it is the more dangerous one. Here we are the thing being
-trusted, and an assertion we sign is accepted by every application that holds our
-certificate. There is no second opinion.
+This is the other direction from being a service provider (see checks.py): here
+we're the thing being trusted, and an assertion we sign is accepted by every
+application holding our certificate. There's no second opinion.
 
-Every value is escaped, and that is not routine
------------------------------------------------
+Every attribute value is escaped through ``escape`` or ``quoteattr`` before it
+reaches the output. An assertion carries a person's display name, email, and
+group names, all sourced from an HR system by way of a provider. Without
+escaping, a display name containing ``</saml:Attribute><saml:Attribute
+Name="admin">`` could inject extra attributes into an assertion we sign
+ourselves. There's a test that tries exactly that name.
 
-The XML on the SP side interpolates our own configuration into f-strings, which is
-low risk because we chose those values. An assertion is different: it carries a
-person's display name, their email, and the names of their groups, all of which came
-from an HR system by way of a provider.
-
-Somebody whose display name contains ``</saml:Attribute><saml:Attribute
-Name="admin">`` would otherwise inject attributes into their own assertion, signed
-by us, and every application downstream would believe them. So nothing reaches the
-output without going through ``escape`` or ``quoteattr``, and there is a test that
-tries exactly that name.
-
-We have to produce what we ourselves demand
--------------------------------------------
-
-The ten checks in checks.py are what we insist on as a service provider. The
-assertion built here carries every field those checks look for — audience,
-destination, recipient, both time windows, InResponseTo in two places — because a
-provider that asks for more than it produces is a provider nobody can integrate
-with, and because our own SP is the first thing that will read this.
+The assertion built here carries every field checks.py looks for (audience,
+destination, recipient, both time windows, InResponseTo in two places), since
+our own SP is the first thing that reads it and has to accept it.
 
 No xmlsec in this module. It builds the document as text; signer.py adds the
-signature, and that is the only part needing the container.
+signature and is the only part that needs the xmlsec container.
 """
 
 from __future__ import annotations
@@ -51,51 +38,49 @@ REDIRECT_BINDING = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
 AUTHN_PASSWORD_PROTECTED = "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"  # noqa: S105
 """How the person authenticated, as far as the application is told.
 
-Accurate rather than flattering: they signed in with a password at an upstream
-provider, over TLS. Claiming a stronger context — multi-factor, say — would be
-telling applications something we do not know.
+They signed in with a password at an upstream provider, over TLS. Claiming a
+stronger context (multi-factor, say) would tell applications something we
+don't actually know.
 """
 
 ASSERTION_LIFETIME = dt.timedelta(minutes=5)
 """How long the assertion is valid for.
 
-Short, because it only has to survive one browser redirect. This is the window in
-which a stolen assertion can be replayed against an application, so minutes rather
-than hours — and our own SP additionally refuses one it has seen before.
+Short, since it only has to survive one browser redirect. This is also the
+window in which a stolen assertion could be replayed, so minutes rather than
+hours; our own SP additionally refuses one it has seen before.
 """
 
 CLOCK_SKEW = dt.timedelta(minutes=1)
 """How far back NotBefore is set.
 
-Clocks between here and an application are not perfectly aligned, and an assertion
-that is not valid yet is rejected with a timing error nobody thinks to blame on
-clocks. A minute costs nothing against a five minute lifetime.
+Clocks between here and an application aren't perfectly aligned. Without this,
+an assertion that isn't valid yet gets rejected with a timing error that's easy
+to misdiagnose. A minute costs nothing against a five minute lifetime.
 """
 
 
 class SigningFailed(Exception):
     """The document could not be signed, and the message says why.
 
-    Raised rather than returning an unsigned document, and that distinction
-    matters: an unsigned assertion looks almost identical and is rejected by the
-    receiver with a signature error, which sends whoever is debugging it to the
-    wrong end of the connection entirely.
+    Raised instead of returning an unsigned document, since an unsigned
+    assertion looks almost identical and would be rejected downstream with a
+    confusing signature error.
 
-    Defined here rather than in signer.py, where it is raised, because signer.py
-    needs xmlsec. The endpoint that catches this has to be importable on a laptop,
-    and an `except` clause that cannot be imported is not much of a safety net.
-    signer.py re-exports it, so `from iam.saml.signer import SigningFailed` still
-    reads the way it should at the place that raises it.
+    Defined here rather than in signer.py, where it's raised, because signer.py
+    needs xmlsec and the endpoint that catches this has to import on a laptop
+    without it. signer.py re-exports it, so `from iam.saml.signer import
+    SigningFailed` still works at the place that raises it.
     """
 
 
 def new_id() -> str:
     """An XML id for a response or an assertion.
 
-    Prefixed with an underscore because the SAML schema types these as xs:ID, which
-    may not start with a digit — and a bare UUID starts with one about 60% of the
-    time. That produces a document some parsers accept and others reject, which is
-    the worst kind of bug to chase.
+    Prefixed with an underscore because the SAML schema types these as xs:ID,
+    which can't start with a digit, and a bare UUID starts with one about 60%
+    of the time. Some parsers accept a digit-led id anyway and others reject
+    it, so this avoids the issue entirely.
     """
     return f"_{uuid.uuid4().hex}"
 
@@ -109,10 +94,10 @@ def new_session_index() -> str:
 class Issuer:
     """Who we are, as an identity provider.
 
-    Built from BASE_URL, so the metadata and every assertion agree by construction.
-    Two places computing these separately is how an entity id ends up with a
-    trailing slash in one document and not the other, which fails as an issuer
-    mismatch.
+    Built from BASE_URL, so the metadata and every assertion agree by
+    construction. Computing these separately in two places is how an entity id
+    ends up with a trailing slash in one document and not the other, which
+    then fails as an issuer mismatch.
     """
 
     base_url: str
@@ -136,9 +121,9 @@ class Issuer:
     def metadata_xml(self, *, certificate_body: str) -> str:
         """The document an application is given when it starts trusting us.
 
-        Says who we are, where to send people to sign in, and the certificate to
-        check our signatures against. That certificate is the whole basis of the
-        trust — everything else here is addressing.
+        Says who we are, where to send people to sign in, and the certificate
+        to check our signatures against. The certificate is the whole basis of
+        the trust; everything else here is just addressing.
         """
         return (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -175,10 +160,9 @@ class Issuer:
 class LoginToIssue:
     """Everything one assertion needs to say.
 
-    A single object rather than a dozen arguments, because the caller assembling
-    this is the place where a wrong value does damage — passing the requester's
-    entity id where the audience belongs, say — and named fields make that visible
-    at the call site.
+    A single object rather than a dozen positional arguments, so a mistake like
+    passing the requester's entity id where the audience belongs is visible as
+    a named field at the call site.
     """
 
     # ------------------------------------------------------------- the person
@@ -191,12 +175,12 @@ class LoginToIssue:
     """The application's entity id. What its own audience check compares against."""
 
     acs_url: str = ""
-    """Where the response is posted. Also the Recipient inside the assertion, which
-    is a separate check in the spec and in checks.py."""
+    """Where the response is posted. Also the Recipient inside the assertion,
+    which is a separate check in the spec and in checks.py."""
 
     in_response_to: str | None = None
     """The AuthnRequest id, when there was one. Absent for a login we started
-    ourselves, which is legal and is what an application calls IdP-initiated."""
+    ourselves, which is legal (an application calls this IdP-initiated)."""
 
     # ----------------------------------------------------------------- timing
     issued_at: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.UTC))
@@ -215,9 +199,8 @@ class LoginToIssue:
 def _instant(moment: dt.datetime) -> str:
     """A timestamp in the format SAML wants.
 
-    Always UTC with a Z, never an offset. Both are legal and some implementations
-    only ever got the Z form right, so this is one of those places where following
-    the spec exactly is less useful than following what everybody actually sends.
+    Always UTC with a Z, never an offset. Both are legal, but some
+    implementations only handle the Z form correctly.
     """
     return moment.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -225,9 +208,9 @@ def _instant(moment: dt.datetime) -> str:
 def _attribute_statement(attributes: Mapping[str, Sequence[str]]) -> str:
     """The attributes, escaped.
 
-    This is where somebody else's data enters a document we sign. Both the names
-    and the values go through escaping, because a provider can be configured to
-    send an attribute called anything at all.
+    This is where somebody else's data enters a document we sign. Both names
+    and values go through escaping, since a provider can be configured to send
+    an attribute called anything at all.
     """
     if not attributes:
         return ""
@@ -254,9 +237,8 @@ def _attribute_statement(attributes: Mapping[str, Sequence[str]]) -> str:
 def build_assertion(login: LoginToIssue, *, issuer: Issuer, assertion_id: str) -> str:
     """One assertion, unsigned.
 
-    Carries every field checks.py looks for, because our own service provider is the
-    first thing that will read this and a provider that demands more than it produces
-    is one nobody can integrate with.
+    Carries every field checks.py looks for, since our own service provider is
+    the first thing that reads it.
     """
     in_response_to = (
         f" InResponseTo={quoteattr(login.in_response_to)}" if login.in_response_to else ""
@@ -305,10 +287,9 @@ def build_response(
 ) -> str:
     """The whole response document, unsigned. signer.py signs it.
 
-    Returned unsigned rather than signed here so that everything about *what* the
-    document says is testable without xmlsec, and only the signature needs the
-    container. It is also the honest split: this module decides content, that one
-    proves authorship.
+    Returned unsigned so everything about what the document says is testable
+    without xmlsec; only the signature step needs it. This module decides
+    content, signer.py proves authorship.
     """
     in_response_to = (
         f" InResponseTo={quoteattr(login.in_response_to)}" if login.in_response_to else ""
@@ -343,10 +324,10 @@ def build_failure_response(
 ) -> str:
     """A response that says no, with no assertion in it.
 
-    Worth having rather than returning an HTTP error. An application that sent us an
-    AuthnRequest is waiting on a browser redirect, and a 403 page leaves the person
-    stranded on our domain with no way back. A SAML failure lands them back at the
-    application, which can then say something useful about why.
+    Used instead of an HTTP error because the application is waiting on a
+    browser redirect; a 403 page would strand the person on our domain with no
+    way back. This sends them back to the application, which can say something
+    useful about why.
     """
     moment = issued_at or dt.datetime.now(dt.UTC)
     responding_to = f" InResponseTo={quoteattr(in_response_to)}" if in_response_to else ""
@@ -381,14 +362,12 @@ def build_logout_response(
 ) -> str:
     """Confirm to an application that we signed somebody out.
 
-    Says success even when there was no session to end, and that is the right
-    answer rather than a lazy one. The application asked for the person to be signed
-    out; if they already were, the state it wanted is the state that exists. A
-    failure would invite it to retry something that has nothing left to do, and some
-    implementations retry in a loop.
+    Says success even when there was no session to end: the application wanted
+    the person signed out, and if they already were, that's the state it
+    wanted. A failure here would invite retries that have nothing left to do.
 
-    A genuine failure — a request we cannot read, or one naming a session belonging
-    to somebody else — is the case for ``success=False``.
+    ``success=False`` is for a genuine failure, like a request we can't read or
+    one naming a session belonging to somebody else.
     """
     status = (
         "urn:oasis:names:tc:SAML:2.0:status:Success"

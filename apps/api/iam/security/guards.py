@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 def require(*permissions: Permission) -> Callable[[Actor], Awaitable[Actor]]:
     """Make a check that requires every permission listed.
 
-    All of them, not any one of them. Adding someone to a group touches users and
-    groups, so it asks for both. Accepting just one would quietly let people do
+    All of them, not any one of them. Adding someone to a group touches users
+    and groups, so it asks for both; accepting just one would let people do
     more than they should.
     """
     if not permissions:
@@ -39,10 +39,10 @@ def require(*permissions: Permission) -> Callable[[Actor], Awaitable[Actor]]:
     async def dependency(actor: CurrentActor) -> Actor:
         missing = required - actor.permissions
         if missing:
-            # Logged, not written to the audit log. Writing takes a lock, so if we
-            # recorded every rejected request anyone could slow the whole log down
-            # by spamming requests they aren't allowed to make. P4 adds these as
-            # real audit entries once there's rate limiting in front.
+            # Logged, not written to the audit log. Writing takes a lock, so
+            # recording every rejected request would let anyone slow the log
+            # down by spamming requests they aren't allowed to make. P4 adds
+            # these as real audit entries once there's rate limiting in front.
             logger.warning(
                 "authz.denied",
                 extra={

@@ -1,13 +1,9 @@
 """The apps we connect to, and who has access to them.
 
-An app here is something that either trusts us to log people in or gets accounts
-pushed to it by us (P6).
-
-The SAML columns are load-bearing now. entity_id is what an AuthnRequest is matched
-against, acs_url is where a signed assertion is posted, and slo_url is where a
-logout confirmation goes — all in iam/routers/idp.py. They are filled in by reading
-the application's own metadata rather than typed, because a mistyped acs_url is a
-login delivered to the wrong address.
+An app either trusts us to log people in (SAML) or gets accounts pushed to it
+by us (SCIM). entity_id, acs_url, and slo_url are used by iam/routers/idp.py
+to match and respond to SAML requests, and come from the app's own metadata
+rather than manual entry, to avoid a typo sending logins to the wrong URL.
 """
 
 from __future__ import annotations
@@ -60,8 +56,7 @@ class Application(UUIDPrimaryKey, Timestamps, Base):
     entity_id: Mapped[str | None] = mapped_column(
         String(500),
         unique=True,
-        comment="The app's SAML id. The spec says these are globally unique, so "
-        "the unique constraint is just enforcing that.",
+        comment="The app's SAML id. Globally unique per spec.",
     )
     acs_url: Mapped[str | None] = mapped_column(
         String(500),
@@ -86,10 +81,9 @@ class Application(UUIDPrimaryKey, Timestamps, Base):
 class AppAssignment(UUIDPrimaryKey, Timestamps, Base):
     """Gives one user, or one group, access to one app.
 
-    There are two id columns and a rule saying exactly one must be filled in. The
-    obvious alternative is a single "principal_id" plus a type column, but the
-    database can't check a foreign key on that, so nothing stops it pointing at a
-    row that no longer exists. Two columns means both cases stay checked.
+    Uses separate user_id and group_id columns (exactly one set, checked by
+    the constraint below) instead of one polymorphic principal_id, so both
+    stay real foreign keys.
     """
 
     __tablename__ = "app_assignments"
@@ -120,9 +114,8 @@ class AppAssignment(UUIDPrimaryKey, Timestamps, Base):
             "(user_id IS NOT NULL) <> (group_id IS NOT NULL)",
             name="exactly_one_principal",
         ),
-        # These two work side by side because Postgres treats empty values as all
-        # different from each other. So plenty of rows can have an empty user_id
-        # without clashing, and the same the other way round.
+        # Postgres treats NULLs as distinct from each other, so rows with a
+        # null user_id (or null group_id) don't collide on this constraint.
         UniqueConstraint("application_id", "user_id", name="one_per_user"),
         UniqueConstraint("application_id", "group_id", name="one_per_group"),
         Index("ix_app_assignments_application_id", "application_id"),
@@ -137,7 +130,7 @@ class AppAssignment(UUIDPrimaryKey, Timestamps, Base):
 
     @property
     def principal_id(self) -> uuid.UUID:
-        """The id of whoever this gives access to, from whichever column has it."""
+        """The user or group id, whichever column is set."""
         principal = self.user_id if self.user_id is not None else self.group_id
         if principal is None:  # pragma: no cover - the CHECK constraint prevents this
             raise ValueError("app_assignment has neither user_id nor group_id")

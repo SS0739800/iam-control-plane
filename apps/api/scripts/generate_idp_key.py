@@ -3,14 +3,8 @@
     python -m scripts.generate_idp_key
 
 Prints a private key and a certificate as PEM, ready to paste into .env. Writes
-nothing: the whole point is that the key exists in exactly one place you chose, and
-a script that helpfully saved it to disk would be creating a copy you did not decide
-to keep.
-
-The private key is not printed with any ceremony, because ceremony encourages
-scrolling past. Read the warning instead — this key can mint a login for anybody, in
-any application that trusts this system, and every one of those logins verifies
-correctly.
+nothing to disk, so the key only ever exists in the one place you choose to
+keep it.
 """
 
 from __future__ import annotations
@@ -25,18 +19,15 @@ from iam.saml.keys import CERTIFICATE_YEARS, generate
 def _quote_for_env(pem: str) -> str:
     """PEM as a single .env value.
 
-    A multi-line value has to be quoted or the file only carries its first line —
-    which produces a key that loads, fails to parse, and reports something unhelpful
-    about ASN.1. The quotes and the real newlines inside them are what make it work.
+    Quoted because a multi-line value without quotes only keeps its first line,
+    producing a key that loads but fails to parse with a confusing ASN.1 error.
     """
     return '"' + pem.strip() + '"'
 
 
 def main() -> int:
-    # Windows uses the locale encoding for a piped stdout, which is cp1252 here, and
-    # the fingerprint contains an ellipsis. Without this the script either mangles
-    # its own output or raises UnicodeEncodeError while printing a key somebody now
-    # has to generate again.
+    # Windows pipes stdout as cp1252, which can't encode the ellipsis in the
+    # fingerprint and raises UnicodeEncodeError without this.
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
     parser = argparse.ArgumentParser(description=__doc__)

@@ -23,9 +23,8 @@ from iam.security import Actor, Permission, require
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-# Fields the identity provider owns once it's created a user. Letting someone edit
-# these here is worse than refusing: the next sync puts the old value back, and
-# they walk away thinking they fixed it.
+# Fields the identity provider owns once it's created a user. Editing these here
+# would get silently overwritten on the next sync.
 IDP_OWNED_FIELDS = frozenset({"department", "job_title"})
 
 
@@ -39,9 +38,8 @@ async def _effective_applications(session: SessionDep, user_id: uuid.UUID) -> li
     """Everything a person can get into, and how they got it.
 
     Access comes from two places: given to them directly, or given to a group
-    they're in. We keep the group name rather than throwing it away, because the
-    question helpdesk actually gets asked is "why does this person have
-    Salesforce?"
+    they're in. Keeps the group name, since helpdesk needs to answer "why does
+    this person have Salesforce?"
     """
     direct_rows = (
         await session.execute(
@@ -63,8 +61,8 @@ async def _effective_applications(session: SessionDep, user_id: uuid.UUID) -> li
 
     effective: dict[uuid.UUID, AppRef] = {}
 
-    # Group access goes in first so a direct grant below can overwrite it. If
-    # someone has both, "given directly" is the more useful thing to show.
+    # Group access goes in first so a direct grant overwrites it — if someone
+    # has both, "given directly" is more useful to show.
     for app, role, group_name in inherited_rows:
         effective[app.id] = AppRef(
             id=app.id,
@@ -112,10 +110,9 @@ async def list_users(
 ) -> Page[UserSummary]:
     """The user list, filtered and split into pages.
 
-    The filtering and paging happen in Postgres, not the browser. There are 1,284
-    users in the demo data; sending all of them so the frontend can filter would
-    be slow, and it would also hand out every record to anyone who can load one
-    page.
+    Filtering and paging happen in Postgres, not the browser — sending every
+    user so the frontend can filter would be slow and would leak every record
+    to anyone who can load one page.
     """
     limit = clamp_limit(limit)
     filters = []
@@ -215,13 +212,11 @@ async def update_user(
     if not changes:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
-    # Deactivating is the one change here that can lock somebody out, so it gets two
-    # guards the other fields do not need.
+    # Deactivating is the one change here that can lock somebody out, so it gets
+    # two extra guards.
     if changes.get("active") is False:
-        # Yourself, first. Deactivating revokes every session you have immediately and
-        # /saml/acs refuses the next login — a provider will happily sign you in, and
-        # ours is the answer that counts. There is no self-service way back, so this
-        # would end with somebody editing the database by hand.
+        # Deactivating yourself would end your sessions immediately and get your
+        # next login refused at /saml/acs, with no self-service way back.
         if actor.user_id == user.id:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
@@ -232,14 +227,11 @@ async def update_user(
                 ),
             )
 
-        # And the last admin. The same reasoning as revoking their grant — see
-        # iam/routers/access.py — because switching somebody off empties the set of
-        # people who can grant anything just as surely as taking their role away.
-        # count_live_admins only counts active people, which is exactly why.
+        # Same check as revoking the last admin's grant — see
+        # iam/routers/access.py — since deactivating them empties the set of
+        # people who can grant anything just as much as removing their role.
         now = dt.datetime.now(dt.UTC)
         current = await live_grant(session, user.id, now=now)
-        # The count is only asked for once the cheap checks pass, which the
-        # short-circuit takes care of.
         if (
             current is not None
             and current.role is PlatformRole.ADMIN
@@ -271,9 +263,8 @@ async def update_user(
     for field, value in changes.items():
         setattr(user, field, value)
 
-    # Editing somebody's department here has the same consequence as the provider
-    # changing it, so it runs the same rules. Without this, the console would be a
-    # way to move somebody between departments and leave their groups behind.
+    # Editing somebody's department here runs the same rules as the provider
+    # changing it, so their groups get updated too instead of left behind.
     reconciled = None
     if touches_rules(changes):
         reconciled = await reconcile(session, user)
@@ -296,9 +287,8 @@ async def update_user(
                     field: {"from": str(before[field]), "to": str(value)}
                     for field, value in changes.items()
                 },
-                # Folded into the same entry rather than written separately, so
-                # "moved to Sales, and here is what that did to their groups" reads
-                # as one event.
+                # Folded into the same entry so "moved to Sales, and here's what
+                # that did to their groups" reads as one event.
                 **(
                     {"rules": reconciled.as_audit_detail()}
                     if reconciled is not None and reconciled.changed
@@ -309,10 +299,8 @@ async def update_user(
     )
     await session.commit()
 
-    # Refreshed before reading anything off this row again. updated_at has a
-    # server-side onupdate, so the UPDATE leaves that one column expired, and
-    # touching it outside an await is a MissingGreenlet under async — which is
-    # exactly what this endpoint did for every edit until there was a test for it.
+    # updated_at has a server-side onupdate, so it's left expired after the
+    # UPDATE. Reading it without this refresh raises MissingGreenlet under async.
     await session.refresh(user)
 
     return await get_user(session, user_id)
@@ -321,8 +309,8 @@ async def update_user(
 @router.put(
     "/{user_id}/groups/{group_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    # Has to be spelled out. Otherwise FastAPI sees `-> None` and treats None as a
-    # response body type, then complains that a 204 isn't allowed to have a body.
+    # Without this, FastAPI treats the `-> None` return type as a response body
+    # and complains that a 204 can't have a body.
     response_model=None,
     summary="Add a user to a group",
 )
@@ -348,7 +336,7 @@ async def add_to_group(
         GroupMember(
             group_id=group_id,
             user_id=user_id,
-            # Somebody chose this in the console, so the rule engine leaves it alone.
+            # Chosen in the console, so the rule engine leaves it alone.
             source=MembershipSource.MANUAL,
         )
     )

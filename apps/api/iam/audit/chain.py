@@ -4,12 +4,11 @@ Every entry stores a fingerprint (a SHA-256 hash) of the entry before it. If
 anyone edits, deletes, or inserts an old entry, its fingerprint stops matching
 what the next entry expects, and the verify check tells you which entry broke.
 
-One limit worth being clear about: this catches tampering, it doesn't prevent it.
-Someone with write access to the database could redo all the fingerprints after
-their edit. Blocking that properly needs a copy of the fingerprints kept
-somewhere we don't control, and we're not doing that. What this does catch is a
-stray UPDATE or a bug in our own code, and the database rule that blocks edits
-covers the rest.
+This catches tampering, it doesn't prevent it. Someone with write access to the
+database could redo all the fingerprints after their edit — blocking that needs
+a copy of the fingerprints kept somewhere outside our control, which we don't
+have. What this does catch is a stray UPDATE or a bug in our own code; the
+database rule that blocks edits covers the rest.
 """
 
 from __future__ import annotations

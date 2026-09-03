@@ -1,15 +1,13 @@
 """The checks a login has to pass before we believe it.
 
-Nothing in this file imports xmlsec or touches XML. It works on facts already
-pulled out of the document, which has two benefits: these run and are tested on
-any machine including Windows, and each check is a small function you can read on
-its own.
+Nothing here imports xmlsec or touches XML, it works on facts already pulled out
+of the document. That means these run and are tested on any machine, including
+Windows, and each check is a small function you can read on its own.
 
-The order below is roughly cheapest-first, but every check runs regardless of
-whether an earlier one failed. That's on purpose. "Signature is fine, audience is
-wrong" is a configuration mistake and "signature is wrong and so is everything
-else" is something else entirely, and you can only tell them apart if you have all
-the answers.
+Order is roughly cheapest-first, but every check always runs, even after an
+earlier one fails. "Signature is fine, audience is wrong" is a config mistake;
+"signature is wrong and so is everything else" is a different problem. You need
+every result to tell them apart.
 
 See docs/adr/0005-validate-assertions-ourselves.md for why these are ours rather
 than a library's.
@@ -27,7 +25,7 @@ SAML_SUCCESS = "urn:oasis:names:tc:SAML:2.0:status:Success"
 class MalformedResponse(Exception):
     """The response could not be read at all.
 
-    Different from a login that reads fine but fails a check. This one means there
+    Different from a login that reads fine but fails a check: this means there
     was nothing to check, so it's a 400 rather than a rejected login.
 
     Raised by reader.py, but defined here so the endpoint can catch it without
@@ -38,9 +36,8 @@ class MalformedResponse(Exception):
 DEFAULT_CLOCK_SKEW = dt.timedelta(minutes=3)
 """How far out a provider's clock is allowed to be.
 
-Some slack is necessary; machines disagree about the time and a login that took
-400ms shouldn't fail because of it. Too much slack and an expired login stays
-usable, so this stays small. Three minutes is the usual choice.
+Some slack is needed since machines disagree about the time. Too much and an
+expired login stays usable a while longer, so this stays small.
 """
 
 
@@ -61,8 +58,8 @@ class CheckResult:
 class AssertionFacts:
     """What we read out of the login document, before judging any of it.
 
-    Separating reading from judging is what keeps this file free of XML. The reader
-    fills this in; everything below only looks at it.
+    The reader fills this in; everything below only looks at it, which is what
+    keeps this file free of XML.
     """
 
     assertion_id: str
@@ -95,7 +92,7 @@ class AssertionFacts:
 class LogoutRequestFacts:
     """A provider telling us somebody signed out over there.
 
-    Same split as AssertionFacts: the reader fills this in, and deciding what to do
+    Same split as AssertionFacts: the reader fills this in, deciding what to do
     about it needs no XML.
     """
 
@@ -133,11 +130,9 @@ class AuthnRequestFacts:
     """An application asking us to sign somebody in.
 
     The other direction from AssertionFacts: this arrives from a service provider
-    rather than from an identity provider, because in P5 we are the one being asked.
+    rather than an identity provider, since here we're the one being asked.
 
-    ``acs_url`` is read but deliberately not trusted — see the note on it. Reading a
-    value and acting on it are different things, and the reader's job is only the
-    first.
+    ``acs_url`` is read but not trusted for routing — see the note on it.
     """
 
     request_id: str
@@ -148,15 +143,15 @@ class AuthnRequestFacts:
     acs_url: str | None = None
     """AssertionConsumerServiceURL, as the request asked for it.
 
-    Recorded so a mismatch can be logged, and never used as the address to post to.
-    Anybody can send an AuthnRequest naming any application and any return address;
-    honouring it would mean posting a signed assertion for a real person to a
-    server the attacker chose. The registered acs_url is the only one used."""
+    Recorded so a mismatch can be logged, but never used as the address to post
+    to. Anybody can send an AuthnRequest naming any application and any return
+    address; honouring it would mean posting a signed assertion for a real
+    person to a server the attacker chose. Only the registered acs_url is used."""
 
     name_id_policy: str | None = None
     force_authn: bool = False
-    """The application asking us to make them sign in again regardless of an
-    existing session. Read, and not yet acted on."""
+    """The application asking us to make them sign in again even with an
+    existing session. Read, not yet acted on."""
 
     relay_state: str | None = None
     """Opaque to us. Handed back unchanged so the application can resume whatever
@@ -216,10 +211,9 @@ def check_signature(facts: AssertionFacts) -> CheckResult:
 def check_assertion_signed(facts: AssertionFacts, expected: Expectations) -> CheckResult:
     """Was the assertion itself signed, not just the envelope around it.
 
-    This matters more than it sounds. If only the outer response is signed, the
-    signature covers the wrapper and someone can potentially swap what's inside it
-    while the signature still checks out. Insisting the assertion carries its own
-    signature closes that off.
+    If only the outer response is signed, someone can swap what's inside it and
+    the signature still checks out. Requiring the assertion's own signature
+    closes that off.
     """
     if not expected.require_signed_assertion:
         return CheckResult(
@@ -257,9 +251,9 @@ def check_issuer(facts: AssertionFacts, expected: Expectations) -> CheckResult:
 def check_audience(facts: AssertionFacts, expected: Expectations) -> CheckResult:
     """Was this meant for us.
 
-    Skip this one and a login the provider issued for a different application gets
-    you into this one. Anybody with an account on that other app becomes a user
-    here.
+    Skip this and a login the provider issued for a different application gets
+    accepted here too, so anybody with an account on that other app becomes a
+    user here.
     """
     ok = expected.our_entity_id in facts.audiences
     listed = ", ".join(facts.audiences) if facts.audiences else "nobody"
@@ -277,9 +271,9 @@ def check_audience(facts: AssertionFacts, expected: Expectations) -> CheckResult
 def check_destination(facts: AssertionFacts, expected: Expectations) -> CheckResult:
     """Was it sent to our address.
 
-    Stops a login captured on the way to somewhere else being pointed at us.
-    Providers may leave this out, and the spec allows that, so an absent value is
-    not treated as a failure.
+    Stops a login captured on the way to somewhere else from being replayed at
+    us. Providers may leave this out (the spec allows it), so a missing value
+    isn't a failure.
     """
     if facts.destination is None:
         return CheckResult(
@@ -303,8 +297,8 @@ def check_destination(facts: AssertionFacts, expected: Expectations) -> CheckRes
 def check_timing(facts: AssertionFacts, expected: Expectations, now: dt.datetime) -> CheckResult:
     """Is it currently valid: not expired, and not dated in the future.
 
-    Both ends matter. No upper bound and an old login works forever. No lower bound
-    and a provider with a fast clock hands out logins that are valid before they
+    Both ends matter: no upper bound and an old login works forever, no lower
+    bound and a provider with a fast clock hands out logins valid before they
     were issued.
     """
     skew = expected.clock_skew
@@ -336,8 +330,8 @@ def check_subject_confirmation(
     """Is the part that says "this person, here, now" still good.
 
     An assertion has an outer validity window and a tighter one on the subject.
-    The tighter one is the one that says this login is for us specifically, and it
-    is usually only valid for a few minutes.
+    The tighter one says this login is for us specifically, and is usually
+    valid for only a few minutes.
     """
     skew = expected.clock_skew
 
@@ -367,12 +361,11 @@ def check_subject_confirmation(
 def check_in_response_to(facts: AssertionFacts, expected: Expectations) -> CheckResult:
     """Is this answering a login we actually asked for.
 
-    Without this, anyone can post a valid-looking login at us out of nowhere and be
-    let in. That's the whole shape of the attack, and matching the id we sent is
-    what prevents it.
+    Without this, anyone can post a valid-looking login at us out of nowhere and
+    get let in. Matching the id we sent is what prevents that.
 
-    A login with no id at all is one the provider started by itself. We only allow
-    that when we weren't waiting for anything.
+    A login with no id at all is one the provider started by itself. We only
+    allow that when we weren't waiting on anything.
     """
     quoted = facts.in_response_to or facts.subject_in_response_to
 
@@ -412,7 +405,7 @@ def check_not_replayed(facts: AssertionFacts, already_seen: bool) -> CheckResult
     """Have we accepted this exact login before.
 
     Every login carries a unique id. Seeing one twice means somebody kept a copy
-    and sent it again. Without this check, one captured login works over and over
+    and sent it again; without this check a captured login works over and over
     until it expires.
     """
     return CheckResult(
@@ -435,9 +428,9 @@ def run_all_checks(
 ) -> list[CheckResult]:
     """Run every check and return all the answers, in display order.
 
-    Deliberately does not stop at the first failure. The inspector shows the whole
-    list, and a login that fails three checks tells you something different from one
-    that fails a single one.
+    Does not stop at the first failure. The inspector shows the whole list, and
+    a login failing three checks tells you something different from one that
+    fails just one.
     """
     return [
         check_status(facts),

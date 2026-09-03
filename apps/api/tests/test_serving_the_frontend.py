@@ -1,20 +1,17 @@
 """Serving the built frontend from the API process.
 
 In production one server answers for both halves — see
-docs/adr/0008-one-server-serves-both-halves-in-production.md. That decision has two
-failure modes that are invisible if nobody tests them, and both of them look like a
-working API next to a broken website.
+docs/adr/0008-one-server-serves-both-halves-in-production.md. Two failure
+modes here are easy to miss, and both look like a working API next to a
+broken website.
 
-The first is mounting order. Every router carries a prefix, so a static mount at "/"
-conflicts with none of them — today. Mounting order is exactly the sort of thing
-somebody rearranges while tidying imports, and if the mount goes first, every API
-route starts returning index.html with a 200. Nothing about that reads as an error.
+First, mounting order: every router carries a prefix so a static mount at "/"
+doesn't conflict with them today, but if the mount ever goes first, every API
+route starts returning index.html with a 200 instead.
 
-The second is the deep link. /users and /groups are React routes with no file behind
-them. Locally the Vite dev server invents index.html for unknown paths, so they work
-without anyone deciding they should. A plain file server 404s them, and only the home
-page loads. That divergence between local and production is named in the ADR as the
-honest cost of this shape, and this file is where it stops being a risk.
+Second, deep links: /users and /groups are React routes with no file behind
+them. Locally the Vite dev server invents index.html for unknown paths; a
+plain file server 404s them instead, so only the home page would load.
 """
 
 from __future__ import annotations
@@ -66,9 +63,8 @@ def test_the_hashed_assets_are_served(bundle: pathlib.Path) -> None:
 def test_a_deep_link_gets_index_html_rather_than_a_404(bundle: pathlib.Path) -> None:
     """The failure that would only appear in production.
 
-    /users is a React route. Locally Vite invents index.html for paths it does not
-    recognise, so this works without anybody choosing it. A plain file server would
-    404, and a visitor following a link to a person's page would get nothing.
+    /users is a React route. Locally Vite invents index.html for unrecognized
+    paths; a plain file server would 404 instead.
     """
     response = client_serving(bundle).get("/users")
 
@@ -90,8 +86,7 @@ def test_the_api_still_answers_json(bundle: pathlib.Path) -> None:
     """The mounting-order test.
 
     If the static mount is ever registered before the routers, this returns
-    index.html with a 200 and every client breaks while the health check keeps
-    reporting success.
+    index.html with a 200 and every client breaks silently.
     """
     response = client_serving(bundle).get("/api/health")
 
@@ -108,14 +103,12 @@ def test_the_openapi_schema_is_not_the_frontend(bundle: pathlib.Path) -> None:
 
 
 def test_the_saml_and_scim_paths_are_not_the_frontend(bundle: pathlib.Path) -> None:
-    """These sit outside /api because providers post to them directly. They are the
-    likeliest to be shadowed by a root mount, and the breakage would be somebody
-    else's identity provider silently receiving HTML.
+    """These sit outside /api because providers post to them directly, which
+    makes them the likeliest to be shadowed by a root mount.
 
-    Used as a context manager because the SCIM token check needs a session factory,
-    and that is built by the lifespan — which TestClient only runs when it is entered
-    rather than just constructed. The database itself is never reached: the refusal
-    happens before any query.
+    Used as a context manager since the SCIM token check needs a session
+    factory, built by the lifespan, which TestClient only runs once entered.
+    The database is never reached — the refusal happens before any query.
     """
     with client_serving(bundle) as client:
         metadata = client.get("/saml/metadata")
@@ -133,8 +126,8 @@ def test_the_saml_and_scim_paths_are_not_the_frontend(bundle: pathlib.Path) -> N
 def test_no_static_dir_means_no_mount() -> None:
     """What local development and every other test does.
 
-    The API must be complete on its own. Requiring a built frontend to start would
-    make the test suite depend on npm.
+    The API must be complete on its own — requiring a built frontend to start
+    would make the test suite depend on npm.
     """
     client = TestClient(create_app(build_settings()))
 
@@ -145,9 +138,8 @@ def test_no_static_dir_means_no_mount() -> None:
 def test_a_static_dir_with_nothing_in_it_refuses_to_start(tmp_path: pathlib.Path) -> None:
     """Loud rather than lazy.
 
-    A wrong path would otherwise be a blank site in front of a healthy API, with the
-    health check still reporting success — so the process refuses to come up instead
-    of serving nothing convincingly.
+    A wrong path would otherwise be a blank site in front of a healthy API
+    with a passing health check.
     """
     settings = build_settings().model_copy(update={"static_dir": str(tmp_path)})
 
@@ -165,9 +157,9 @@ def test_a_static_dir_that_does_not_exist_refuses_to_start(tmp_path: pathlib.Pat
 def test_a_missing_asset_stays_a_404(bundle: pathlib.Path) -> None:
     """Not the application.
 
-    If a missing bundle file returned index.html, the browser would try to run HTML
-    as JavaScript and the console error would point at the bundle rather than at the
-    deploy that lost it.
+    If a missing bundle file returned index.html, the browser would try to
+    run HTML as JavaScript, and the error would point at the bundle rather
+    than the deploy that lost it.
     """
     response = client_serving(bundle).get("/assets/index-deadbeef.js")
 
@@ -182,11 +174,8 @@ def test_a_missing_file_at_the_root_stays_a_404(bundle: pathlib.Path) -> None:
 
 
 def test_an_unknown_api_path_stays_a_404(bundle: pathlib.Path) -> None:
-    """The one that matters most.
-
-    A broken client asking for a route that does not exist has to be told so. HTML
-    with a 200 is worse than a 404 because nothing in it reads as a failure.
-    """
+    """The one that matters most: a broken client asking for a route that
+    doesn't exist has to be told so, not handed HTML with a 200."""
     response = client_serving(bundle).get("/api/nonsense")
 
     assert response.status_code == 404

@@ -1,12 +1,8 @@
-"""Listing applications, looking at one, and registering one.
+"""Listing applications, looking at one, registering one, and granting access.
 
-Listing, registering, and granting access.
-
-Registering happens by pasting the application's own metadata rather than by
-filling in a form of addresses. That is the same decision as registering an
-identity provider and it matters more here, not less: the ACS URL is where we post
-a signed assertion for a real person, so a mistyped one is a login delivered
-somewhere it should not go.
+Registering happens by pasting the application's own metadata rather than
+filling in a form of addresses, same as registering an identity provider. A
+mistyped ACS URL here means a signed login gets posted to the wrong place.
 """
 
 from __future__ import annotations
@@ -173,19 +169,15 @@ async def register_application(
 ) -> ApplicationDetail:
     """Read an application's metadata and store what it says.
 
-    ``apps:write``, reused rather than given a permission of its own. Registering an
-    application is managing an application, and the audience is already the narrowest
-    one — admin. Inventing a separate permission would suggest it was a different
-    kind of power and then let the two drift apart. The opposite call was made for
-    role grants, where ``users:write`` was genuinely *not* an equivalent power.
+    Reuses ``apps:write`` rather than a permission of its own, since registering
+    an application is just managing one.
 
-    The document is pasted in, never fetched from a URL. Same reasoning as
-    registering an identity provider, and it applies here for the same reason: our
-    server can reach things the person pasting cannot. See
-    docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+    The document is pasted in, never fetched from a URL — same reasoning as
+    registering an identity provider: our server can reach things the person
+    pasting cannot. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
 
-    Registering the same slug again replaces the details, which is how a certificate
-    or an address change is handled — paste the new metadata and the row updates.
+    Registering the same slug again replaces the details, so a certificate or
+    address change is just pasting the new metadata again.
 
     Raises:
         HTTPException: 400 if the metadata can't be read or is missing something.
@@ -235,9 +227,8 @@ async def register_application(
         session.add(application)
     await session.flush()
 
-    # Where assertions go is the security-relevant fact about an application, so a
-    # change to it is called out rather than buried in a list of edited fields. An
-    # address moving when nobody moved it is exactly the event worth finding.
+    # Called out separately since where assertions go is the security-relevant
+    # fact about an application, and it's worth being able to find when it moved.
     acs_moved = previous_acs is not None and previous_acs != metadata.acs_url
 
     await append_event(
@@ -281,15 +272,9 @@ async def register_application(
 
 # --------------------------------------------------------- granting app access
 #
-# Until now nothing could create an app_assignments row except the seed script,
-# which meant P5 decided every login from a table the API had no way to write. The
-# console could show who had access and nobody could grant it — the same shape as
-# the pre-P4 problem where making somebody an admin meant a hand-written UPDATE.
-#
-# Both permissions are required for a group assignment, and that asymmetry is on
-# purpose. Giving one person access affects one person; giving a group access
-# affects everybody in it and everybody added to it later, so it needs the
-# permission that governs changing what a group means.
+# A group assignment requires both apps:write and groups:write. Giving one
+# person access affects one person; giving a group access affects everybody in
+# it now and everybody added to it later.
 
 
 async def _assignable_application(session: SessionDep, app_id: uuid.UUID) -> Application:
@@ -353,8 +338,8 @@ async def assign_user(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such user")
 
     if not user.active:
-        # Assigning access to somebody who has left is either a mistake or the first
-        # half of one. Reactivating is a separate, deliberate act.
+        # Assigning access to somebody who has left is likely a mistake.
+        # Reactivating them is a separate action.
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail=f"{user.display_name} is deactivated. Reactivate them first.",
@@ -403,10 +388,9 @@ async def unassign_user(
 ) -> None:
     """Safe to call twice.
 
-    Deleted rather than marked, unlike a role grant. An assignment carries no reason
-    or expiry of its own, so there is nothing in the row worth keeping — the audit
-    entry holds who removed it and when, which is the part somebody asks about.
-    That asymmetry is a known one; see the note in models/application.py.
+    Deleted rather than marked, unlike a role grant — an assignment has no reason
+    or expiry of its own, so there's nothing in the row worth keeping. The audit
+    entry records who removed it and when. See the note in models/application.py.
     """
     app = await _assignable_application(session, app_id)
 
@@ -450,9 +434,8 @@ async def assign_group(
 ) -> None:
     """Grant through a group, which is how access should usually be given.
 
-    Needs groups:write as well as apps:write. Giving one person access affects one
-    person; giving a group access affects everybody in it now and everybody added to
-    it later, including by an access rule nobody re-reads.
+    Needs groups:write as well as apps:write, since it affects everybody in the
+    group now and everybody added to it later.
     """
     app = await _assignable_application(session, app_id)
 
@@ -489,8 +472,6 @@ async def assign_group(
             "through": "group",
             "group": group.name,
             "role": role,
-            # How many people this actually reached. A group assignment is the one
-            # here with a blast radius, and it belongs in the record.
             "people_affected": members,
         },
     )

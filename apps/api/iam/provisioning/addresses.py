@@ -1,24 +1,18 @@
 """Deciding whether we are willing to send anything to an address.
 
-The enforcement of ADR 0007. Read that first for why outbound provisioning is
-allowed at all when ADR 0006 says we never fetch a URL somebody gives us; the short
-version is that a provisioning target is a reviewed row rather than a value in a
-request.
+This enforces ADR 0007. See that doc for why outbound provisioning is allowed
+at all when ADR 0006 says we never fetch a URL somebody gives us - short
+version: a provisioning target is a reviewed row, not a value in a request.
 
-Checked when a target is registered, not on every push
------------------------------------------------------
+This check runs when a target is registered, not on every push. That means a
+hostname that resolves somewhere harmless today and somewhere private
+tomorrow won't get caught here. Resolving before every request would be
+slower and still racy (DNS can change between the check and the connection),
+so instead the control is that the address is a row someone chose, visible on
+a page and in the audit log. This stops obvious mistakes; it's not a sandbox.
 
-A deliberate trade, and worth being honest about what it gives up. A hostname that
-resolves somewhere harmless today and somewhere private tomorrow is not caught here.
-
-The alternative — resolving before every request — is slower, still racy, because
-DNS can change between the check and the connection, and worst of all it *feels* like
-it solved the problem. The real control is that the address is a row somebody chose,
-visible on a page, in the audit log. This function stops the obvious mistakes and
-does not pretend to be a sandbox.
-
-No xmlsec, no network, no database. Pure decisions about strings, so all of it is
-testable anywhere.
+No xmlsec, no network, no database - pure string checks, so it's testable
+anywhere.
 """
 
 from __future__ import annotations
@@ -34,12 +28,12 @@ BLOCKED_ALWAYS = (
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("fe80::/10"),
 )
-"""Refused in every environment, with no setting that relaxes it.
+"""Refused in every environment, with no setting to relax it.
 
-Link-local. Nothing legitimate is a SCIM server here, and 169.254.169.254 is the
-cloud metadata service — the single most valuable thing a server-side request can
-reach, because it hands out credentials to anything that asks. In P7 this system runs
-somewhere that has one.
+Link-local addresses. Nothing legitimate is a SCIM server here, and
+169.254.169.254 is the cloud metadata service - it hands out credentials to
+anything that asks, so it's the most valuable target a server-side request
+could reach.
 """
 
 ALLOWED_SCHEMES = ("http", "https")
@@ -53,10 +47,9 @@ class UnusableTarget(Exception):
 class Decision:
     """What was allowed, and what it cost.
 
-    ``concession`` records a rule that was relaxed rather than met — a private
-    address outside production, or plain HTTP. Kept so the target's page can show
-    that it was a decision rather than an oversight, which is the difference between
-    a reviewable exception and a quiet one.
+    `concession` records a rule that was relaxed rather than met - a private
+    address outside production, or plain HTTP. Kept so the target's page can
+    show it was a deliberate exception, not an oversight.
     """
 
     host: str
@@ -67,8 +60,8 @@ class Decision:
 def _literal_address(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     """The IP, if the host is written as one.
 
-    A hostname is left alone deliberately. Resolving it here would be a check that
-    looks stronger than it is — see the module docstring — and `hrms` is exactly the
+    A hostname is left alone - resolving it here would look like a stronger
+    check than it is (see the module docstring), and `hrms` is exactly the
     kind of name a compose target has.
     """
     try:
@@ -83,7 +76,7 @@ def check(url: str, *, is_production: bool, allow_private: bool) -> Decision:
     Args:
         url: The target's base URL, as somebody typed it.
         is_production: Tightens two of the rules. Locally a downstream at
-            ``http://hrms:8000`` is the whole point of compose.
+            ``http://hrms:8000`` is normal for compose.
         allow_private: Permit a private or loopback address in production. Never
             permits link-local.
 
@@ -111,7 +104,7 @@ def check(url: str, *, is_production: bool, allow_private: bool) -> Decision:
     if address is not None:
         for network in BLOCKED_ALWAYS:
             if address.version == network.version and address in network:
-                # No environment and no setting reaches this. See BLOCKED_ALWAYS.
+                # No environment or setting can bypass this. See BLOCKED_ALWAYS.
                 raise UnusableTarget(
                     f"{host} is a link-local address. Nothing legitimate is a SCIM "
                     "server there, and it is where cloud metadata services live — so "

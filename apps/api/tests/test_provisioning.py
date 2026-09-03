@@ -1,8 +1,7 @@
 """Tests for managing provisioning tokens from the console.
 
-The two that matter: a token is shown exactly once and is never retrievable
-afterwards, and revoking one actually stops it working. Everything else on this
-screen is reporting.
+The two that matter most: a token is shown exactly once and never
+retrievable afterward, and revoking one actually stops it working.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -53,7 +52,7 @@ def test_issuing_hands_back_a_token_once(db_client: TestClient, console: Console
         assert created["name"] == name
         assert created["usable"] is True
 
-        # And nothing can fetch it again, because there is nothing to fetch.
+        # Nothing can fetch it again, since there's nothing to fetch.
         listed = db_client.get(CLIENTS, headers=console.as_admin).json()
         mine = next(row for row in listed if row["name"] == name)
         assert "token" not in mine
@@ -62,7 +61,7 @@ def test_issuing_hands_back_a_token_once(db_client: TestClient, console: Console
 
 
 def test_only_the_hash_is_stored(db_client: TestClient, console: ConsoleUsers) -> None:
-    """Somebody who reads the table cannot use what they find."""
+    """Somebody who reads the table can't use what they find."""
     name = f"hashed-{console.suffix}"
     try:
         created = issue(db_client, console, name)
@@ -82,8 +81,8 @@ def test_only_the_hash_is_stored(db_client: TestClient, console: ConsoleUsers) -
 
 
 def test_the_new_token_works_immediately(db_client: TestClient, console: ConsoleUsers) -> None:
-    """Issuing it in the console and using it on the SCIM endpoint are the same
-    credential — worth checking, since one writes the hash and the other reads it."""
+    """Issuing it in the console and using it on the SCIM endpoint are the
+    same credential."""
     name = f"usable-{console.suffix}"
     try:
         created = issue(db_client, console, name)
@@ -115,7 +114,7 @@ def test_two_clients_cannot_share_a_name(db_client: TestClient, console: Console
 def test_issuing_is_recorded_without_the_token(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """Logging the token would rather defeat the point of not storing it."""
+    """Logging the token would defeat the point of not storing it."""
     name = f"audited-{console.suffix}"
     try:
         created = issue(db_client, console, name)
@@ -142,8 +141,8 @@ def test_issuing_is_recorded_without_the_token(
 
 
 def test_revoking_stops_the_token_working(db_client: TestClient, console: ConsoleUsers) -> None:
-    """The point of the screen. A revoke that leaves the credential working is
-    worse than no button at all, because somebody believes they cut it off."""
+    """A revoke that leaves the credential working is worse than no button
+    at all, since somebody believes they cut it off."""
     name = f"revoked-{console.suffix}"
     try:
         created = issue(db_client, console, name)
@@ -168,8 +167,7 @@ def test_revoking_stops_the_token_working(db_client: TestClient, console: Consol
 
 
 def test_a_revoked_client_is_kept_not_deleted(db_client: TestClient, console: ConsoleUsers) -> None:
-    """ "That sync stopped on the 3rd because we revoked it" has to stay
-    answerable, and the audit entries referring to it still have to resolve."""
+    """The row has to survive so audit entries referring to it still resolve."""
     name = f"kept-{console.suffix}"
     try:
         created = issue(db_client, console, name)
@@ -186,7 +184,7 @@ def test_a_revoked_client_is_kept_not_deleted(db_client: TestClient, console: Co
 def test_revoking_twice_keeps_the_first_reason(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """When it was cut off is the fact that matters."""
+    """When it was cut off is the fact that should stick."""
     name = f"twice-{console.suffix}"
     try:
         created = issue(db_client, console, name)
@@ -221,8 +219,7 @@ def test_revoking_something_that_is_not_there(db_client: TestClient, console: Co
 def test_an_auditor_can_see_the_tokens_but_not_issue_one(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """ "Is the sync running" is a question an auditor should be able to answer.
-    "Here is a new credential" is not a sentence they should be able to say."""
+    """An auditor can check whether the sync is running but can't issue tokens."""
     assert db_client.get(CLIENTS, headers=console.as_user(console.auditor)).status_code == 200
 
     denied = db_client.post(
@@ -256,8 +253,8 @@ def test_the_overview_counts_what_the_sync_owns(
 def test_the_activity_list_only_shows_provisioning(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """It is a view over the audit log, not a second copy of it. A console edit
-    turning up here would make the screen useless for its one job."""
+    """A view over the audit log, not a second copy - a console edit
+    showing up here would defeat the point of this screen."""
     response = db_client.get("/api/provisioning/activity", headers=console.as_admin)
 
     assert response.status_code == 200

@@ -1,30 +1,25 @@
 """The part of SCIM's filter grammar we accept, and the part we refuse.
 
-SCIM defines a full query language: ``and``, ``or``, ``not``, grouping,
-``pr`` (present), ``co`` (contains), ``sw``, ``ew``, ``gt``, ``ge``, ``lt``,
-``le``, and complex attribute paths like
-``emails[type eq "work"].value``. Implementing all of it means writing a parser
-and then translating its tree into SQL.
-
-We accept a subset, deliberately:
+SCIM defines a full query language: `and`, `or`, `not`, grouping, `pr`
+(present), `co` (contains), `sw`, `ew`, `gt`, `ge`, `lt`, `le`, and complex
+attribute paths like `emails[type eq "work"].value`. We only accept:
 
     userName eq "ada@demo.local"
-    userName eq ada@demo.local        (unquoted — authentik sends this)
+    userName eq ada@demo.local        (unquoted - authentik sends this)
     externalId eq "9f1c-..."
     displayName eq "Engineering"
     active eq true
 
-That is not a guess about what is enough. It is what providers actually send
-during a sync: before creating anything, a provider asks "do you already have
-this one?", and that question is a single ``eq`` on the attribute it identifies
-people by. Okta, authentik and Entra all do exactly this.
+That matches what providers actually send during a sync: before creating
+anything, a provider asks "do you already have this one?", which is a single
+`eq` on the attribute it identifies people by. Okta, authentik, and Entra all
+do this.
 
-Anything outside the subset is refused with ``invalidFilter`` and a message
-naming what was unsupported. That is the important half of the design. A filter
-we don't understand must never be treated as "no filter", because the request
-that asks "do you have userName X" would then be answered with the entire
-directory — and a provider reading the first page of that gets somebody else's
-account and merrily writes to it.
+Anything outside that subset is refused with `invalidFilter`, naming what
+was unsupported. This matters for security: a filter we don't understand
+must never be treated as "no filter", or a request asking "do you have
+userName X" would get answered with the entire directory - handing the
+provider someone else's account to write to.
 """
 
 from __future__ import annotations
@@ -34,12 +29,12 @@ from dataclasses import dataclass
 
 from iam.scim.errors import bad_filter
 
-# attribute, operator, value. The value is a quoted string, or an unquoted run of
-# non-space characters.
+# attribute, operator, value. The value is a quoted string, or an unquoted
+# run of non-space characters.
 #
-# Anchored at both ends, and that is what keeps the unquoted form safe: a second
-# clause like `userName eq a and active eq true` has a space after the `a`, so the
-# whole expression fails to match rather than being read as just its first part.
+# Anchored at both ends - that's what keeps the unquoted form safe. A second
+# clause like `userName eq a and active eq true` has a space after the `a`,
+# so the whole expression fails to match instead of matching just the first part.
 _SIMPLE_EQ = re.compile(
     r"""
     ^\s*
@@ -76,7 +71,7 @@ GROUP_FILTER_ATTRIBUTES = {
 
 @dataclass(frozen=True, slots=True)
 class Comparison:
-    """One ``attribute eq value``, already mapped to the column it means."""
+    """One `attribute eq value`, already mapped to the column it means."""
 
     column: str
     value: str | bool
@@ -90,8 +85,8 @@ def _unescape(quoted: str) -> str:
     r"""Undo the escaping inside a quoted filter value.
 
     SCIM strings are JSON strings, so a quote inside one arrives as \" and a
-    backslash as \\. Leaving those in means a search for a name containing an
-    apostrophe-escaped character quietly matches nothing.
+    backslash as \\. Leaving those escaped would make a search for a name
+    containing one of those characters silently match nothing.
     """
     return quoted.replace('\\"', '"').replace("\\\\", "\\")
 
@@ -105,10 +100,10 @@ def parse_filter(expression: str, attributes: dict[str, str]) -> Comparison:
             the column each one means.
 
     Raises:
-        ScimError: The filter is malformed, uses an operator or an attribute we
-            don't support, or contains more than one clause. Always
-            ``invalidFilter``, never silently ignored — see the module docstring
-            for why that distinction matters more than it looks.
+        ScimError: The filter is malformed, uses an operator or an attribute
+            we don't support, or contains more than one clause. Always
+            `invalidFilter`, never silently ignored - see the module
+            docstring for why that matters.
     """
     match = _SIMPLE_EQ.match(expression)
     if match is None:
@@ -137,11 +132,10 @@ def parse_filter(expression: str, attributes: dict[str, str]) -> Comparison:
     if bare is not None:
         # true and false are booleans; anything else unquoted is a string.
         #
-        # The spec says a string comparison value is a quoted JSON string, and
-        # authentik sends `userName eq akadmin` with no quotes at all. Refusing
-        # that is technically defensible and practically useless: the filter is
-        # the first thing a provider sends, so rejecting it means the sync never
-        # starts. Both forms are accepted, and the tests cover both.
+        # The spec wants a quoted JSON string here, but authentik sends
+        # `userName eq akadmin` with no quotes. Rejecting that would break
+        # the first request a sync makes, so both forms are accepted and
+        # tested.
         if bare.lower() in ("true", "false"):
             return Comparison(column=column, value=bare.lower() == "true")
         return Comparison(column=column, value=bare)

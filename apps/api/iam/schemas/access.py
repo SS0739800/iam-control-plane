@@ -68,10 +68,8 @@ class RoleGrantRevoke(BaseModel):
 
 
 class AccessSummary(BaseModel):
-    """Everything one person has, and where it came from.
-
-    The access review view for a single person. Answers the three questions in
-    order: what can they do here, what apps can they get into, and why.
+    """Everything one person has, and where it came from: what they can do
+    here, what apps they can reach, and why.
     """
 
     user_id: uuid.UUID

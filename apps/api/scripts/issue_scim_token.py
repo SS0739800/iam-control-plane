@@ -4,7 +4,7 @@
 
 Prints the token once. Only its hash is stored, so this is the only moment it
 exists in readable form — if it is lost, issue another and revoke this one.
-There is deliberately no way to read it back out.
+There is no way to read it back out.
 
 The token is what lets something write to the directory: create people, rename
 them, switch them off. Treat it like a password, because that is what it is.

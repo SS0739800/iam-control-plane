@@ -1,30 +1,26 @@
-"""Granting, revoking and working out someone's console role.
+"""Granting, revoking, and working out someone's console role.
 
-Grants are the truth. ``User.platform_role`` is a cache of them.
+Grants are the source of truth. ``User.platform_role`` is a cache of them,
+kept because every authenticated request needs the role and joining the
+grants table each time would be wasteful for something that changes maybe
+twice a year per person. This module is the only thing allowed to write
+that column.
 
-That needs justifying, because a cache that can disagree with its source is a bug
-waiting to happen. The reason is that every single authenticated request needs to
-know what the caller is allowed to do. Deriving that from the grants table means a
-join on every request, forever, to answer a question that changes maybe twice a
-year per person. So the answer is written onto the user's row, and this module is
-the only thing allowed to write it.
+What keeps the cache correct:
 
-What keeps the cache honest:
+- Nothing else sets ``platform_role``. Every path goes through
+  ``grant_role`` or ``revoke_role``, and both finish by recomputing it.
+- The database allows only one unrevoked grant per person, so recomputing
+  is a single-row lookup.
+- ``expire_due_grants`` sweeps expired grants and runs before any
+  privileged request is trusted, since expiry changes the answer without
+  anyone writing anything.
+- ``find_drift`` recomputes everybody and reports disagreements. A test
+  runs it and expects nothing back.
 
-- Nothing else sets ``platform_role``. Every path that changes a grant goes
-  through ``grant_role`` or ``revoke_role``, and both finish by recomputing.
-- The database allows only one unrevoked grant per person, so "recompute" is a
-  single-row lookup with no ordering question to get wrong.
-- Expiry is the one thing that changes the answer without anybody writing
-  anything, so ``expire_due_grants`` exists and is called before a privileged
-  request is trusted.
-- ``find_drift`` recomputes everybody and reports disagreements. There is a test
-  that runs it and expects nothing.
-
-Roles do not stack. One person, one role, and granting a second supersedes the
-first. Additive roles would mean helpdesk plus auditor quietly adding up to
-something close to admin that nobody granted, and the point of this table is that
-every power somebody has traces back to a decision.
+Roles don't stack: one person, one role, and granting a second supersedes
+the first. Otherwise helpdesk plus auditor could quietly add up to
+something close to admin that nobody actually granted.
 """
 
 from __future__ import annotations
@@ -64,14 +60,13 @@ class Granter:
 async def count_live_admins(db: AsyncSession, *, now: dt.datetime) -> int:
     """How many people can currently grant anything.
 
-    Counted from the grants rather than the cached column, because this number is the
-    thing standing between us and an unrecoverable system, and it should not depend on
-    a cache being right.
+    Counted from the grants table, not the cached column, since this number
+    guards against locking everyone out and shouldn't depend on the cache
+    being right.
 
-    Only counts people who are still active: a deactivated admin cannot sign in, so
-    they are no help at all when the last other admin is being removed. That clause is
-    also why deactivating somebody has to ask this question — switching off the last
-    admin empties the set just as surely as revoking their grant.
+    Only counts active people — a deactivated admin can't sign in, so they
+    don't help. This is also why deactivating someone has to check this
+    count: it can empty the admin set just like revoking a grant would.
     """
     return (
         await db.scalar(
@@ -158,8 +153,8 @@ async def grant_role(
         )
 
     if not user.active:
-        # Granting access to somebody who has left is either a mistake or the
-        # first half of an attack. Reactivate them first, deliberately.
+        # Granting to a deactivated user is either a mistake or an attack —
+        # reactivate them first.
         raise RoleGrantRefused(
             f"{user.user_name} is deactivated. Reactivate them before granting access."
         )
@@ -169,8 +164,8 @@ async def grant_role(
     )
 
     if existing is not None:
-        # Same role, still live, no end date change: nothing to do. Worth catching
-        # because a rule re-firing shouldn't fill the history with identical rows.
+        # Same role, still live, same expiry: nothing to do, so a rule
+        # re-firing doesn't fill the history with duplicate rows.
         if (
             existing.role == role
             and existing.expires_at == expires_at
@@ -231,8 +226,7 @@ async def revoke_role(
     )
 
     if existing is None:
-        # Still recompute. If the cache says admin and there is no grant, this is
-        # the moment that gets fixed rather than a permanent lie.
+        # Still recompute — fixes the cache if it says admin but there's no grant.
         await _recompute(db, user, now=now)
         return None
 
@@ -259,11 +253,9 @@ async def revoke_role(
 async def expire_due_grants(db: AsyncSession, *, now: dt.datetime) -> int:
     """Revoke every grant whose end date has passed, and fix the cached roles.
 
-    Expiry is the one way somebody's role changes with nobody writing anything, so
-    it needs sweeping rather than reacting. Called from a scheduled command, and
-    also just before a privileged request is trusted — see iam/security/actor.py,
-    because "their admin access expired an hour ago but the sweep runs at
-    midnight" is not an acceptable window.
+    Called from a scheduled command, and also right before a privileged
+    request is trusted (see iam/security/actor.py), so expired access
+    doesn't stay live until the next scheduled sweep.
 
     Returns how many were ended.
     """
@@ -290,9 +282,7 @@ async def expire_due_grants(db: AsyncSession, *, now: dt.datetime) -> int:
         )
     )
 
-    # Reset the cached role for everybody affected. Done as one statement rather
-    # than a loop, because the sweep can touch many people at once and each one
-    # would otherwise be a separate round trip.
+    # One statement instead of a loop, since the sweep can touch many people at once.
     await db.execute(
         update(User)
         .where(User.id.in_([grant.user_id for grant in due]))
@@ -374,13 +364,12 @@ class Drift:
 async def find_drift(db: AsyncSession, *, now: dt.datetime) -> list[Drift]:
     """Recompute everybody and report where the cache is wrong.
 
-    The safety net for the whole design. If this ever returns anything, either
-    something wrote ``platform_role`` without going through this module, or the
-    expiry sweep has not run. A test calls it and expects an empty list.
+    If this ever returns anything, either something wrote ``platform_role``
+    without going through this module, or the expiry sweep hasn't run. A
+    test calls it and expects an empty list.
 
-    One query for the users and one for the grants, then compared in Python.
-    Deliberately not a clever join: this runs rarely, and being obviously correct
-    matters more than being fast.
+    Two simple queries compared in Python, not a join — this runs rarely,
+    and being obviously correct matters more than being fast.
     """
     users = (await db.scalars(select(User))).all()
     grants = (await db.scalars(select(RoleGrant).where(RoleGrant.revoked_at.is_(None)))).all()

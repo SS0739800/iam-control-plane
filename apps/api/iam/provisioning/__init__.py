@@ -1,14 +1,11 @@
 """Pushing accounts outward: the SCIM client half.
 
-P3 made us a SCIM server — a provider writes into our directory. This is the other
-direction, where we write into somebody else's.
+P3 made us a SCIM server (a provider writes into our directory). This is the
+other direction, where we write into somebody else's.
 
-- addresses.py — whether we are willing to send anything to a given address (ADR 0007)
-- client.py — the requests themselves, one at a time, no retries
-- sync.py — which requests to make, and when
-
-Coming in the rest of P6: the console screen that shows what went where, and a
-downstream to point it at.
+- addresses.py: checks whether we can send to a given address (ADR 0007)
+- client.py: makes the requests, one at a time, no retries
+- sync.py: decides which requests to make and when
 """
 
 from __future__ import annotations

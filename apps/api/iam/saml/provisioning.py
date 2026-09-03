@@ -1,17 +1,18 @@
 """Turning a verified login into a person in our directory.
 
 By the time anything here runs, the login has already passed every check in
-checks.py. This file is only about the question that comes next: which row in
-``users`` is this, and what do we do if there isn't one.
+checks.py. This file only answers the next question: which row in ``users``
+is this, and what do we do if there isn't one.
 
-Two jobs, kept apart on purpose:
+Two separate jobs:
 
-Reading the claims. Every provider spells the same handful of facts differently —
-authentik sends ``http://schemas.goauthentik.io/2021/02/saml/username``, Entra
-sends a WS-Federation claim URI, Okta often just sends ``email``. That's a
-lookup table, not logic, and it lives in the CLAIM constants below.
+Reading the claims. Every provider spells the same handful of facts
+differently — authentik sends
+``http://schemas.goauthentik.io/2021/02/saml/username``, Entra sends a
+WS-Federation claim URI, Okta often just sends ``email``. That's a lookup
+table, not logic, and it lives in the CLAIM constants below.
 
-Deciding what to do with them. Match an existing person, or create one. The
+Deciding what to do with them: match an existing person, or create one. The
 matching order matters and is explained on find_user.
 
 No xmlsec and no XML here either, so this runs and is tested anywhere.
@@ -32,18 +33,17 @@ from iam.saml.checks import AssertionFacts
 class UnusableAssertion(Exception):
     """The login was genuine but doesn't say who it's for.
 
-    Different from a failed check. Nothing was wrong with the document; it just
-    didn't carry enough to identify a person, which is a provider configuration
-    problem and needs a different error message.
+    Different from a failed check: nothing was wrong with the document, it
+    just didn't carry enough to identify a person. That's a provider
+    configuration problem and needs a different error message.
     """
 
 
-# Claim names, best first. A provider sends one or two of each of these, never
-# all of them, so every list is tried in order and the first one with a value
-# wins.
+# Claim names, best first. A provider sends one or two of these, never all of
+# them, so each list is tried in order and the first value found wins.
 #
-# These are deliberately data rather than if-statements: adding Okta or Entra
-# should mean adding a string here, not editing the matching logic.
+# Kept as data rather than if-statements: adding Okta or Entra means adding a
+# string here, not editing the matching logic.
 
 CLAIM_USER_NAME = (
     "http://schemas.goauthentik.io/2021/02/saml/username",
@@ -138,16 +138,12 @@ class ProvisionOutcome:
 def _first_claim(attributes: dict[str, list[str]], names: tuple[str, ...]) -> str | None:
     """First non-empty value among these claim names, in the order given.
 
-    Matched without regard to case, which matters more than it looks. Provider
-    consoles let somebody type the attribute name by hand, so the same claim
-    arrives as ``firstName`` from one tenant and ``FirstName`` from the next. An
-    exact lookup finds neither unless both are listed, and the failure is a login
-    that succeeds with a blank name — or, for the username, one refused with "the
-    login carries no email address or username" while the assertion visibly
-    contains one.
-
-    Folding the case is one line and covers every casing anybody invents. Listing
-    them all would be a guessing game that is never finished.
+    Matched without regard to case. Provider consoles let somebody type the
+    attribute name by hand, so the same claim arrives as ``firstName`` from
+    one tenant and ``FirstName`` from the next. An exact lookup would miss
+    both unless both spellings were listed, and the failure is a login that
+    succeeds with a blank name, or one refused even though the assertion
+    plainly has the data.
     """
     folded = {name.casefold(): values for name, values in attributes.items()}
 
@@ -162,9 +158,8 @@ def _first_claim(attributes: dict[str, list[str]], names: tuple[str, ...]) -> st
 def _looks_like_an_email(value: str) -> bool:
     """Good enough to decide whether a username can double as an email address.
 
-    Not validation. The provider is the authority on whether an address is real;
-    this only answers "is it shaped like one", so we know whether falling back to
-    it would put nonsense in the email column.
+    Not validation. This only answers "is it shaped like one", to check
+    whether falling back to it would put nonsense in the email column.
     """
     local, separator, domain = value.partition("@")
     return bool(separator) and bool(local) and "." in domain and not domain.endswith(".")
@@ -190,20 +185,18 @@ def read_claims(facts: AssertionFacts) -> IdentityClaims:
     if email is None and user_name is not None and _looks_like_an_email(user_name):
         email = user_name
 
-    # Last resort: the NameID itself, when it is an email address.
+    # Last resort: the NameID itself, when it's an email address.
     #
-    # A provider sending an emailAddress NameID and no attribute statements at all
-    # is a normal, specification-compliant configuration, and refusing it was
-    # wrong. Okta's app-creation wizard does not even offer attribute statements —
-    # they have to be added afterwards, on a different screen — so the default path
-    # through a real provider's console produces exactly this assertion.
+    # A provider sending an emailAddress NameID with no attribute statements at
+    # all is a normal, spec-compliant setup. Okta's app-creation wizard doesn't
+    # even offer attribute statements by default, so this is a common case,
+    # not an edge case.
     #
-    # Guarded on shape rather than on the declared format. A persistent NameID is
-    # an opaque provider-specific string, and putting that in the email column
-    # would be worse than refusing: it would look like a successful login and
-    # leave nonsense in the directory. The declared format is not trusted for the
-    # same reason the attribute names are folded — providers are inconsistent
-    # about it, and "does this look like an email" is checkable.
+    # Guarded on shape, not on the declared format, since a persistent NameID
+    # is an opaque provider-specific string and putting that in the email
+    # column would look like a successful login while leaving nonsense in the
+    # directory. The declared format isn't trusted because providers are
+    # inconsistent about it, same reason the attribute names are folded above.
     if not email and facts.name_id and _looks_like_an_email(facts.name_id):
         email = facts.name_id.strip()
         if not user_name:
@@ -229,9 +222,9 @@ def read_claims(facts: AssertionFacts) -> IdentityClaims:
         display_name=display_name,
         given_name=given_name,
         family_name=family_name,
-        # NameID is the fallback because we ask for the persistent format, which
-        # is the provider's own stable id for this person. It doesn't change when
-        # they get married or move team, and their email does.
+        # NameID is the fallback since we ask for the persistent format, the
+        # provider's own stable id for this person, which doesn't change when
+        # their email does.
         external_id=_first_claim(attributes, CLAIM_EXTERNAL_ID) or facts.name_id,
     )
 
@@ -239,18 +232,17 @@ def read_claims(facts: AssertionFacts) -> IdentityClaims:
 async def find_user(db: AsyncSession, claims: IdentityClaims) -> User | None:
     """Find the person this login belongs to, if we already know them.
 
-    External id first, userName second, and that order is the whole point. The
-    external id is the provider's own handle for someone and never changes.
-    Emails do change, and if we matched on email alone then somebody's first
-    login after a name change would create a second account for them and quietly
-    strand the first one.
+    External id first, userName second. The external id is the provider's own
+    handle for someone and never changes; email can, and matching on email
+    alone would mean someone's first login after a name change creates a
+    second account and strands the first.
     """
     if claims.external_id:
         by_external_id = await db.scalar(select(User).where(User.external_id == claims.external_id))
         if by_external_id is not None:
             return by_external_id
 
-    # Case-insensitive, because providers are not consistent about it and
+    # Case-insensitive since providers aren't consistent about it, and
     # "Ada.Bergman@demo.local" is the same person as "ada.bergman@demo.local".
     # Annotated because func.lower() loses the row type and scalar() falls back
     # to Any, which strict mypy rejects at the return.
@@ -264,12 +256,11 @@ def refresh_user(user: User, claims: IdentityClaims) -> tuple[str, ...]:
     """Update a person's details from the login, and say what changed.
 
     Only touches records this flow created. A record SCIM owns gets overwritten
-    on the next sync anyway, and a record somebody typed into the console is
-    theirs — silently reverting an admin's edit on the next login would be a
-    genuinely confusing bug to be on the receiving end of.
+    on the next sync anyway, and silently reverting an admin's manual edit on
+    the next login would be a confusing bug to hit.
 
-    The external id is the exception. It's set when it's missing, because that's
-    how a person SCIM created gets linked to their logins, but never overwritten.
+    The external id is the exception: it's set when missing (that's how a
+    person SCIM created gets linked to their logins) but never overwritten.
     """
     changed: list[str] = []
 
@@ -296,10 +287,8 @@ def refresh_user(user: User, claims: IdentityClaims) -> tuple[str, ...]:
 def build_user(claims: IdentityClaims) -> User:
     """A new person, created because they logged in and we'd never seen them.
 
-    Everyone starts as an employee. Nobody gets to be an admin by logging in;
-    that's a decision somebody makes in the console afterwards, and having no
-    path from "the provider let them in" to "they can change things here" is
-    worth the extra step.
+    Everyone starts as an employee. Nobody becomes an admin just by logging in;
+    that's a separate decision made in the console afterwards.
     """
     return User(
         external_id=claims.external_id,
@@ -317,11 +306,10 @@ def build_user(claims: IdentityClaims) -> User:
 async def provision_user(db: AsyncSession, claims: IdentityClaims) -> ProvisionOutcome:
     """Match this login to a person, creating one if we've never seen them.
 
-    Creating on first login is deliberate for P2. SCIM is what fills the
-    directory properly, and that's P3; until then, a login from a provider we
-    trust is enough to make an account. P4 revisits this — at that point an
-    account created by logging in should probably start with no access at all
-    rather than a default role.
+    Creating on first login is a P2 choice; SCIM (P3) is what fills the
+    directory properly, but until then a login from a trusted provider is
+    enough to make an account. P4 revisits this: an account created this way
+    should probably start with no access rather than a default role.
 
     Does not commit. The caller does, so the new person and the audit entry
     saying they were created go in together.

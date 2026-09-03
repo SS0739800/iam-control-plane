@@ -1,18 +1,13 @@
 """Who is allowed to push accounts at us over SCIM.
 
-One row per system we let write to the directory. In practice that is authentik
-to begin with, and later whatever else runs provisioning.
+One row per system allowed to write to the directory. Kept separate from
+identity_providers, even when the same system (e.g. authentik) fills both
+roles, since signing people in and creating/deactivating accounts are
+different powers — separating them lets either be turned off independently
+and lets the audit log say which one did something.
 
-This is a separate table from identity_providers on purpose, even though the
-same authentik fills both roles. Signing people in and writing to the directory
-are different powers with different blast radii: a SAML provider can say who
-somebody is at the moment they log in, while a SCIM client can create and
-deactivate anybody at any time, whether or not they ever visit. Keeping them
-apart means either can be turned off without touching the other, and the audit
-log can say which one did something.
-
-The token works the way the session cookie does: the client is handed a long
-random string once, and we keep only its hash. See iam/tokens.py.
+The token works like the session cookie: the client gets a long random
+string once, and we store only its hash. See iam/tokens.py.
 """
 
 from __future__ import annotations
@@ -39,14 +34,14 @@ class ScimClient(UUIDPrimaryKey, Timestamps, Base):
     token_hash: Mapped[str] = mapped_column(
         String(64),
         unique=True,
-        comment="SHA-256 of the bearer token. The token itself is shown once, when "
-        "it is created, and never stored.",
+        comment="SHA-256 of the bearer token. Shown once at creation, never "
+        "stored in full.",
     )
 
     enabled: Mapped[bool] = mapped_column(
         default=True,
-        comment="Turning this off stops the sync without deleting the record of it "
-        "having existed, which the audit log still refers to.",
+        comment="Turning this off stops the sync but keeps the record, which "
+        "the audit log still refers to.",
     )
 
     description: Mapped[str | None] = mapped_column(
@@ -56,15 +51,14 @@ class ScimClient(UUIDPrimaryKey, Timestamps, Base):
 
     last_used_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True),
-        comment="When this token was last accepted. The useful question is the "
-        "opposite one: a token that has not been used in months is one nobody "
-        "would notice being stolen.",
+        comment="When this token was last accepted. Flags tokens unused for "
+        "months, which is a sign nobody would notice if it were stolen.",
     )
 
     revoked_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True),
-        comment="Set instead of deleting the row, so 'that sync stopped on the 3rd, "
-        "because we revoked it' stays answerable.",
+        comment="Set instead of deleting the row, so it stays clear the sync "
+        "stopped because the token was revoked.",
     )
     revoked_reason: Mapped[str | None] = mapped_column(String(200))
 

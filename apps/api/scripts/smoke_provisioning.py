@@ -6,32 +6,24 @@ Needs the stack up, the HRMS included:
 
     docker compose up -d api web db hrms
 
-What it proves, in order: an entitled person gets an account in a system that shares no
-code with us; a change to them reaches that system; somebody leaving has their account
-switched off rather than deleted; and a rehire gets their old account back rather than a
-second one.
+What it proves, in order: an entitled person gets an account in a system that
+shares no code with us; a change to them reaches that system; somebody leaving
+has their account switched off rather than deleted; and a rehire gets their
+old account back rather than a second one.
 
-This exists for the same reason smoke_login.py does. Every one of these steps has a
-test, and the tests reach the HRMS in-process through an ASGI transport — no socket, no
-container, no network. So the one thing no test covers is whether two containers can
-actually talk to each other, which is exactly what a wrong hostname or a token that
-never made it into the environment breaks.
+The unit tests reach the HRMS in-process through an ASGI transport (no socket,
+no container, no network), so this is the only check for whether two
+containers can actually talk to each other — a wrong hostname or a missing
+token only shows up here.
 
-Note on the lever this pulls
-----------------------------
+The leaver step marks the person inactive rather than removing a direct
+assignment, since access to the HRMS in the seeded data comes entirely from
+group membership — removing a direct grant would leave them still entitled
+through their department and deactivate nobody.
 
-The first version of this script granted a direct assignment and then took it away,
-which deactivated nobody and looked like a bug. It was not: access to the HRMS in the
-seeded data comes entirely from group assignments, so removing a direct grant the script
-had just added left the person entitled through their department the whole time. That is
-the entitlement model working.
-
-So the leaver here is a leaver: the person is marked inactive, which is what happens
-when somebody actually leaves, and what ``entitled_people`` filters on.
-
-It puts the person back the way it found them, and removes the target it registered.
-The employee row in the HRMS is left behind on purpose — there is no delete to call, and
-a former employee still on file is the correct end state anyway.
+Puts the person back the way it found them and removes the target it
+registered. The employee row in the HRMS is left behind, since there's no
+delete to call and a former employee still on file is the correct end state.
 """
 
 from __future__ import annotations
@@ -70,9 +62,8 @@ def ok(response: httpx.Response, expected: int | tuple[int, ...] = 200) -> Any:
 class Console:
     """The admin console API, as an admin.
 
-    Authenticated by the development actor rather than a SAML session, because the login
-    path has its own smoke script and repeating it here would only make this one fail
-    for unrelated reasons.
+    Authenticated by the development actor rather than a SAML session — the
+    login path has its own smoke script.
     """
 
     def __init__(self) -> None:
@@ -94,8 +85,8 @@ class Console:
 def hrms_employees() -> dict[str, dict[str, Any]]:
     """Ask the HRMS directly, keyed by login.
 
-    Read from the HRMS rather than from our own link rows on purpose. Our rows say what
-    we believe happened; this says what actually did.
+    Reads from the HRMS rather than our own link rows, which only say what we
+    believe happened.
     """
     response = httpx.get(
         f"{HRMS}/scim/v2/Users",
@@ -122,10 +113,9 @@ def one_employee(user_name: str) -> dict[str, Any] | None:
 def sync(console: Console, target_id: str) -> dict[str, Any]:
     """Run one sync, and say how long it took.
 
-    The timing is printed because it is the honest face of a real limitation: there is
-    no background worker, so a sync happens inside the request that asked for it. On a
-    first run against a large directory that is a slow HTTP call, and pretending
-    otherwise would be worse than saying so.
+    Timing printed since there's no background worker — a sync runs inside the
+    request that asked for it, which is slow on a first run against a large
+    directory.
     """
     started = time.monotonic()
     run = ok(console.post(f"/api/provisioning/targets/{target_id}/sync"))
@@ -157,7 +147,7 @@ def main() -> int:
     existing = ok(console.get("/api/provisioning/targets"))
     already = next((t for t in existing if t["application_id"] == application["id"]), None)
     if already:
-        # One target per application, so a re-run rotates rather than adds.
+        # One target per application, so re-running rotates rather than adds.
         print(f"already registered, rotating its token: {already['id']}")
         target = ok(
             console.patch(
@@ -181,12 +171,10 @@ def main() -> int:
     target_id = target["id"]
     print(f"target: {target_id} -> {target['base_url']}")
     if target["address_concession"]:
-        # Plain HTTP to a private address, which is what a container on the same network
-        # is. Recorded rather than waved through — see ADR 0007.
+        # Plain HTTP to a private address — a container on the same network.
+        # Recorded rather than silently allowed; see ADR 0007.
         print(f"  allowed with a concession: {target['address_concession']}")
 
-    # Nothing that came back can be the token. Checked rather than trusted, because a
-    # field returning it would be easy to add by accident.
     assert TOKEN not in str(target), "the token came back in the response"
 
     step("2. probe it, before changing anything")
@@ -199,18 +187,16 @@ def main() -> int:
     people = users if isinstance(users, list) else users["items"]
     employees = hrms_employees()
 
-    # Somebody whose department we are allowed to edit. A person who arrived over
-    # inbound SCIM has their department owned by the provider that sent them, and the
-    # console refuses to change it — correctly, since the next inbound sync would
-    # overwrite it. That guard is what the first version of step 6 walked into.
+    # Somebody whose department we're allowed to edit. A person who arrived via
+    # inbound SCIM has their department owned by that provider, and the console
+    # refuses to change it since the next sync would overwrite it anyway.
     editable = [
         p for p in people if p["active"] and p.get("user_name") and p.get("source") != "scim"
     ]
     assert editable, "nobody here has a locally editable department"
 
-    # Prefer somebody with no account at the HRMS yet, so step 4 is a real joiner
-    # rather than a no-op. On a re-run there may not be one, which is fine and said out
-    # loud rather than asserted away.
+    # Prefer somebody with no HRMS account yet, so step 4 is a real joiner
+    # rather than a no-op. On a re-run there may not be one.
     person = next(
         (p for p in editable if p["user_name"] not in employees),
         editable[0],
@@ -227,8 +213,8 @@ def main() -> int:
     if brand_new:
         assert first["created"] >= 1, "somebody with no account did not get one"
     if first["created"] > 1:
-        # Worth naming rather than hiding: everybody entitled gets an account, and on a
-        # first run against the seeded directory that is most of the company.
+        # A first run provisions everybody entitled, which on the seeded
+        # directory is most of the company.
         print(f"  a first run provisions the whole entitled directory: {first['created']} people")
 
     hired = one_employee(person["user_name"])
@@ -266,7 +252,7 @@ def main() -> int:
     print(f"still on file at the HRMS, switched off: active={gone['active']}")
     assert gone["active"] is False
     assert gone["id"] == remote_id
-    # The whole reason we send PATCH rather than PUT. A leaver keeps their record.
+    # This is why we send PATCH rather than PUT: a leaver keeps their record.
     assert gone["displayName"] == hired["displayName"], "deactivating blanked their name"
 
     step("8. they come back — the rehire")

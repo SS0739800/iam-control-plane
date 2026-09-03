@@ -1,10 +1,10 @@
 """Shapes for the systems we push accounts into.
 
-The token appears in no response here, ever. It is stored encrypted rather than
-hashed, so unlike the inbound tokens we genuinely could decrypt and return it — and
-that is exactly why there is no field for it. A value that can be read back is a value
-that leaks through a screenshot, a browser cache, or a log of the response. Changing a
-token means sending a new one.
+The token never appears in any response. It's stored encrypted, not
+hashed, so we technically could decrypt and return it — which is why
+there's no field for it: a value that can be read back can leak through a
+screenshot, a cache, or a logged response. To change a token, send a new
+one.
 """
 
 from __future__ import annotations
@@ -32,16 +32,16 @@ class ProvisioningTargetSummary(BaseModel):
 
     address_concession: str | None = Field(
         description=(
-            "A rule from ADR 0007 that was relaxed to allow this address — a private "
-            "address, or plain HTTP. Shown so it reads as a decision somebody made "
-            "rather than something nobody noticed."
+            "A rule from ADR 0007 relaxed to allow this address — a private "
+            "address, or plain HTTP. Shown so it's visible as a decision, "
+            "not something missed."
         )
     )
 
     last_sync_at: dt.datetime | None
     last_sync_ok: bool | None = Field(
-        description="Null means never attempted. The useful question is the negative "
-        "one: a target that last succeeded three weeks ago is one nobody is watching."
+        description="Null means never attempted. A target that last succeeded "
+        "three weeks ago is one nobody is watching."
     )
     last_error: str | None
 
@@ -54,18 +54,18 @@ class ProvisioningTargetSummary(BaseModel):
     accounts_failed: int = Field(description="Pushes that did not work.")
     accounts_orphaned: int = Field(
         description=(
-            "People we tried to remove and could not. They still have access "
-            "downstream, which is the number on this page that most needs acting on."
+            "People we tried to remove and couldn't — they still have access "
+            "downstream. Usually the number on this page that most needs acting on."
         )
     )
     accounts_deprovisioned: int
 
     accounts_waiting_to_push: int = Field(
         description=(
-            "People a sync would touch right now — changed since the last push, newly "
-            "entitled, or no longer entitled and still switched on downstream. Nothing "
-            "pushes on its own, so this is the difference between what we know and what "
-            "the downstream has been told."
+            "People a sync would touch right now — changed since the last push, "
+            "newly entitled, or no longer entitled but still active downstream. "
+            "Nothing pushes on its own, so this is the gap between what we know "
+            "and what the downstream has been told."
         )
     )
 
@@ -73,10 +73,9 @@ class ProvisioningTargetSummary(BaseModel):
 class ProvisioningTargetCreate(BaseModel):
     """Register a downstream system."""
 
-    # Extras are refused rather than ignored, which matters more here than it looks.
-    # push_groups used to live on this model and did nothing; a client still sending it
-    # would otherwise get a 200 and reasonably believe groups were flowing. A 422
-    # naming the field it does not know is the honest answer.
+    # Extras are refused, not ignored — push_groups used to live on this model
+    # and did nothing. A client still sending it would otherwise get a 200 and
+    # wrongly believe groups were flowing; a 422 naming the field is clearer.
     model_config = ConfigDict(extra="forbid")
 
     application_id: uuid.UUID = Field(

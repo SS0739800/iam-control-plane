@@ -1,13 +1,8 @@
 """The audit log.
 
-Two things make this table different from the rest.
-
-You can only add to it. The migration sets up a database rule that rejects UPDATE
-and DELETE outright, so nothing can quietly edit history, not even our own code
-by mistake.
-
-Every row carries a fingerprint of the row before it, so if someone does get in
-and change an old entry, the check in iam.audit.chain spots it and says which one.
+Append-only: a database rule rejects UPDATE and DELETE on this table.
+Each row also hashes the previous row, so iam.audit.chain can detect and
+locate tampering if a row is ever changed outside the app.
 """
 
 from __future__ import annotations
@@ -39,8 +34,7 @@ HASH_LENGTH = 64
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
-    # A counting number, not a UUID. "The row before this one" has to mean
-    # something exact, and random UUIDs have no order to them.
+    # Sequential integer, not a UUID, so "the previous row" has a clear order.
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     occurred_at: Mapped[dt.datetime] = mapped_column(
@@ -55,16 +49,14 @@ class AuditEvent(Base):
         nullable=False,
     )
 
-    # Not a foreign key, on purpose. If it were, deleting a user would either be
-    # blocked or would take their history with them. The log has to outlast the
-    # people in it.
+    # Not a foreign key: audit rows must survive the user being deleted.
     actor_id: Mapped[uuid.UUID | None] = mapped_column()
 
     actor_label: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        comment="The person's name, copied in when the entry is written, so the "
-        "entry still makes sense after their account is gone.",
+        comment="The actor's name, copied in at write time so it survives "
+        "account deletion.",
     )
 
     # ----------------------------------------------------------------- action
@@ -72,7 +64,7 @@ class AuditEvent(Base):
         String(100),
         nullable=False,
         comment="Dotted verb, e.g. 'user.created', 'group.member_added', "
-        "'saml.login'. Stable strings — dashboards group on them.",
+        "'saml.login'. Keep these stable, dashboards group on them.",
     )
     outcome: Mapped[AuditOutcome] = mapped_column(
         enum_type(AuditOutcome),
@@ -91,8 +83,7 @@ class AuditEvent(Base):
     user_agent: Mapped[str | None] = mapped_column(String(500))
 
     correlation_id: Mapped[uuid.UUID | None] = mapped_column(
-        comment="Ties every event produced by one request or one sync run "
-        "together. P6 relies on this to show a whole provisioning cascade.",
+        comment="Ties together every event from one request or one sync run.",
     )
 
     detail: Mapped[dict[str, Any]] = mapped_column(
@@ -100,8 +91,8 @@ class AuditEvent(Base):
         nullable=False,
         default=dict,
         server_default="{}",
-        comment="Event-specific payload. In P2 this holds the decoded SAML "
-        "assertion and its per-check validation results.",
+        comment="Event-specific payload, e.g. a decoded SAML assertion and "
+        "its validation results.",
     )
 
     # ------------------------------------------------------------- hash chain
@@ -114,8 +105,7 @@ class AuditEvent(Base):
     )
 
     __table_args__ = (
-        # The log is always shown newest first and paged by id, which the primary
-        # key index already handles. These are for the filter dropdowns.
+        # Paging by id uses the primary key index. These support filtering.
         Index("ix_audit_events_occurred_at", occurred_at.desc()),
         Index("ix_audit_events_action", "action"),
         Index("ix_audit_events_actor_id", "actor_id"),

@@ -1,32 +1,16 @@
-"""Asking for access, and deciding.
+"""Asking for access, and deciding on it.
 
-The rules engine covers access that follows from who somebody is. This covers the
-rest: the person who needs the finance system for one quarter and has no attribute
-that says so.
+Covers access that doesn't follow from the rules engine — a one-off need with
+no attribute behind it.
 
-Approving is the interesting part, and what makes it worth having is what it
-refuses.
-
-**Nobody approves their own request.** Checked here and constrained in the
-database. An approval step you can perform on yourself is a form somebody fills in
-twice, and every other control in this system assumes it means something.
-
-**A decision is final.** Approved, denied and withdrawn all stay that way. Asking
-again is a new request, which is honest about there having been two, rather than a
-reopened one that makes "who approved this" ambiguous.
-
-**Approving grants the access.** The point of failure in a workflow like this is
-an approval that records a decision and doesn't act on it, leaving somebody
-waiting for access they were told they had. So the membership is written in the
-same transaction as the decision.
-
-Temporary access
-----------------
-
-A request can carry an expiry, and it lands on the membership rather than being
-forgotten. "Approved until the end of the quarter" is the common real answer to an
-access request, and a system that can only grant forever turns every temporary
-need into permanent access.
+Rules:
+- Nobody can approve their own request (checked here and in the database).
+- A decision is final. Approved, denied, and withdrawn all stay that way;
+  asking again means raising a new request.
+- Approving writes the group membership in the same transaction as the
+  decision, so a request is never left "approved" without the access applied.
+- A request can carry an expiry, which lands on the membership itself, so
+  temporary access actually expires.
 """
 
 from __future__ import annotations
@@ -61,16 +45,12 @@ class Decider:
 
 
 async def approvers(db: AsyncSession) -> list[User]:
-    """Everybody who could decide a request.
+    """Everyone who could decide a request: anyone who can change group
+    membership by hand. Deactivated people are excluded since they can't
+    sign in to answer it.
 
-    Anyone who can change group membership by hand, since approving is exactly
-    that with a paper trail. Deactivated people are excluded: they can't sign in,
-    so listing them as approvers would mean emailing a request to somebody who
-    cannot answer it.
-
-    Per-group owners would be better than "every admin", and are the obvious next
-    step — the group table has no owner column yet, and inventing one here would be
-    a bigger change than this module.
+    This is "every admin", not per-group owners — the group table has no
+    owner column yet.
     """
     candidates = (await db.scalars(select(User).where(User.active))).all()
     return [
@@ -112,9 +92,7 @@ async def raise_request(
         raise RequestRefused("A deactivated account can't request access.")
 
     if not reason.strip():
-        # Required, and not just for tidiness. An approver with no reason in front
-        # of them is rubber-stamping, which is the failure this whole flow is meant
-        # to avoid.
+        # Required — without a reason, an approver has nothing to weigh.
         raise RequestRefused("Say why the access is needed. An approver needs something to weigh.")
 
     already_in = await db.scalar(
@@ -170,7 +148,6 @@ def _guard_decision(request: AccessRequest, decider: Decider) -> None:
         )
 
     if request.requester_id == decider.user_id:
-        # The rule that makes the approval step mean anything.
         raise RequestRefused(
             "You can't decide your own access request. Somebody else has to look at it."
         )
@@ -185,11 +162,8 @@ async def approve(
     note: str | None = None,
     expires_at: dt.datetime | None = None,
 ) -> GroupMember:
-    """Approve a request and put them in the group.
-
-    Both, in one transaction. An approval that records a decision without granting
-    the access leaves somebody waiting for something they were told they had, which
-    is the worst outcome available here.
+    """Approve a request and add them to the group, in one transaction, so a
+    decision is never recorded without the access being applied.
 
     Raises:
         RequestRefused: Already decided, self-approval, an expiry in the past, or
@@ -202,8 +176,8 @@ async def approve(
 
     requester = await db.get(User, request.requester_id)
     if requester is None or not requester.active:
-        # Approving access for somebody who has left is how a leaver quietly keeps
-        # a foothold. Refused rather than granted-then-revoked.
+        # Block approval instead of granting then immediately revoking if the
+        # requester was deactivated after asking.
         raise RequestRefused(
             "The person who asked has been deactivated, so this can't be approved. "
             "Cancel it instead."
@@ -219,9 +193,8 @@ async def approve(
     membership = GroupMember(
         group_id=request.group_id,
         user_id=request.requester_id,
-        # Not MANUAL. A review asking "why is this person in here" should get
-        # "somebody approved a request", which is a different answer from "somebody
-        # added them", and the request id is findable from the audit entry.
+        # REQUEST, not MANUAL, so a review can tell this came from an
+        # approved request rather than a direct add.
         source=MembershipSource.REQUEST,
     )
     db.add(membership)
@@ -248,14 +221,11 @@ async def deny(
     now: dt.datetime,
     note: str | None = None,
 ) -> AccessRequest:
-    """Turn a request down.
-
-    Kept, not deleted. "We asked twice and were refused twice" is a fact somebody
-    eventually needs, and it only exists if denied requests survive.
+    """Turn a request down. Kept, not deleted, so the history of past
+    refusals is still there later.
 
     Raises:
-        RequestRefused: Already decided, or self-denial — which is odd but still
-            somebody deciding their own request, and the rule holds either way.
+        RequestRefused: Already decided, or self-denial (same rule as approval).
     """
     _guard_decision(request, decider)
 
@@ -281,11 +251,9 @@ async def deny(
 async def withdraw(
     db: AsyncSession, request: AccessRequest, *, by: Decider, now: dt.datetime
 ) -> AccessRequest:
-    """The requester changing their mind.
-
-    Its own state rather than a denial, because who closed it matters: "they
-    withdrew it" and "we turned them down" are different answers to the same
-    question.
+    """The requester changing their mind. Its own state, separate from a
+    denial, since "they withdrew it" and "we turned them down" are different
+    answers.
 
     Raises:
         RequestRefused: Already decided, or somebody else trying to withdraw it.
@@ -297,10 +265,9 @@ async def withdraw(
         raise RequestRefused("Only the person who asked can withdraw a request. Deny it instead.")
 
     request.state = RequestState.WITHDRAWN
-    # The requester is the author here, and that is recorded rather than left
-    # blank. The database's approver_is_not_the_requester check is scoped to
-    # approved and denied for exactly this reason: the rule is about who may
-    # decide, not who may close their own request.
+    # Recording the requester as decider is fine here — the DB's
+    # approver_is_not_the_requester check only applies to approved/denied,
+    # since that rule is about who may decide, not who may withdraw.
     request.decided_by_id = by.user_id
     request.decided_by_label = by.label
     request.decided_at = now
@@ -313,10 +280,9 @@ async def withdraw(
 async def cancel(
     db: AsyncSession, request: AccessRequest, *, now: dt.datetime, reason: str
 ) -> AccessRequest:
-    """Close a request that events have overtaken — usually the requester leaving.
-
-    Not a denial. Nobody weighed it and decided no; it simply stopped being a
-    question, and recording that as a refusal would misrepresent what happened.
+    """Close a request that events overtook — usually the requester leaving.
+    Not a denial: nobody weighed it and said no, it just stopped being
+    relevant.
     """
     if not request.is_open:
         raise RequestRefused(f"That request is already {request.state}.")
@@ -331,11 +297,9 @@ async def cancel(
 
 
 async def cancel_open_for_leaver(db: AsyncSession, user_id: uuid.UUID, *, now: dt.datetime) -> int:
-    """Close anything this person had outstanding, because they left.
-
-    Otherwise their requests sit in the approvers' queue forever, and the obvious
-    failure is somebody approving one of them months later without noticing the
-    requester is gone.
+    """Close anything this person had outstanding, because they left —
+    otherwise it sits in the approvers' queue and could get approved after
+    they're gone.
     """
     open_requests = (
         await db.scalars(

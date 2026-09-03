@@ -7,29 +7,19 @@ application, then drives one login all the way round:
 
     /saml/login  ->  /idp/sso  ->  signed assertion  ->  /saml/acs  ->  a session
 
-Why this is worth having
-------------------------
+The strongest end-to-end check available without a public hostname, since the
+two halves were built independently against the spec: the SAML reader
+validates assertions, the IdP side builds and signs them, and neither was
+written with the other in mind.
 
-It is the strongest end-to-end check available without a public hostname, because
-the two halves were written four phases apart against the specification rather than
-against each other. P2 reads and validates assertions; P5 builds and signs them.
-Neither was written with the other in mind.
+Exercises, in one pass: building an AuthnRequest, reading one, looking the
+application up by entity id, checking access, building and signing the
+assertion, verifying that signature, all the checks in checks.py, replay
+protection, and issuing a session cookie.
 
-So this exercises, in one pass and for real: building an AuthnRequest, reading one,
-looking the application up by entity id, checking the person has access to it,
-building the assertion, signing it with xmlsec, verifying that signature, all ten
-checks in checks.py, replay protection, and issuing a session cookie. A failure
-anywhere in that chain shows up here as a refusal with a reason.
-
-It also demonstrates something a single-sided test cannot: that what we publish is
-acceptable to a real service provider, because ours is one.
-
-What it is not
---------------
-
-Not a substitute for smoke_login.py. That one proves a *third party* accepts what we
-ask for and that we accept what it sends — a loop can agree with itself about
-something both halves get wrong. Run both.
+Not a substitute for smoke_login.py — that proves a *third party* accepts what
+we send and that we accept what it sends back, which this loop can't (it could
+agree with itself about something both halves get wrong). Run both.
 
 Needs the stack up. Does not need authentik.
 """
@@ -68,9 +58,8 @@ def fail(message: str) -> int:
 def register_ourselves_as_a_provider(client: httpx.Client) -> None:
     """Trust our own signing certificate, the way any provider is trusted.
 
-    Nothing special happens here. It is the ordinary registration path, reading the
-    ordinary metadata document — which is the point: if our published metadata were
-    not real metadata, this step would refuse it.
+    The ordinary registration path reading the ordinary metadata document — if
+    our published metadata weren't real metadata, this step would refuse it.
     """
     metadata = client.get(f"{CONSOLE}/idp/metadata")
     metadata.raise_for_status()
@@ -113,8 +102,7 @@ def register_ourselves_as_an_application(client: httpx.Client) -> str:
 def grant_access(client: httpx.Client, app_id: str) -> None:
     """Give the admin access to it.
 
-    Without this the login is refused, and that refusal is itself worth seeing: it
-    is P4's entitlements deciding a P5 question.
+    Without this the login is refused — entitlements deciding an SSO question.
     """
     users = client.get(f"{CONSOLE}/api/users", params={"q": ACTOR}, headers={"X-Dev-Actor": ACTOR})
     users.raise_for_status()
@@ -152,8 +140,9 @@ def start_the_login(client: httpx.Client) -> str:
 def collect_the_assertion(client: httpx.Client, sso_url: str) -> tuple[str, str | None]:
     """Follow the redirect to our own IdP and take the assertion out of the form.
 
-    The IdP answers with an auto-submitting form, because SAML's POST binding has no
-    other shape. A browser would submit it; this reads the fields out instead.
+    The IdP answers with an auto-submitting form, since that's the only shape
+    SAML's POST binding has. A browser would submit it; this reads the fields
+    out instead.
     """
     response = client.get(sso_url, headers={"X-Dev-Actor": ACTOR}, follow_redirects=False)
     if response.status_code != 200:
@@ -176,10 +165,7 @@ def collect_the_assertion(client: httpx.Client, sso_url: str) -> tuple[str, str 
 def deliver_the_assertion(
     client: httpx.Client, saml_response: str, relay_state: str | None
 ) -> httpx.Response:
-    """Post it to our own assertion consumer, as the browser would.
-
-    Everything after this point is P2 code that has never seen a P5 document.
-    """
+    """Post it to our own assertion consumer, as the browser would."""
     form = {"SAMLResponse": saml_response}
     if relay_state:
         form["RelayState"] = relay_state

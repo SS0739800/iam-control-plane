@@ -1,9 +1,8 @@
 """Who am I.
 
 The first thing the console asks on every load: is anybody signed in, and what
-are they allowed to do. Deliberately its own tiny surface rather than a field
-bolted onto the dashboard, because it answers a different question and gets
-called on pages the dashboard has nothing to do with.
+are they allowed to do. Its own endpoint rather than a field on the dashboard,
+since it gets called on pages that have nothing to do with the dashboard.
 """
 
 from __future__ import annotations
@@ -24,9 +23,8 @@ router = APIRouter(tags=["session"])
 async def me(actor: CurrentActor) -> SignedInUser:
     """Report the current person.
 
-    No permission check on this one on purpose: everybody is allowed to know who
-    they are. Being signed in at all is the only requirement, and that's what
-    resolving the actor already established.
+    No permission check: everybody is allowed to know who they are. Being
+    signed in is the only requirement, which resolving the actor already checks.
     """
     return SignedInUser(
         id=actor.user_id,

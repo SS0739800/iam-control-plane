@@ -1,17 +1,17 @@
 """The SCIM resource shapes, as the spec defines them.
 
-Two things about this file look like mistakes and are not.
+Two things about this file look like mistakes and aren't:
 
-**The capital letters.** ``Resources`` and ``Operations`` are capitalised in the
-spec while every other field is camelCase. It is inconsistent and it is
-normative, so we match it. A lowercase ``operations`` is silently ignored by the
-provider, which shows up as a PATCH that returns 200 and changes nothing.
+- `Resources` and `Operations` are capitalized in the spec while every other
+  field is camelCase. Inconsistent, but normative, so we match it. A
+  lowercase `operations` is silently ignored by the provider, showing up as
+  a PATCH that returns 200 and changes nothing.
+- SCIM is camelCase and our columns are snake_case, so every field carries
+  an alias. `populate_by_name` is on so our own code can build these with
+  Python names while the wire keeps the spec's.
 
-**The aliases.** SCIM is camelCase and our columns are snake_case, so every field
-carries an alias. ``populate_by_name`` is on so our own code can build these with
-Python names while the wire keeps the spec's.
-
-Everything here is JSON, so unlike the SAML half it runs and is tested anywhere.
+Everything here is JSON, so unlike the SAML half it runs and is tested
+anywhere.
 """
 
 from __future__ import annotations
@@ -33,9 +33,9 @@ from iam.scim.constants import (
 class ScimModel(BaseModel):
     """Base for everything on the wire.
 
-    ``populate_by_name`` lets our code use Python names; the alias is what gets
-    serialised. ``extra="allow"`` on inbound resources is deliberate and
-    explained on ScimUser.
+    `populate_by_name` lets our code use Python names; the alias is what
+    gets serialized. See ScimUser for why `extra="allow"` is on inbound
+    resources.
     """
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
@@ -51,8 +51,8 @@ class Meta(ScimModel):
     version: str | None = Field(
         default=None,
         description=(
-            "An ETag. Providers use it for conditional updates; we send it so a "
-            "client that cares can, and we do not require it back."
+            "An ETag. Providers use it for conditional updates; we send it "
+            "so a client that cares can, but don't require it back."
         ),
     )
 
@@ -76,8 +76,8 @@ class Email(ScimModel):
 class MemberRef(ScimModel):
     """A pointer from one resource to another.
 
-    ``$ref`` is a URL to the thing pointed at. Providers largely ignore it and
-    the spec asks for it, so it goes in.
+    `$ref` is a URL to the thing pointed at. Providers largely ignore it, but
+    the spec asks for it, so it's here.
     """
 
     value: str = Field(description="The id of the referenced resource.")
@@ -89,8 +89,8 @@ class MemberRef(ScimModel):
 class EnterpriseUser(ScimModel):
     """The bits an HRMS cares about, which the base User schema leaves out.
 
-    Deliberately an extension rather than core: a provider has to name the URN to
-    send these, so receiving them is always something the other side chose.
+    An extension rather than core: a provider has to name the URN to send
+    these, so receiving them is always something the other side chose.
     """
 
     employee_number: str | None = Field(default=None, alias="employeeNumber")
@@ -101,11 +101,11 @@ class EnterpriseUser(ScimModel):
 class ScimUser(ScimModel):
     """A person, in SCIM's shape.
 
-    ``extra="allow"`` is inherited on purpose. Providers send attributes we don't
-    model — ``locale``, ``timezone``, ``phoneNumbers``, whole extension URNs —
-    and the spec says to ignore what you don't understand rather than reject it.
-    Rejecting means a provider whose default profile includes one extra field
-    cannot create anybody here at all.
+    Inherits `extra="allow"` since providers send attributes we don't model
+    (`locale`, `timezone`, `phoneNumbers`, whole extension URNs), and the
+    spec says to ignore what you don't understand rather than reject it.
+    Rejecting would mean a provider whose default profile includes one
+    extra field can't create anybody here at all.
     """
 
     schemas: list[str] = Field(default_factory=lambda: [USER_SCHEMA])
@@ -122,8 +122,8 @@ class ScimUser(ScimModel):
     groups: list[MemberRef] = Field(
         default_factory=list,
         description=(
-            "Read-only. Group membership is changed by PATCHing the group, not "
-            "the person — see the note on ScimGroup.members."
+            "Read-only. Group membership is changed by PATCHing the group, "
+            "not the person - see the note on ScimGroup.members."
         ),
     )
 
@@ -135,9 +135,9 @@ class ScimUser(ScimModel):
     def primary_email(self) -> str | None:
         """The address to use, preferring the one marked primary.
 
-        A provider that sends several and marks none primary still has to resolve
-        to something, so the first is taken rather than nothing — an account with
-        no email is worse than an account with the wrong one of two.
+        If a provider sends several and marks none primary, the first is
+        taken rather than nothing - an account with no email is worse than
+        one with the wrong address of two.
         """
         for email in self.emails:
             if email.primary and email.value:
@@ -157,9 +157,9 @@ class ScimGroup(ScimModel):
     members: list[MemberRef] = Field(
         default_factory=list,
         description=(
-            "Who is in the group. This is the writable side of membership: a "
-            "provider adds somebody by PATCHing the group here, and User.groups "
-            "is the read-only reflection of it."
+            "Who is in the group. This is the writable side of membership: "
+            "a provider adds somebody by PATCHing the group here, and "
+            "User.groups is the read-only reflection of it."
         ),
     )
 
@@ -169,8 +169,8 @@ class ScimGroup(ScimModel):
 class ListResponse(ScimModel):
     """The envelope around any list of resources.
 
-    Paging is 1-based: the first item is startIndex 1, not 0. Sending 0 makes a
-    provider request the same page forever, so the off-by-one here is load-bearing.
+    Paging is 1-based: the first item is startIndex 1, not 0. Sending 0
+    would make a provider request the same page forever.
     """
 
     schemas: list[str] = Field(default_factory=lambda: [LIST_RESPONSE_SCHEMA])
@@ -186,9 +186,9 @@ PATCH_OPS = ("add", "remove", "replace")
 class PatchOperation(ScimModel):
     """One change inside a PATCH.
 
-    ``value`` is deliberately untyped. It is a scalar for ``replace active``, an
-    object for ``replace`` on a complex attribute, and a list for ``add members``,
-    and pinning it to one of those breaks the other two.
+    `value` is untyped: it's a scalar for `replace active`, an object for
+    `replace` on a complex attribute, and a list for `add members` -
+    pinning it to one type breaks the other two.
     """
 
     op: str
@@ -200,11 +200,10 @@ class PatchOperation(ScimModel):
     def _normalise_op(cls, value: str) -> str:
         """Lowercase it, and refuse anything that isn't a real operation.
 
-        The spec says these are case-insensitive and providers genuinely differ:
-        Entra sends ``Add``, most others send ``add``, and nothing stops one
-        sending ``REPLACE``. Spelling the accepted casings out as a fixed list
-        works against whichever provider you tested with and rejects the next
-        one, so this normalises instead of enumerating.
+        The spec says these are case-insensitive and providers genuinely
+        differ: Entra sends `Add`, most others send `add`. Normalizing
+        instead of listing fixed casings avoids rejecting whichever
+        provider you didn't test with.
         """
         lowered = value.strip().lower()
         if lowered not in PATCH_OPS:
@@ -220,9 +219,8 @@ class PatchOperation(ScimModel):
 class PatchRequest(ScimModel):
     """A set of changes to apply to one resource.
 
-    This is how deprovisioning arrives. When somebody leaves, the provider does
-    not delete them — it sends ``replace active false``, and that one operation
-    is the most important thing this server handles.
+    This is how deprovisioning arrives: when somebody leaves, the provider
+    sends `replace active false` instead of deleting them.
     """
 
     schemas: list[str] = Field(default_factory=lambda: [PATCH_OP_SCHEMA])

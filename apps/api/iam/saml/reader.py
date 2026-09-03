@@ -1,19 +1,19 @@
 """Reads the messages a provider sends us, and checks their signatures.
 
-This is the only file that touches XML or cryptography, which is why it's the only
-one that needs xmlsec, and so the only one that can't run on Windows. Everything
-that decides whether to accept a login lives in checks.py and stays testable
-anywhere. See docs/adr/0005-validate-assertions-ourselves.md.
+This is the only file that touches XML or cryptography, which is why it's the
+only one that needs xmlsec and the only one that can't run on Windows.
+Everything that decides whether to accept a login lives in checks.py and stays
+testable anywhere. See docs/adr/0005-validate-assertions-ourselves.md.
 
-Two things here are security-relevant rather than just plumbing:
+Two things here are security-relevant, not just plumbing:
 
-The parser is locked down. Untrusted XML with entity expansion turned on lets
-someone read files off the server or hang the process, and the defaults in most XML
-libraries allow it. See SAFE_PARSER.
+The parser is locked down. Untrusted XML with entity expansion enabled lets
+someone read files off the server or hang the process, and most XML library
+defaults allow it. See SAFE_PARSER.
 
-The signature is checked against the assertion element specifically, not just
-whatever signature happens to be in the document. A response can carry more than
-one, and verifying the wrong one is how signature-wrapping attacks work.
+The signature is checked against the assertion element specifically, not
+whatever signature happens to be in the document. A response can carry more
+than one, and verifying the wrong one is how signature-wrapping attacks work.
 """
 
 from __future__ import annotations
@@ -78,15 +78,14 @@ MAX_RESPONSE_BYTES = 512 * 1024
 """Refuse anything absurdly large before parsing it. A real login response is a
 few kilobytes; anything approaching this is either broken or deliberate."""
 
-# These point at the ds:Signature element, not at the element it signs, and that
-# distinction is the whole reason they're named constants with a comment.
+# These point at the ds:Signature element itself, not the element it signs.
 #
-# validate_sign() takes an xpath and treats whatever it selects as the signature
-# node. Handing it "/samlp:Response/saml:Assertion" — the thing being signed,
-# which is what you would write if you were describing intent — makes it try to
-# read an Assertion element as a signature. That fails, and it fails as
-# "signature missing or does not match", which points at the certificate and not
-# at the xpath. Cost an afternoon against a real authentik.
+# validate_sign() takes an xpath and treats whatever it selects as the
+# signature node. Pointing it at "/samlp:Response/saml:Assertion" (the thing
+# being signed, which looks like the natural thing to write) makes it try to
+# read an Assertion element as a signature. That fails as "signature missing
+# or does not match", which points at the certificate, not the xpath. Cost an
+# afternoon debugging against a real authentik.
 ASSERTION_SIGNATURE_XPATH = "/samlp:Response/saml:Assertion/ds:Signature"
 RESPONSE_SIGNATURE_XPATH = "/samlp:Response/ds:Signature"
 
@@ -128,8 +127,8 @@ def _text(element: etree._Element | None) -> str | None:
 def _parse_instant(value: str | None) -> dt.datetime | None:
     """Read a SAML timestamp.
 
-    These are always UTC in practice. Anything without a timezone is treated as
-    UTC rather than as local time, because guessing local time here would make the
+    These are always UTC in practice. Anything without a timezone is treated
+    as UTC rather than local time, since guessing local time would make the
     timing checks wrong in a way that only shows up in some deployments.
     """
     if not value:
@@ -153,8 +152,8 @@ def _first(root: etree._Element, path: str) -> etree._Element | None:
 def _signature_over(element: etree._Element) -> bool:
     """Whether this element carries a signature of its own, not a child's.
 
-    The './' matters. Without it this would also find a signature nested deeper and
-    report the wrong thing.
+    The './' matters: without it this would also match a signature nested
+    deeper and report the wrong thing.
     """
     return len(element.findall("./ds:Signature", NS)) > 0
 
@@ -162,17 +161,17 @@ def _signature_over(element: etree._Element) -> bool:
 def _verify(xml: bytes, cert: str, xpath: str) -> bool:
     """Check one signature against the provider's certificate.
 
-    The xpath matters. A response can contain several signed pieces, and verifying
-    "a signature" rather than "the signature over the thing I'm about to read" is
-    the gap signature-wrapping attacks go through. The caller says which signature
-    it means, and it has to be a path to a ds:Signature element — see
-    ASSERTION_SIGNATURE_XPATH.
+    The xpath matters. A response can contain several signed pieces, and
+    verifying "a signature" instead of "the signature over the thing I'm
+    about to read" is the gap signature-wrapping attacks go through. The
+    caller says which signature it means; it has to be a path to a
+    ds:Signature element — see ASSERTION_SIGNATURE_XPATH.
 
-    Leaving the xpath off would let the library pick, and it prefers the signature
-    over the whole response. That is the one we specifically do not want to rely
-    on, so it is always passed.
+    Leaving the xpath off lets the library pick, and it defaults to the
+    signature over the whole response, which is exactly the one we don't want
+    to rely on. So it's always passed explicitly.
 
-    python3-saml does the actual work here, wrapping xmlsec and OpenSSL. Do not
+    python3-saml does the actual work here, wrapping xmlsec and OpenSSL. Don't
     replace this with anything hand-written.
     """
     try:
@@ -186,9 +185,9 @@ def _verify(xml: bytes, cert: str, xpath: str) -> bool:
             )
         )
     except Exception:
-        # A bad signature throws in a variety of ways depending on how it's broken.
-        # All of them mean the same thing here, and none of them should take the
-        # request down.
+        # A bad signature throws in different ways depending on how it's broken.
+        # All of them mean the same thing here: treat it as unverified, not a
+        # crashed request.
         logger.warning("saml.signature_check_failed", exc_info=True)
         return False
 
@@ -196,8 +195,8 @@ def _verify(xml: bytes, cert: str, xpath: str) -> bool:
 def read_response(raw_response: str, idp_signing_cert: str) -> AssertionFacts:
     """Pull the facts out of a login response and check its signature.
 
-    Reads and verifies. It does not decide anything: whether to accept the login is
-    checks.py's job, working from what this returns.
+    Reads and verifies, but doesn't decide anything: whether to accept the
+    login is checks.py's job, working from what this returns.
 
     Raises:
         MalformedResponse: There was no readable response to check.
@@ -263,9 +262,9 @@ def read_response(raw_response: str, idp_signing_cert: str) -> AssertionFacts:
         ]
         attributes[name] = values
 
-    # Verify the signature over the assertion, because the assertion is what we
-    # read the person's identity out of. If it isn't signed itself, fall back to
-    # the signature over the whole response, and record which it was so
+    # Verify the signature over the assertion, since that's what we read the
+    # person's identity out of. If it isn't signed itself, fall back to the
+    # signature over the whole response, and record which it was so
     # check_assertion_signed can object.
     assertion_was_signed = _signature_over(assertion)
     if assertion_was_signed:
@@ -316,12 +315,13 @@ LOGOUT_RESPONSE_SIGNATURE_XPATH = "/samlp:LogoutResponse/ds:Signature"
 def inflate_and_decode(raw: str) -> bytes:
     """Undo what the redirect binding does to a message on the way here.
 
-    Logout arrives in a query string rather than a form field, so it is deflated as
-    well as base64'd. Raw deflate with no zlib header, matching what we send.
+    Logout arrives in a query string rather than a form field, so it's
+    deflated as well as base64'd. Raw deflate with no zlib header, matching
+    what we send.
 
-    Providers are not consistent: a few send a plain zlib stream, and a few send
-    uncompressed XML. All three are tried rather than rejecting a provider over
-    something this cosmetic.
+    Providers aren't consistent: a few send a plain zlib stream, a few send
+    uncompressed XML. All three are tried rather than rejecting a provider
+    over something this cosmetic.
     """
     if len(raw) > MAX_RESPONSE_BYTES:
         raise MalformedResponse(f"message larger than {MAX_RESPONSE_BYTES} bytes")
@@ -383,17 +383,16 @@ def read_authn_request(
     """Read an application asking us to sign somebody in.
 
     The one message here that arrives from a service provider rather than an
-    identity provider, because P5 is the direction where we are the one being asked.
+    identity provider, since P5 is the direction where we're the one being asked.
 
-    The certificate is optional, and that is a real asymmetry with the rest of this
-    module rather than an oversight. An unsigned AuthnRequest is normal — most
-    applications do not sign them, and none of the three providers this system talks
-    to require it — because the request carries no claims. It only says "somebody at
-    this application would like to sign in", and everything that decides *who* they
-    are comes from our own session, not from the request.
+    The certificate is optional here, unlike the rest of this module. An
+    unsigned AuthnRequest is normal: most applications don't sign them, and
+    the request carries no claims anyway. It only says "somebody at this
+    application would like to sign in"; who they are comes from our own
+    session, not the request.
 
-    What that means is that anybody can send one. So nothing in the returned facts
-    may be trusted as an instruction: the issuer is looked up rather than believed,
+    That also means anybody can send one. So nothing in the returned facts may
+    be trusted as an instruction: the issuer is looked up rather than believed,
     and acs_url is recorded rather than used. See the note on AuthnRequestFacts.
 
     Args:
@@ -471,8 +470,9 @@ def read_logout_response(
 def decoded_xml_for_display(raw_response: str) -> str:
     """Pretty-printed XML for the login inspector.
 
-    Shown so a person can look at what actually arrived. Safe to display: it's the
-    provider's own document, and it's already been through the locked-down parser.
+    Shown so a person can look at what actually arrived. Safe to display: it's
+    the provider's own document and it's already been through the locked-down
+    parser.
     """
     try:
         root = parse(decode_response(raw_response))

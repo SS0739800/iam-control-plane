@@ -5,25 +5,20 @@
 Produces the counts from the original console sketch: 1,284 users, 42 groups,
 17 applications (12 of them federated over SAML), and 45,829 audit events.
 
-What repeats and what doesn't. The random number generator uses a fixed seed, so
-the people, ids, groups and access all come out the same every run. That's what
-keeps a bookmarked user page working after you reseed, and lets a test look up a
-specific person by name.
-
-Audit timestamps are different. They're spread backwards from right now, so a
-fresh demo always shows recent activity instead of events dated from whenever this
-was written. Since the time goes into the fingerprint, that makes the fingerprints
-differ run to run. That's fine, nothing points at an audit entry by id. Pass
---anchor with a fixed time if you need the exact same output twice.
+The random generator uses a fixed seed, so people, ids, groups and access come
+out the same every run — a bookmarked user page keeps working after a reseed.
+Audit timestamps are the exception: they're spread backwards from right now so
+a fresh demo shows recent activity, which means the fingerprints (which include
+the timestamp) differ run to run. Pass --anchor with a fixed time for
+byte-identical output.
 
 Names come from the word lists below rather than Faker, so this script needs
-nothing beyond requirements.txt. P7 runs it on a schedule to reset the public demo,
-and that image doesn't install the dev packages.
+nothing beyond requirements.txt.
 
-The fingerprints are worked out here in Python rather than by calling append_event
-45,829 times, which would mean 45,829 locks and round trips. It uses the same
-functions the app uses, so /api/audit/verify passes on this data exactly as it
-would on real data.
+Fingerprints are computed here in Python with the same functions the app uses,
+rather than calling append_event 45,829 times (which would mean 45,829 locks
+and round trips), so /api/audit/verify passes on this data like it would on
+real data.
 """
 
 from __future__ import annotations
@@ -201,11 +196,9 @@ def _uuid(rng: random.Random) -> uuid.UUID:
 async def reset(session: AsyncSession) -> None:
     """Empty every table.
 
-    The audit log has database rules that reject DELETE and TRUNCATE, so this turns
-    them off for a moment and puts them back. That's allowed here because it's a
-    development script, and it's also the honest illustration of what those rules
-    do and don't protect against: they stop mistakes, not someone who owns the
-    table.
+    The audit log rejects DELETE and TRUNCATE, so this disables those triggers,
+    truncates, and re-enables them. Shows what the append-only rule actually
+    protects against: mistakes, not someone with table-owner access.
     """
     print("resetting: disabling append-only triggers on audit_events")
     await session.execute(text("ALTER TABLE audit_events DISABLE TRIGGER USER"))

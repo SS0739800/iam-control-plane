@@ -4,20 +4,18 @@ Not a test module. The counterpart to saml_harness.py: that one sets up somebody
 else asking us to believe them, this one sets up an application asking us to vouch
 for somebody.
 
-Two stubs, and it is worth being precise about what each replaces.
+``StubAuthnReader`` stands in for reading an application's request, since
+reader.py needs xmlsec (no Windows build), so the endpoint takes it as a
+dependency and a test hands it prepared facts.
 
-``StubAuthnReader`` stands in for reading an application's request, exactly as
-StubReader does on the other side — reader.py needs xmlsec, which has no Windows
-build, so the endpoint takes it as a dependency and a test hands it prepared facts.
+``StubSigner`` stands in for xmlsec signing the finished document. It returns
+the document unchanged with a marker wrapped around it, so a test can tell
+signed from unsigned without verifying anything.
 
-``StubSigner`` stands in for xmlsec putting a signature on the finished document.
-It returns the document unchanged with a marker wrapped round it, so a test can tell
-signed from unsigned without being able to verify anything.
-
-Neither replaces a decision. Registered, signed in, allowed, what the assertion
-says, what gets written to the audit log — all of that is the real code running
-against a real database. What an actual signature looks like is checked in the
-container by test_saml_signer.py, which is the only place it can be.
+Neither replaces a decision — registration, sign-in, permissions, what the
+assertion says, and what gets audited are all real code against a real
+database. An actual signature is checked in the container by
+test_saml_signer.py.
 """
 
 from __future__ import annotations
@@ -37,10 +35,9 @@ from iam.models.user import User
 from iam.saml.checks import AuthnRequestFacts, LogoutRequestFacts
 from tests.support import run_db
 
-# The endpoint hands this straight to the stub reader, which ignores it. Still real
-# base64 of real-looking XML, because it also travels through a login redirect and
-# back in a query string, and a value that is not URL-safe base64 would make that
-# round trip untestable.
+# The endpoint hands this straight to the stub reader, which ignores it. Still
+# real base64 of real-looking XML, since it also travels through a login
+# redirect and back in a query string, so it needs to be URL-safe base64.
 POSTED_AUTHN_REQUEST = base64.b64encode(
     b'<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol">'
     b"<!-- the reader is stubbed; the facts come from the test -->"
@@ -50,10 +47,9 @@ POSTED_AUTHN_REQUEST = base64.b64encode(
 SIGNED_PREFIX = "<!-- signed by the stub signer -->"
 """How a test tells a signed document from an unsigned one.
 
-A marker rather than a real signature, because a real one needs xmlsec. What is
-being checked wherever this appears is that the response went through the signing
-step at all — an unsigned assertion is rejected by every receiver, and returning one
-is the failure this marker makes visible.
+A marker rather than a real signature, since a real one needs xmlsec. Checks
+that the response went through the signing step, since an unsigned assertion
+is rejected by every receiver.
 """
 
 
@@ -83,10 +79,9 @@ class StubAuthnReader:
 class StubSigner:
     """Stands in for xmlsec signing the finished response.
 
-    Returns the document with a marker in front of it. The key and certificate are
-    recorded rather than used — a test cannot check a signature without xmlsec, but
-    it can check that the pair the app loaded at startup is the pair that was
-    reached for, which is the part that would go wrong silently.
+    Returns the document with a marker in front of it. The key and certificate
+    are recorded rather than used, so a test can at least check that the pair
+    the app loaded at startup is the pair that got reached for.
     """
 
     def __init__(self) -> None:
@@ -166,8 +161,8 @@ def new_app_scenario() -> AppScenario:
 def clean_up(scenario: AppScenario) -> None:
     """Remove everything one test made.
 
-    Assignments first, then what they point at. Audit entries are left behind on
-    purpose — the table refuses DELETE, which is the point of it.
+    Assignments first, then what they point at. Audit entries are left behind
+    since the table refuses DELETE.
     """
 
     async def work(session: AsyncSession) -> None:
@@ -310,8 +305,8 @@ class StubLogoutReader:
     """Stands in for reader.py reading an application's logout request.
 
     Same seam as StubAuthnReader. Reads nothing: the test says what the message
-    contained and whether its signature checked out, and every decision the endpoint
-    makes from that is the real code.
+    contained and whether its signature checked out, and every decision the
+    endpoint makes from that is the real code.
     """
 
     def __init__(self) -> None:
@@ -332,9 +327,9 @@ class StubLogoutReader:
 class StubDocumentSigner:
     """Stands in for xmlsec signing a document that has no assertion in it.
 
-    Kept separate from StubSigner because the real functions are separate, and for
-    the same reason — one of them refuses a document with no assertion, and a single
-    stub with a flag would hide that difference from every test.
+    Kept separate from StubSigner because the real functions are separate: one
+    of them refuses a document with no assertion, and a single stub with a
+    flag would hide that difference from every test.
     """
 
     def __init__(self) -> None:

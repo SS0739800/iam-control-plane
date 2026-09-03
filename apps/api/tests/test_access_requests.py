@@ -1,13 +1,10 @@
 """Tests for access requests and approvals.
 
-The one that matters most is that nobody can decide their own request. An approval
-step you can perform on yourself is a form filled in twice, and every other
-control here assumes it means something. It is checked in the service layer and
-constrained in the database, so both are tested.
+The one that matters most: nobody can decide their own request. That's
+checked in the service layer and constrained in the database, so both are
+tested here.
 
-After that: approving actually grants the access — an approval that records a
-decision without acting on it leaves somebody waiting for something they were told
-they had — and decisions are final.
+After that: approving actually grants the access, and decisions are final.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -196,13 +193,12 @@ def test_you_cannot_deny_your_own_request_either(
 
 
 def test_the_database_refuses_a_self_decision(console: ConsoleUsers, group: uuid.UUID) -> None:
-    """Going around the service layer on purpose.
+    """Bypasses the service layer to check the database's own CHECK
+    constraint — a rule living only in application code is one refactor
+    away from not existing.
 
-    A rule that lives only in application code is one refactor away from not
-    existing, so this one is a CHECK constraint as well.
-
-    Written as a sync test running its own transaction, because run_db calls
-    asyncio.run and so cannot be used from inside an async test.
+    Written as a sync test running its own transaction, since run_db calls
+    asyncio.run and can't be used from inside an async test.
     """
     admin_id = console.id_of(console.admin)
 

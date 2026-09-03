@@ -1,8 +1,7 @@
 """Small shapes used in more than one place.
 
-The Ref ones are so a user's page can list their groups and apps without dragging
-in the whole group or app record each time. They hold what a link needs: an id, a
-name, and whatever gets shown beside it.
+The Ref ones let a user's page list their groups and apps without loading
+the full group or app record: just an id, a name, and a bit of context.
 """
 
 from __future__ import annotations
@@ -50,19 +49,15 @@ class AppRef(BaseModel):
     )
     via_group: str | None = Field(
         default=None,
-        description=(
-            "The group that gives them this access, or null if it was given to "
-            "them directly. Answers 'why does this person have Salesforce?'"
-        ),
+        description="The group that gives them this access, or null if given directly.",
     )
 
 
 class SignedInUser(BaseModel):
     """Who the console is talking to, and what they can do.
 
-    The permissions are sent as a list so the front end can hide buttons nobody
-    can use. It is only ever a nicety: every one of them is checked again on the
-    request, because a hidden button is not a permission check.
+    Permissions are a list so the front end can hide buttons the user can't
+    use. That's just UI convenience; every action is checked again server-side.
     """
 
     id: uuid.UUID
@@ -71,10 +66,8 @@ class SignedInUser(BaseModel):
     role: PlatformRole
     permissions: list[str]
     via_saml_session: bool = Field(
-        description=(
-            "True when this came from a real login. False means the development "
-            "stand-in identified the request, which never happens in production."
-        )
+        description="True for a real login. False means the dev stand-in "
+        "identified the request (never true in production)."
     )
 
 
@@ -86,14 +79,10 @@ class DashboardCounts(BaseModel):
     groups: int
     applications: int
     sso_applications: int = Field(
-        description="How many of the apps use SAML login. Part of `applications`."
+        description="How many applications use SAML login. A subset of `applications`."
     )
     audit_events: int
     live_admins: int = Field(
-        description=(
-            "People who can currently grant anything. Counted from the grants rather "
-            "than the cached role, and only counting active people — a deactivated "
-            "admin cannot sign in, so they are no help. Zero means nobody can "
-            "administer this deployment and the only way back is a shell."
-        )
+        description="Active people who currently hold an admin grant. Zero "
+        "means nobody can administer this deployment except via shell access."
     )

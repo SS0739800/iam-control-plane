@@ -1,8 +1,8 @@
 """The shapes the API sends and accepts.
 
-Separate from iam.models on purpose. Those describe the database; these describe
-what goes over the wire. If they were the same thing, renaming a column would
-break every client, and adding a column would quietly start publishing it.
+Kept separate from iam.models: those describe the database, these describe
+the wire format. Otherwise a column rename would break clients, and a new
+column would get published without anyone deciding to.
 """
 
 from __future__ import annotations

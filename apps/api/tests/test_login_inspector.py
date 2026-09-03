@@ -1,9 +1,7 @@
 """Tests for the login inspector.
 
-The thing being checked is that a failed login leaves behind enough to work out
-why. Not "it was refused" — which check, and what the values were. That is the
-whole argument for doing the checks ourselves rather than calling one library
-function, so it needs a test that would notice if the detail stopped being kept.
+Checks that a failed login leaves behind enough to work out why — not just
+"it was refused," but which check failed and what the values were.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -51,9 +49,8 @@ def attempts(
 ) -> list[dict[str, object]]:
     """Read the inspector as an admin.
 
-    The cookie has to go first. A test that just signed somebody in is holding
-    their session, and a real session beats the development header every time —
-    which is the behaviour we want, and it would otherwise make these requests
+    The cookie has to go first — a real session beats the dev header, so a
+    test that just signed somebody in would otherwise make these requests
     come from a newly created employee with no permissions.
     """
     client.cookies.clear()

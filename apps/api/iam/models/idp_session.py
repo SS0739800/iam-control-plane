@@ -1,25 +1,13 @@
 """Which applications we have signed somebody into.
 
-This table is what makes single logout possible, and its absence is what made it
-impossible before.
+This is what makes single logout possible. Every assertion we issue carries
+a SessionIndex, and when an application asks us to sign someone out, it
+quotes that index back — we need it stored to match the request against.
 
-Every assertion we issue carries a SessionIndex — our name for that login. When an
-application later says "sign this person out", it quotes that index back at us. If
-we never wrote it down, there is nothing to match the request against, and the only
-honest answer to a logout request is a shrug. So the index is stored here, next to
-the browser session it belongs to and the application it was issued for.
-
-One row per application per browser session
--------------------------------------------
-
-Signing in to three applications from one browser makes three rows sharing one
-``saml_session_id``. That shape is deliberate: it is what lets a logout arriving
-from any one of them be traced back to the browser session, and it is what a
-fan-out to the other two would read.
-
-Kept after the session ends, like everything else here. "They were signed in to the
-finance system that afternoon" is a question somebody asks after an incident, and it
-is unanswerable if the row is deleted when they log out.
+One browser session that signs in to three apps makes three rows sharing
+one saml_session_id, so a logout from any one of them can be traced back
+to the others. Rows are kept after the session ends, so "were they signed
+into finance that afternoon" can still be answered later.
 """
 
 from __future__ import annotations
@@ -47,9 +35,8 @@ class IdpSession(UUIDPrimaryKey, Base):
 
     saml_session_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("saml_sessions.id", ondelete="SET NULL"),
-        comment="The browser session this login came from. Goes null rather than "
-        "cascading, because the record of having signed in should outlive the "
-        "session that did it.",
+        comment="The browser session this login came from. Goes null instead "
+        "of cascading, so this record outlives the session.",
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -64,14 +51,14 @@ class IdpSession(UUIDPrimaryKey, Base):
     session_index: Mapped[str] = mapped_column(
         String(128),
         nullable=False,
-        comment="Our name for this login, as it appeared in the assertion. What an "
-        "application quotes back when it asks us to sign the person out.",
+        comment="Our name for this login, from the assertion. An application "
+        "quotes this back when asking us to sign someone out.",
     )
     name_id: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        comment="The subject we told the application about. A logout request may "
-        "name this instead of the session index, so both are searchable.",
+        comment="The subject we told the application about. A logout request "
+        "may name this instead of the session index, so both are searchable.",
     )
 
     issued_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -88,16 +75,15 @@ class IdpSession(UUIDPrimaryKey, Base):
         return self.ended_at is None
 
     __table_args__ = (
-        # The index we issued has to be unique, or a logout request quoting one
-        # would be ambiguous about which login it meant.
+        # Must be unique, or a logout request quoting it would be ambiguous.
         UniqueConstraint("session_index", name="one_login_per_session_index"),
-        # How a logout request is resolved: by the index it quotes.
+        # Resolves a logout request by the index it quotes.
         Index("ix_idp_sessions_session_index", "session_index"),
-        # The fallback lookup, for a request that names the subject instead.
+        # Fallback lookup, for a request that names the subject instead.
         Index("ix_idp_sessions_name_id", "name_id"),
-        # Everything one browser session opened, which is what a fan-out reads.
+        # Everything one browser session opened, for single-logout fan-out.
         Index("ix_idp_sessions_saml_session", "saml_session_id"),
-        # "Who is signed in to the finance system right now."
+        # "Who is signed in to this application right now."
         Index("ix_idp_sessions_application", "application_id", "ended_at"),
     )
 

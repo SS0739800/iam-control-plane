@@ -58,9 +58,9 @@ class CursorPage(BaseModel, Generic[T]):
 def encode_cursor(row_id: int) -> str:
     """Wrap a row id into a cursor string.
 
-    Scrambled on purpose, so callers treat it as a token instead of pulling the
-    row id out of it. That way we can change what goes in a cursor later without
-    breaking anyone. The padding is stripped because `=` is awkward in a URL.
+    Encoded so callers treat it as an opaque token instead of reading the row id
+    out of it, which leaves room to change what's inside a cursor later without
+    breaking anyone. Padding is stripped since `=` is awkward in a URL.
     """
     raw = base64.urlsafe_b64encode(str(row_id).encode())
     return raw.decode().rstrip("=")

@@ -60,10 +60,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             'python -c "import secrets; print(secrets.token_urlsafe(48))"'
         )
 
-    # Load the signing keypair now rather than on the first login. Outside
-    # production this generates a throwaway pair and warns; in production a missing
-    # or mismatched pair raises, and refusing to boot is much better than starting
-    # and failing every login with a signature error nobody can trace back to here.
+    # Load the signing keypair now rather than on the first login, so a missing or
+    # mismatched pair fails the app at startup instead of every login later. Outside
+    # production a throwaway pair is generated and a warning logged.
     #
     # See iam/saml/keys.py for why the key is not in the database.
     from iam.saml.keys import UnusableKeypair, for_settings
@@ -75,8 +74,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(instance: FastAPI) -> AsyncIterator[None]:
-        # This doesn't actually connect yet, so the app still starts when Postgres
-        # is down. The readiness check reports that instead.
+        # Doesn't connect yet, so the app still starts when Postgres is down.
+        # The readiness check reports that instead.
         engine = build_engine(resolved)
         instance.state.engine = engine
         instance.state.sessionmaker = build_sessionmaker(engine)
@@ -101,8 +100,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
         # All under /api so Caddy needs one rule to cover the whole API, docs
         # included. The oauth2 redirect is spelled out because FastAPI otherwise
-        # puts it at /docs/oauth2-redirect, outside that prefix, where it would
-        # hit the frontend instead.
+        # puts it at /docs/oauth2-redirect, outside that prefix, hitting the
+        # frontend instead.
         docs_url="/api/docs",
         swagger_ui_oauth2_redirect_url="/api/docs/oauth2-redirect",
         redoc_url=None,
@@ -113,9 +112,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = resolved
     app.state.saml_keypair = keypair
 
-    # No CORS middleware here, on purpose. The frontend is served from this same
-    # address, so a cross-origin request means something is misconfigured and it
-    # should fail loudly. See docs/adr/0003-single-origin.md.
+    # No CORS middleware. The frontend is served from this same address, so a
+    # cross-origin request means something is misconfigured and should fail
+    # loudly. See docs/adr/0003-single-origin.md.
     app.include_router(health.router, prefix="/api")
     app.include_router(me.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
@@ -131,45 +130,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(access_review.router, prefix="/api")
     app.include_router(audit.router, prefix="/api")
 
-    # No /api prefix. Providers post to these from the person's browser, so they're
-    # part of the site rather than the JSON API, and Caddy proxies /saml/* on its
-    # own rule.
+    # No /api prefix. Providers post to these from the person's browser, so
+    # they're part of the site rather than the JSON API, and Caddy proxies
+    # /saml/* on its own rule.
     app.include_router(saml.router)
 
-    # The other direction: applications ask us to sign people in. Outside /api for
-    # the same reason as /saml — an application posts here from somebody's browser.
+    # The other direction: applications ask us to sign people in. Also outside
+    # /api since an application posts here from somebody's browser.
     app.include_router(idp.router)
 
-    # SCIM lives outside /api too, and for the same reason: a provider posts here
-    # directly, so it is part of the site rather than the console's own JSON API.
-    # Caddy proxies /scim/* on its own rule.
+    # SCIM lives outside /api too, for the same reason: a provider posts here
+    # directly. Caddy proxies /scim/* on its own rule.
     # Discovery first: a provider reads these before it sends anything.
     app.include_router(scim_discovery.router)
     app.include_router(scim_users.router)
     app.include_router(scim_groups.router)
 
-    # SCIM has its own error document, and a provider reading FastAPI's
-    # {"detail": ...} learns nothing it can act on. Registered here so no handler
-    # builds the envelope itself and the shape cannot drift between endpoints.
+    # SCIM has its own error document; FastAPI's default {"detail": ...} tells a
+    # provider nothing it can act on. Registered here so no handler builds the
+    # envelope itself and the shape can't drift between endpoints.
     app.add_exception_handler(ScimError, scim_error_handler)
 
     # ---------------------------------------------------------- the frontend
-    # Mounted last, so it can claim "/" without shadowing anything. Every router
-    # above carries a prefix, so an API request never reaches this — but mounting
-    # order is the kind of thing that gets rearranged by somebody tidying up, and
-    # the failure would be every API route returning index.html.
+    # Mounted last, so it can claim "/" without shadowing the API routers above
+    # (all of which carry a prefix). If mounting order ever changes, API routes
+    # would start returning index.html instead of their real response.
     #
-    # html=True is what makes deep links work: /users and /groups are React routes
-    # with no file behind them, and without it they 404 and only the home page
-    # loads. See docs/adr/0008-one-server-serves-both-halves-in-production.md.
+    # html=True is what makes deep links work: /users and /groups are React
+    # routes with no file behind them, and without it they'd 404. See
+    # docs/adr/0008-one-server-serves-both-halves-in-production.md.
     if resolved.static_dir:
         bundle = resolve_bundle(resolved.static_dir)
         app.mount("/", SinglePageApp(directory=bundle), name="frontend")
         logger.info("api.serving_frontend", extra={"static_dir": str(bundle)})
 
-    # SAML login works now, but the development stand-in is still behind it for
-    # requests that arrive without a session cookie. Say so on startup rather than
-    # letting an environment run it quietly. See iam/security/actor.py.
+    # The development stand-in still runs for requests with no session cookie.
+    # Logged on startup rather than letting an environment run it quietly. See
+    # iam/security/actor.py.
     if not resolved.is_production and resolved.dev_actor_user_name:
         logger.warning(
             "auth.development_shim_active",

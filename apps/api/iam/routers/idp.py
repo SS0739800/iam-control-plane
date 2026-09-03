@@ -4,37 +4,32 @@
     /idp/sso       where an application sends somebody to be signed in
     /idp/slo       where an application tells us somebody signed out
 
-The direction that makes this system an identity provider rather than a consumer
-of one. Everything in P2 was us checking somebody else's word; here applications
-take ours.
+The direction that makes this system an identity provider rather than a
+consumer of one. Everything in P2 was us checking somebody else's word; here
+applications take ours.
 
-The rule that matters most
---------------------------
+The rule that matters most: the assertion is posted to the registered
+address, never to the one in the request. An AuthnRequest carries an
+``AssertionConsumerServiceURL``, and honouring it is the worst mistake
+available on this endpoint — anybody can send a request naming a real
+application and their own return address, and posting there would hand an
+attacker a genuine signed assertion for whoever happened to be logged in. So
+the request's copy is read, logged when it disagrees, and never used.
 
-**The assertion is posted to the registered address, never to the one in the
-request.** An AuthnRequest carries an ``AssertionConsumerServiceURL``, and honouring
-it is the single worst mistake available on this endpoint. Anybody can send a
-request naming a real application and their own return address; posting there would
-hand an attacker a genuine signed assertion for whoever happened to be logged in.
+Three things have to be true before we sign anything, in order, each a
+different refusal:
 
-So the request's copy is read, logged when it disagrees, and never used.
+1. The application is registered and enabled. Otherwise there's nowhere to
+   send anything, and nothing to sign.
+2. Somebody is signed in. If not, they're sent to log in first and come
+   back — the whole point of single sign-on.
+3. That person has access to that application. This is where P4's
+   entitlements stop being a reporting exercise and start being enforcement:
+   an assertion is only issued to somebody an assignment says may have it.
 
-What has to be true before we sign anything
--------------------------------------------
-
-Three things, in order, and each is a different refusal:
-
-1. The application is registered and enabled. Otherwise we do not know where to
-   send anything, and there is nothing to sign.
-2. Somebody is signed in. If not they are sent to log in first and come back —
-   which is the whole point of single sign-on.
-3. That person has access to that application. This is where P4's entitlements stop
-   being a reporting exercise and start being enforcement: an assertion is only
-   issued to somebody an assignment says may have it.
-
-Refusals after step one come back as SAML, not as an HTTP error page. Somebody
-halfway through signing in to an application should land back at that application
-with a reason, not stranded on our domain.
+Refusals after step one come back as SAML, not an HTTP error page. Somebody
+halfway through signing in to an application should land back at that
+application with a reason, not stranded on our domain.
 """
 
 from __future__ import annotations
@@ -90,11 +85,11 @@ AuthnRequestReader = Callable[..., AuthnRequestFacts]
 def _authn_request_reader() -> AuthnRequestReader:
     """The function that reads an application's login request.
 
-    A dependency rather than an import, for the same two reasons as the SP side:
-    reader.py needs xmlsec, which does not install on Windows, so importing it at
-    module level would stop the app being importable on a laptop — and a test can
-    swap in a reader returning prepared facts, which keeps every decision below
-    covered outside the container.
+    A dependency rather than an import, for the same two reasons as the SP
+    side: reader.py needs xmlsec, which doesn't install on Windows, so
+    importing it at module level would stop the app being importable on a
+    laptop — and a test can swap in a reader returning prepared facts, which
+    keeps every decision below covered outside the container.
     """
     from iam.saml.reader import read_authn_request
 
@@ -110,11 +105,11 @@ AssertionSigner = Callable[..., str]
 def _assertion_signer() -> AssertionSigner:
     """The function that signs a finished response.
 
-    The same seam as the reader above, and needed for the same reason: signer.py
-    imports xmlsec through reader.py, so it cannot be imported on a laptop. Behind a
-    dependency, everything this endpoint decides — registered, signed in, allowed —
-    is covered by tests that run anywhere, and the signing itself is covered in the
-    container by test_saml_signer.py.
+    Same seam as the reader above, and same reason: signer.py imports xmlsec
+    through reader.py, so it can't be imported on a laptop. Behind a
+    dependency, everything this endpoint decides — registered, signed in,
+    allowed — is covered by tests that run anywhere, and the signing itself
+    is covered in the container by test_saml_signer.py.
     """
     from iam.saml.signer import sign_assertion
 
@@ -130,8 +125,8 @@ DocumentSigner = Callable[..., str]
 def _document_signer() -> DocumentSigner:
     """The function that signs a document with no assertion in it.
 
-    Separate from the assertion signer on purpose — see sign_document in signer.py
-    for why the two must not be one function with a flag.
+    Kept separate from the assertion signer — see sign_document in signer.py
+    for why the two shouldn't be one function with a flag.
     """
     from iam.saml.signer import sign_document
 
@@ -167,8 +162,9 @@ IssuerDep = Annotated[Issuer, Depends(_issuer)]
 def _keypair(request: Request) -> Keypair:
     """The signing keypair, loaded once when the app was built.
 
-    On app.state rather than loaded here, so a missing or mismatched pair stops the
-    process starting rather than failing the first login somebody tries.
+    On app.state rather than loaded here, so a missing or mismatched pair
+    stops the process starting rather than failing the first login somebody
+    tries.
     """
     keypair: Keypair = request.app.state.saml_keypair
     return keypair
@@ -186,9 +182,9 @@ KeypairDep = Annotated[Keypair, Depends(_keypair)]
 async def metadata(issuer: IssuerDep, keypair: KeypairDep) -> Response:
     """Hand this to whoever is setting up an application.
 
-    Not behind a login, the same as the SP metadata and for the same reason: it
-    contains nothing secret, and requiring a session to fetch the document you need
-    in order to set up signing in would be an awkward loop.
+    Not behind a login, same as the SP metadata and for the same reason: it
+    contains nothing secret, and requiring a session to fetch the document
+    you need to set up signing in would be a loop.
     """
     return Response(
         content=issuer.metadata_xml(certificate_body=keypair.certificate_body),
@@ -201,10 +197,10 @@ async def current_saml_session(
 ) -> SamlSession | None:
     """The browser session this request came from, if there is one.
 
-    Recorded against every login we issue so a logout can be traced back to the
-    browser. Returns nothing for a request identified by the development stand-in,
-    which has no session cookie behind it — that is a real gap rather than a
-    convenience, and it means such a login can only be matched by subject.
+    Recorded against every login we issue so a logout can be traced back to
+    the browser. Returns nothing for a request identified by the development
+    stand-in, which has no session cookie behind it — that's a real gap, and
+    it means such a login can only be matched by subject.
     """
     token = request.cookies.get(settings.session_cookie_name)
     if not token:
@@ -220,17 +216,17 @@ def _attr(value: str) -> str:
 def _post_back(acs_url: str, saml_response: str, relay_state: str | None) -> HTMLResponse:
     """The auto-submitting form that carries the response to the application.
 
-    SAML's POST binding has no other shape: the browser has to make a cross-site
-    POST, and only a form can. The submit button matters — it is what somebody sees
-    if scripting is off, and without it they are stuck on a blank page with no way
-    to continue.
+    SAML's POST binding has no other shape: the browser has to make a
+    cross-site POST, and only a form can. The submit button matters: it's
+    what somebody sees if scripting is off, and without it they're stuck on
+    a blank page with no way to continue.
     """
 
     encoded = base64.b64encode(saml_response.encode("utf-8")).decode("ascii")
 
-    # Both of the values below land inside a double-quoted HTML attribute, so the
-    # quote needs escaping as well as the usual three. Neither is ours: RelayState
-    # is opaque data the application chose, and the ACS URL was typed into a form by
+    # Both values below land inside a double-quoted HTML attribute, so the
+    # quote needs escaping too. Neither is ours: RelayState is opaque data
+    # the application chose, and the ACS URL was typed into a form by
     # whoever registered it.
     relay = (
         f'    <input type="hidden" name="RelayState" value="{_attr(relay_state)}"/>\n'
@@ -257,9 +253,10 @@ def _post_back(acs_url: str, saml_response: str, relay_state: str | None) -> HTM
 async def _has_access(session: SessionDep, user: User, application: Application) -> bool:
     """Whether this person may sign in to this application.
 
-    Directly, or through a group they are in. This is the moment P4's entitlements
-    stop being a report and become enforcement — everything else in this system
-    records who should have access, and this is the one place that acts on it.
+    Directly, or through a group they're in. This is the moment P4's
+    entitlements stop being a report and become enforcement — everything
+    else in this system records who should have access, this is the one
+    place that acts on it.
     """
     direct = await session.scalar(
         select(AppAssignment.id).where(
@@ -284,12 +281,11 @@ async def _has_access(session: SessionDep, user: User, application: Application)
 async def _attributes_for(session: SessionDep, user: User) -> dict[str, list[str]]:
     """What we tell the application about this person.
 
-    Deliberately small. Every attribute here is one more thing an application starts
-    depending on, and one more thing that has to keep being true — so this is the
-    set an application actually needs to identify somebody and place them, and
-    nothing more.
+    Kept small. Every attribute here is one more thing an application
+    starts depending on, so this is the set an application actually needs
+    to identify somebody and place them, and nothing more.
 
-    Group names are included because that is how an application does its own
+    Group names are included since that's how an application does its own
     authorisation without asking us a second time.
     """
     from iam.models.group import Group
@@ -336,9 +332,10 @@ async def _refuse(
 ) -> HTMLResponse:
     """Say no, in SAML, and write down why.
 
-    Posted back to the application rather than rendered here. Somebody halfway
-    through signing in should end up at the application they were going to, with
-    something it can explain — not on our domain looking at an error.
+    Posted back to the application rather than rendered here. Somebody
+    halfway through signing in should end up at the application they were
+    going to, with something it can explain — not stuck on our domain
+    looking at an error.
     """
     await append_event(
         session,
@@ -390,9 +387,9 @@ async def _issue(
     session_index = new_session_index()
 
     login = LoginToIssue(
-        # The person's own id, not their email. Emails change; this does not, and an
-        # application keying its records on something that changes is how somebody
-        # ends up with two accounts after they get married.
+        # The person's own id, not their email. Emails change and this
+        # doesn't; an application keying its records on something that
+        # changes is how somebody ends up with two accounts.
         name_id=str(user.id),
         audience=application.entity_id or "",
         acs_url=acs_url,
@@ -411,8 +408,8 @@ async def _issue(
         )
     except SigningFailed as exc:
         # Nothing usable to send: an unsigned assertion is rejected by the
-        # application anyway, and sending one would put the confusing error at their
-        # end rather than ours.
+        # application anyway, and sending one would put the confusing error
+        # at their end rather than ours.
         logger.error(
             "idp.signing_failed",
             extra={"application": application.slug, "error": str(exc)},
@@ -431,15 +428,16 @@ async def _issue(
             detail={"error": str(exc)},
         )
 
-    # Written before the audit entry, and this is the row that makes single logout
-    # possible. The SessionIndex above went out in the assertion; an application
-    # asking us to sign the person out quotes it back, and without this there would
-    # be nothing to match it against. See iam/models/idp_session.py.
+    # Written before the audit entry — this is the row that makes single
+    # logout possible. The SessionIndex above went out in the assertion; an
+    # application asking us to sign the person out quotes it back, and
+    # without this row there'd be nothing to match it against. See
+    # iam/models/idp_session.py.
     #
-    # The browser session is recorded when there is one. A login issued through the
-    # development stand-in has no session cookie behind it, so this is nullable
-    # rather than the flow refusing — but a logout for it can only be matched by
-    # subject, not by browser.
+    # The browser session is recorded when there is one. A login issued
+    # through the development stand-in has no session cookie behind it, so
+    # this is nullable rather than refusing the flow — but a logout for it
+    # can only be matched by subject, not by browser.
     signed_in_session = await current_saml_session(session, request, settings)
     session.add(
         IdpSession(
@@ -470,9 +468,9 @@ async def _issue(
                 "acs_url": acs_url,
                 "session_index": session_index,
                 "in_response_to": in_response_to,
-                # Named rather than valued: an audit entry is not the place to
-                # duplicate somebody's personal details, and which attributes were
-                # released is the reviewable fact.
+                # Named rather than valued: an audit entry isn't the place to
+                # duplicate somebody's personal details, and which
+                # attributes were released is the reviewable fact.
                 "attributes_released": sorted(login.attributes),
             },
         ),
@@ -490,9 +488,9 @@ async def _issue(
 async def _application_for(session: SessionDep, entity_id: str) -> Application | None:
     """The registered application with this entity id, if it is switched on.
 
-    Looked up rather than believed. The entity id in an AuthnRequest is a claim
-    about who is asking, and this is the step that turns it into either a row we
-    trust or a refusal.
+    Looked up rather than believed. The entity id in an AuthnRequest is a
+    claim about who is asking; this is the step that turns it into either a
+    row we trust or a refusal.
     """
     found: Application | None = await session.scalar(
         select(Application).where(
@@ -527,10 +525,10 @@ async def sso_redirect(
 ) -> Response:
     """The redirect binding, and the one most applications use.
 
-    Also handles a login we start ourselves: with ``?app=slug`` and no SAMLRequest,
-    somebody clicking an application in the console gets signed straight in. That is
-    what an application calls IdP-initiated, and it is legal — the assertion simply
-    carries no InResponseTo.
+    Also handles a login we start ourselves: with ``?app=slug`` and no
+    SAMLRequest, somebody clicking an application in the console gets
+    signed straight in. That's what an application calls IdP-initiated,
+    and it's legal — the assertion simply carries no InResponseTo.
     """
     return await _sign_in(
         request,
@@ -543,8 +541,8 @@ async def sso_redirect(
         saml_request=saml_request,
         relay_state=relay_state,
         app_slug=app_slug,
-        # A request that arrived by POST and is coming back through here after a
-        # login was never deflated. See _login_url_returning_here.
+        # A request that arrived by POST and is coming back through here
+        # after a login was never deflated. See _login_url_returning_here.
         deflated=binding != "post",
     )
 
@@ -563,7 +561,7 @@ async def sso_post(
 ) -> Response:
     """The POST binding. Same decisions, different envelope.
 
-    Offered because our metadata says we offer it, and an application that reads
+    Offered because our metadata says we offer it; an application that reads
     metadata and then finds only one binding working has been lied to.
     """
     return await _sign_in(
@@ -590,17 +588,18 @@ def _login_url_returning_here(
 ) -> str:
     """Where to send somebody who has to log in first, and how they get back.
 
-    Rebuilt rather than taken from ``request.url``, because of the POST binding. A
-    login is a redirect, a redirect is a GET, and the body of the POST that started
-    this does not survive it — so the request travels back in the query string
-    instead, and ``binding=post`` says the payload is base64 that was never deflated.
-    Without that it would come back as an unreadable request, and an application
-    whose users happen to be signed in already would work while the same application
-    failed for everybody else.
+    Rebuilt rather than taken from ``request.url``, because of the POST
+    binding. A login is a redirect, a redirect is a GET, and the body of the
+    POST that started this doesn't survive it — so the request travels back
+    in the query string instead, and ``binding=post`` says the payload is
+    base64 that was never deflated. Without that it would come back as an
+    unreadable request, working only for users who happened to already be
+    signed in.
 
-    Everything is encoded properly. The old form pasted the query on unencoded, which
-    made the ampersands in it read as parameters of /saml/login rather than as part
-    of where to return to — so a login request with a RelayState came back without one.
+    Everything is encoded properly. The old form pasted the query on
+    unencoded, which made its ampersands read as parameters of /saml/login
+    instead of part of where to return to — so a login request with a
+    RelayState came back without one.
     """
     returning: dict[str, str] = {}
     if saml_request:
@@ -641,9 +640,9 @@ async def _sign_in(
         try:
             facts = read_request(saml_request, None, deflated=deflated)
         except MalformedResponse as exc:
-            # No readable request means no issuer, so no application, so nowhere to
-            # post a SAML failure to. This is the one refusal that has to be an HTTP
-            # error, because there is no address to send anything else to.
+            # No readable request means no issuer, so no application, so
+            # nowhere to post a SAML failure to. This has to be an HTTP
+            # error since there's no other address to send anything to.
             logger.warning("idp.unreadable_request", extra={"error": str(exc)})
             return Response(
                 content=f"That login request could not be read: {exc}",
@@ -661,10 +660,10 @@ async def _sign_in(
         )
 
     if application is None or not application.acs_url or not application.entity_id:
-        # Still an HTTP error, and for the same reason: without a registered
-        # application there is no trusted address to post a failure to. Using the
-        # one from the request here is exactly the mistake this endpoint refuses to
-        # make.
+        # Still an HTTP error, same reason: without a registered application
+        # there's no trusted address to post a failure to. Using the one
+        # from the request here is the exact mistake this endpoint refuses
+        # to make.
         named = facts.issuer if facts else (app_slug or "nothing")
         logger.warning("idp.unknown_application", extra={"requested": named})
         return Response(
@@ -676,8 +675,9 @@ async def _sign_in(
             media_type="text/plain",
         )
 
-    # Read, logged, and not used. See the module docstring: honouring this is how an
-    # attacker gets a genuine signed assertion delivered to a server they chose.
+    # Read, logged, and not used. See the module docstring: honouring this
+    # is how an attacker gets a genuine signed assertion delivered to a
+    # server they chose.
     if facts and facts.acs_url and facts.acs_url != application.acs_url:
         logger.warning(
             "idp.acs_url_ignored",
@@ -690,13 +690,14 @@ async def _sign_in(
 
     in_response_to = facts.request_id if facts else None
 
-    # Are they signed in? Two different answers come back from resolve_actor and they
-    # mean opposite things here, so the exception is read rather than swallowed. 401
-    # is "nobody is signed in", which is the ordinary case at the start of single
-    # sign-on and means send them to log in and come back. 403 is "we know exactly
-    # who this is and their account is switched off", and sending them to log in
-    # would be a loop with no exit — that one is a refusal the application is told
-    # about. Anything else is a fault at our end and is not turned into a login page.
+    # Are they signed in? Two different answers come back from resolve_actor
+    # and they mean opposite things here, so the exception is read rather
+    # than swallowed. 401 is "nobody is signed in", the ordinary case at the
+    # start of single sign-on, meaning send them to log in and come back.
+    # 403 is "we know exactly who this is and their account is switched
+    # off", where sending them to log in would be a loop with no exit —
+    # that's a refusal the application gets told about. Anything else is a
+    # fault at our end and isn't turned into a login page.
     try:
         actor: Actor = await resolve_actor(request, session, settings)
     except HTTPException as exc:
@@ -727,10 +728,9 @@ async def _sign_in(
 
     user = await session.get(User, actor.user_id)
     if user is None or not user.active:
-        # A backstop rather than the main path — resolve_actor refuses a deactivated
-        # account above. It stays because the check that matters least is the one
-        # that catches the case nobody predicted, and issuing an assertion for
-        # somebody who has left is not a mistake worth making twice.
+        # A backstop, not the main path — resolve_actor refuses a
+        # deactivated account above. Kept because issuing an assertion for
+        # somebody who's left isn't a mistake worth making twice.
         return await _refuse(
             session,
             request,
@@ -746,8 +746,8 @@ async def _sign_in(
         )
 
     if not await _has_access(session, user, application):
-        # The point where P4 stops being a report. Somebody signed in, at a real
-        # application, refused because nothing grants them access to it.
+        # The point where P4 stops being a report. Somebody signed in, at a
+        # real application, refused because nothing grants them access.
         return await _refuse(
             session,
             request,
@@ -789,9 +789,9 @@ async def sso_for_app(
 ) -> Response:
     """A tidy link for a login we start ourselves.
 
-    Exists so the console can offer "open this application" without anybody
-    constructing a query string, and so a bookmark to an application is a normal
-    looking URL.
+    Exists so the console can offer "open this application" without
+    anybody constructing a query string, and so a bookmark to an
+    application looks like a normal URL.
     """
     return await _sign_in(
         request,
@@ -825,13 +825,13 @@ async def _resolve_logout_target(
 ) -> IdpSession | None:
     """Find the login an application is asking us to end.
 
-    By session index first, because that one is ours and exact: we issued it, it is
-    unique, and it names one login at one application.
+    By session index first, since that one is ours and exact: we issued it,
+    it's unique, and it names one login at one application.
 
-    By subject second, because a request is allowed to name only the NameID. That is
-    looser, so it is narrowed to logins still open at the application that asked.
-    Without that narrowing a request from one application could close somebody's
-    login at another, which is not its business to ask for.
+    By subject second, since a request is allowed to name only the NameID.
+    That's looser, so it's narrowed to logins still open at the application
+    that asked — without that narrowing, a request from one application
+    could close somebody's login at another, which isn't its business.
     """
     if facts.session_index:
         by_index: IdpSession | None = await session.scalar(
@@ -872,13 +872,12 @@ async def slo_redirect(
 ) -> Response:
     """The redirect binding, which is what our metadata advertises.
 
-    This address was in the metadata before it was in the code, which is worth
-    naming plainly: we published a document promising an endpoint that answered 404.
+    This address was in the metadata before it was in the code: we
+    published a document promising an endpoint that answered 404.
 
-    It could not simply be written, either. The reason is in
-    iam/models/idp_session.py — the SessionIndex we put in every assertion was
-    generated fresh and never stored, so a logout request quoting one had nothing to
-    be matched against.
+    It couldn't just be written either. See iam/models/idp_session.py — the
+    SessionIndex we put in every assertion was generated fresh and never
+    stored, so a logout request quoting one had nothing to match against.
     """
     return await _sign_out(
         request,
@@ -936,18 +935,17 @@ async def _sign_out(
 ) -> Response:
     """End a login an application asked us to end, and confirm it.
 
-    What this does and does not do is worth being exact about.
+    It ends our record of that application's login, and it ends the browser
+    session the login came from, so the person is signed out of this
+    console too — what somebody clicking "log out" at an application means.
 
-    It ends our record of that application's login, and it ends the browser session
-    the login came from — so the person is signed out of this console too, which is
-    what somebody clicking "log out" at an application means.
-
-    It does **not** notify the *other* applications that person is signed into. That
-    is single logout's fan-out, and the table this reads is what makes it possible
-    for the first time: one browser session, several rows, each naming an address to
-    tell. It is not built. So the honest description of this endpoint is
-    "single-application logout, plus ending the console session", and the audit entry
-    says so rather than leaving it implied.
+    It does not notify the other applications that person is signed into.
+    That's single logout's fan-out: the table this reads makes it possible
+    for the first time (one browser session, several rows, each naming an
+    address to tell), but the fan-out itself isn't built yet. So the honest
+    description of this endpoint is "single-application logout, plus
+    ending the console session", and the audit entry says so rather than
+    leaving it implied.
     """
     now = dt.datetime.now(dt.UTC)
 
@@ -960,8 +958,8 @@ async def _sign_out(
     try:
         facts = read_logout(saml_request, None, deflated=deflated)
     except MalformedResponse as exc:
-        # Nothing readable means no issuer, so nowhere to send a LogoutResponse to.
-        # An HTTP error is all that is left.
+        # Nothing readable means no issuer, so nowhere to send a
+        # LogoutResponse. An HTTP error is all that's left.
         logger.warning("idp.unreadable_logout_request", extra={"error": str(exc)})
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -989,8 +987,8 @@ async def _sign_out(
         await _end_idp_session(session, target, reason="application_signed_out", now=now)
 
         # And the browser session behind it. Somebody clicking log out at an
-        # application means to be signed out — leaving them signed in here would let
-        # one click take them straight back in with no password.
+        # application means to be signed out — leaving them signed in here
+        # would let one click take them straight back in with no password.
         if target.saml_session_id is not None:
             ended = await revoke_all_for_user(
                 session,
@@ -1021,9 +1019,9 @@ async def _sign_out(
                 "name_id": facts.name_id,
                 "matched": target is not None,
                 "console_session_ended": console_session_ended,
-                # Recorded so the gap is visible in the log and not only in a
-                # docstring. Anybody auditing a logout should be able to see that
-                # the other applications were not told.
+                # Recorded so the gap is visible in the log, not only in a
+                # docstring. Anybody auditing a logout should see that the
+                # other applications weren't told.
                 "other_applications_notified": False,
             },
         ),
@@ -1044,8 +1042,8 @@ async def _sign_out(
         destination=application.slo_url,
         in_response_to=facts.request_id,
         issued_at=now,
-        # Success even when nothing matched. The application asked for the person to
-        # be signed out and they are — see build_logout_response.
+        # Success even when nothing matched. The application asked for the
+        # person to be signed out and they are — see build_logout_response.
         success=True,
     )
 
@@ -1068,8 +1066,8 @@ async def _sign_out(
 def _redirect_back(slo_url: str, logout_response: str, relay_state: str | None) -> RedirectResponse:
     """Send the confirmation back over the redirect binding.
 
-    Deflated and base64 in a query string, which is what the binding asks for and
-    what our metadata says we use.
+    Deflated and base64 in a query string, per the binding and what our
+    metadata says we use.
     """
     deflater = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
     packed = deflater.compress(logout_response.encode("utf-8")) + deflater.flush()

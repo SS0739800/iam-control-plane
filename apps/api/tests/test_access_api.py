@@ -1,14 +1,10 @@
 """Tests for the grant and revoke endpoints.
 
-Two of these matter more than the rest.
-
-Helpdesk must not be able to grant roles. They hold users:write, so if granting
-were an ordinary user edit they could promote themselves, and the whole permission
-table would be decoration.
-
-The last admin must not be removable. There is no root account here, so an empty
-admin set is unrecoverable except by hand-editing the database — which is the
-thing this endpoint exists to replace.
+Two of these matter more than the rest: helpdesk must not be able to grant
+roles (they hold users:write, so an ordinary user edit could let them
+promote themselves), and the last admin must not be removable (there's no
+root account, so an empty admin set could only be fixed by hand-editing the
+database).
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -79,10 +75,9 @@ def grants_url(user_id: uuid.UUID) -> str:
 def test_helpdesk_cannot_grant_a_role(
     db_client: TestClient, console: ConsoleUsers, subject: uuid.UUID
 ) -> None:
-    """The one that stops the permission table being decoration.
-
-    Helpdesk can edit users. If that were enough to grant a role, anybody who can
-    fix a misspelled name could make themselves an admin.
+    """Helpdesk can edit users, but that must not be enough to grant a
+    role, or anyone who can fix a misspelled name could make themselves
+    admin.
     """
     response = db_client.post(
         grants_url(subject),
@@ -381,13 +376,12 @@ def test_the_user_edit_endpoint_cannot_set_a_role(
 ) -> None:
     """PATCH /api/users/{id} must not accept platform_role.
 
-    Two things break if it does. Helpdesk holds users:write, so it becomes a way
-    around roles:write and anybody who can edit a user can make themselves an
-    admin. And it writes the cached column with no grant behind it, which is
-    exactly the drift the grant table was built to prevent.
+    If it did, helpdesk (who holds users:write) could bypass roles:write
+    and make themselves admin, and the cached role column would get
+    written with no grant behind it.
 
-    This is a regression test for a hole that was real: the field stayed on
-    UserUpdate after roles moved to grants.
+    Regression test: this field stayed on UserUpdate after roles moved to
+    grants.
     """
     response = db_client.patch(
         f"/api/users/{subject}",
@@ -425,13 +419,13 @@ def test_helpdesk_cannot_promote_through_the_user_edit_endpoint(
 def test_editing_a_user_still_works(
     db_client: TestClient, console: ConsoleUsers, subject: uuid.UUID
 ) -> None:
-    """A regression test for a 500 that had been there since P1.
+    """Regression test for a 500 that existed since P1.
 
-    PATCH on a user committed the change and then read updated_at off the row.
-    That column has a server-side onupdate, so the UPDATE leaves it expired, and
-    reading an expired column outside an await is a MissingGreenlet under async.
-    Every edit through the console returned a 500 after writing the change, and
-    nothing noticed because the endpoint had no test.
+    PATCH read updated_at off the row right after commit. That column has a
+    server-side onupdate, so it's expired after the UPDATE, and reading an
+    expired column outside an await raises MissingGreenlet under async.
+    Every edit through the console 500'd after saving, and there was no
+    test to catch it.
     """
     response = db_client.patch(
         f"/api/users/{subject}",

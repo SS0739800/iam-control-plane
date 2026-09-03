@@ -1,39 +1,23 @@
 """Someone left. Take everything away.
 
-This is the moment the whole project is built to get right. Every design decision
-before it was made so this could work: sessions are rows so they can be deleted,
-roles are grants so they can be revoked, the audit log is append-only so the
-record survives.
+Every path that can mean "they left" — SCIM sending ``active: false``, a
+DELETE on the SCIM endpoint, or the console — calls this one function, so the
+behavior is the same no matter how it was triggered.
 
-Setting a flag and leaving somebody signed in for another eight hours is the
-failure this exists to prevent. So one function does all of it, and everything
-that can mean "they left" calls that one function — the SCIM provider sending
-``active: false``, a DELETE on the SCIM endpoint, and the console.
+What gets removed:
+- Every session, not just the browser they're currently using.
+- Their console role (revoked with a reason, so a review can tell "we took
+  it away" from "it expired").
+- App access assigned to them directly.
 
-What gets taken away
---------------------
+Group membership is left alone. An inactive user can't authenticate, so
+membership grants them nothing anyway, and most groups here are owned by the
+provider — deleting membership rows would just get overwritten on the next
+sync. Their membership at the time they left is recorded in the audit entry
+instead.
 
-**Sessions.** Every one, not just the browser they happen to be using.
-
-**Their console role.** Revoked with a reason saying they left, so a review can
-tell "we took it away" apart from "it ran out".
-
-**Direct application access.** Access assigned to them personally goes.
-
-**Group membership stays.** Two reasons, and this is the one to argue with if you
-disagree. First, an inactive person can't authenticate, so membership grants them
-nothing in practice. Second, most groups here are owned by the provider, and
-deleting rows it believes in means fighting the next sync — it would put them
-straight back, and we would take them away again, forever. What their membership
-was at the moment they left is in the audit entry.
-
-Nothing comes back on its own
------------------------------
-
-Reactivating somebody restores no access. They get their account and nothing
-else, and every grant has to be made again deliberately. A rehire who silently
-regains everything they had two years ago is how people end up with access nobody
-would approve today.
+Reactivating someone restores no access. They get their account back and
+nothing else; every grant has to be made again.
 """
 
 from __future__ import annotations
@@ -59,12 +43,8 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RemovedAccess:
-    """What cutting somebody off actually did.
-
-    Returned so the caller can write one audit entry describing the whole thing,
-    rather than four entries nobody can line up afterwards. It is also what makes
-    the removal reviewable: "lost Salesforce (Sales Rep)" is a sentence, and
-    "app_assignments: 1" is not.
+    """What cutting somebody off did, so the caller can write one audit entry
+    instead of several separate ones.
     """
 
     sessions_ended: int
@@ -87,18 +67,17 @@ class RemovedAccess:
             "sessions_ended": self.sessions_ended,
             "role_revoked": str(self.role_revoked) if self.role_revoked else None,
             "apps_removed": list(self.apps_removed),
-            # Recorded rather than removed. See the module docstring on why group
-            # membership is left alone.
+            # Recorded, not removed — see the module docstring for why.
             "groups_at_departure": list(self.groups_at_departure),
             "requests_cancelled": self.requests_cancelled,
         }
 
 
 async def _direct_app_access(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[str, str | None]]:
-    """Applications assigned to this person directly, with the role each gives.
+    """Apps assigned to this person directly, with the role each gives.
 
-    Only the direct ones. Access that comes through a group is not theirs to lose
-    — it belongs to the group, and removing it would take it from everybody.
+    Only direct assignments — access via a group belongs to the group, and
+    removing it would take it from everyone in it.
     """
     rows = await db.execute(
         select(Application.name, AppAssignment.role)
@@ -122,16 +101,14 @@ async def _group_names(db: AsyncSession, user_id: uuid.UUID) -> list[str]:
 async def cut_access(
     db: AsyncSession, user: User, *, by: Granter, now: dt.datetime
 ) -> RemovedAccess:
-    """Remove everything this person has, because they have left.
+    """Remove everything this person has access to, because they left.
 
-    Does not set ``active``. The caller owns that flag — SCIM sets it from the
-    document it received, the console sets it from the form — and having two
-    places write it would mean guessing which won. This function is only the
-    "and now take their access away" half, which is the half that used to be
-    missing.
+    Does not set ``active`` — the caller owns that flag (SCIM sets it from the
+    document it received, the console sets it from the form). This only does
+    the "take their access away" part.
 
-    Safe to call twice. Sessions are already revoked, the role is already gone,
-    the assignments are already deleted, so the second call reports nothing
+    Safe to call twice: the second call finds sessions already revoked, the
+    role already gone, and assignments already deleted, so it reports nothing
     happened and writes nothing.
     """
     apps = await _direct_app_access(db, user.id)
@@ -146,9 +123,8 @@ async def cut_access(
     if apps:
         await db.execute(delete(AppAssignment).where(AppAssignment.user_id == user.id))
 
-    # Anything they had outstanding stops being a question. Left open, their
-    # requests sit in the approvers' queue and the obvious failure is somebody
-    # approving one months later without noticing the requester is gone.
+    # Cancel anything still pending, otherwise it sits in an approver's queue
+    # and could get approved after the requester is already gone.
     cancelled = await cancel_open_for_leaver(db, user.id, now=now)
 
     removed = RemovedAccess(

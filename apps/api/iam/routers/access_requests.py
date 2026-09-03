@@ -1,27 +1,20 @@
 """Raising access requests and deciding them.
 
-The permissions here are unusual for this codebase and worth reading.
+Permissions here are a bit different from the rest of this codebase:
 
-**Anybody signed in can raise a request.** No permission check at all. An employee
-holds no permissions — that is the point of the employee role — and a request
-system only they cannot use is not a request system. Asking for access grants
-nothing; the approval does.
+Anyone signed in can raise a request — no permission check. An employee
+holds no permissions, so a request system they can't use wouldn't be one.
+Asking grants nothing; approval does.
 
-**Deciding needs groups:write.** Approving is putting somebody in a group, with a
-paper trail, so it needs the permission that lets somebody do it directly.
+Deciding needs groups:write, since approving means putting someone in a
+group, with a paper trail.
 
-**Reading is split.** Your own requests are always visible to you. Everybody
-else's needs groups:read, because "who has been asking for the finance system" is
-review information rather than public.
+Reading is split: your own requests are always visible to you. Everyone
+else's needs groups:read, since "who's been asking for the finance system"
+is review information, not public.
 
-The notification is sent after the commit
------------------------------------------
-
-Deliberately, and it is the one ordering decision in this file that matters. Mail
-goes out only once the decision is safely written, so nobody is ever told they
-have access that a rolled-back transaction did not actually grant. The cost is
-that a send failure cannot roll the decision back — which is correct, because the
-decision is the record and the email is a copy of it. See iam/mail.py.
+Notifications are sent after the commit, so nobody is emailed about access
+that a rolled-back transaction never actually granted. See iam/mail.py.
 """
 
 from __future__ import annotations
@@ -170,10 +163,8 @@ async def create_request(
     settings: SettingsDep,
     actor: CurrentActor,
 ) -> AccessRequestOut:
-    """Raise a request for yourself.
-
-    No permission required, on purpose. An employee holds no permissions, and a
-    request system they cannot use is not a request system. Asking grants nothing.
+    """Raise a request for yourself. No permission required — an employee
+    holds no permissions, so asking grants nothing.
 
     Raises:
         HTTPException: 400 if the request doesn't make sense, 404 for a group that
@@ -343,11 +334,8 @@ async def withdraw_request(
     session: SessionDep,
     actor: CurrentActor,
 ) -> AccessRequestOut:
-    """Withdraw your own request.
-
-    No permission needed, because it is your own. Somebody else closing it is a
-    denial and goes through the other endpoint — the two are different answers to
-    the same question and the record should say which happened.
+    """Withdraw your own request. No permission needed, since it's yours —
+    somebody else closing it is a denial and goes through the other endpoint.
     """
     request = await _load(session, request_id)
 
@@ -420,11 +408,9 @@ async def get_request(
     dependencies=[Depends(require(Permission.GROUPS_READ))],
 )
 async def for_group(group_id: uuid.UUID, session: SessionDep) -> list[AccessRequestOut]:
-    """The history for a group, decided ones included.
-
-    Denied requests are the interesting ones here. "Three people asked for this and
-    were all refused" says something about the group that its membership list does
-    not.
+    """The history for a group, decided ones included. Denied requests
+    matter here too — "three people asked and were all refused" says
+    something the membership list alone doesn't.
     """
     rows = await session.scalars(
         select(AccessRequest)

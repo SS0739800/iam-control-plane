@@ -1,6 +1,6 @@
 """Shared setup for the tests.
 
-There are three client fixtures on purpose:
+There are three client fixtures:
 
 `client` points at a database that isn't there. Anything that should work without
 Postgres uses this one, so you can run most of the suite with nothing else
@@ -153,9 +153,9 @@ def saml_client(
 ) -> Iterator[TestClient]:
     """A client whose SAML endpoints read messages through the stubs.
 
-    Overriding the private dependencies directly is deliberate: they are the seams
-    the endpoints were given so everything downstream of the signature check can be
-    tested without xmlsec.
+    Overrides the private dependencies directly — they're the seams the
+    endpoints were given so everything downstream of the signature check can
+    be tested without xmlsec.
     """
     app = create_app(build_settings(database_url()))
     app.dependency_overrides[_response_reader] = lambda: saml_reader

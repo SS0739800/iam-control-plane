@@ -1,8 +1,7 @@
 """Column sets that most tables reuse.
 
-The database fills in the timestamps, not Python. That way rows created by a
-migration, the seed script, or someone poking around in psql all get sensible
-values instead of nothing.
+Timestamps are filled in by the database, not Python, so rows created from
+a migration, the seed script, or psql still get sensible values.
 """
 
 from __future__ import annotations
@@ -17,9 +16,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 class UUIDPrimaryKey:
     """A random id for the row.
 
-    UUIDs instead of 1, 2, 3 because these ids end up in SAML and SCIM URLs. If
-    they counted up, anyone could tell how many users we have and guess the next
-    one.
+    UUIDs instead of sequential ints because these ids end up in SAML and
+    SCIM URLs, and sequential ids would leak the row count and let someone
+    guess the next one.
     """
 
     id: Mapped[uuid.UUID] = mapped_column(

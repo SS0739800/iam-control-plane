@@ -1,10 +1,8 @@
 """Shapes for managing the systems that provision into us.
 
-The token is the interesting one. It appears in exactly one response — the one
-that creates it — and there is no field anywhere else that could carry it back.
-That is not an oversight to be tidied up later: we store only its hash, so there
-is genuinely nothing to return, and a screen offering to "show token" would be
-lying or would mean we had kept it.
+The token appears in exactly one response - the one that creates it. There's
+no field anywhere else that could carry it back, since we store only its
+hash. A "show token" button would either lie or mean we'd kept it.
 """
 
 from __future__ import annotations
@@ -27,16 +25,15 @@ class ScimClientSummary(BaseModel):
     created_at: dt.datetime
     last_used_at: dt.datetime | None = Field(
         description=(
-            "When this token was last accepted. The useful question is the "
-            "opposite one: a token nobody has used for months is one nobody would "
-            "notice being stolen."
+            "When this token was last accepted. A token unused for months is "
+            "one nobody would notice being stolen."
         )
     )
     revoked_at: dt.datetime | None
     revoked_reason: str | None
 
     usable: bool = Field(
-        description="Whether this token would be accepted right now — enabled and not revoked."
+        description="Whether this token would be accepted right now - enabled and not revoked."
     )
 
 
@@ -59,8 +56,8 @@ class ScimClientCreate(BaseModel):
 class ScimClientIssued(ScimClientSummary):
     """A newly created client, with its token.
 
-    The only response that ever carries a token. Store it now; there is no way to
-    read it again, because we kept only the hash.
+    The only response that ever carries a token. Store it now - there's no
+    way to read it again, since we kept only the hash.
     """
 
     token: str = Field(
@@ -94,18 +91,17 @@ class ProvisioningActivity(BaseModel):
 class ProvisioningOverview(BaseModel):
     """What provisioning has actually done to this directory.
 
-    Counts rather than a list, because the answer people want from this screen is
-    "is the sync working and what does it own", not a directory listing they can
-    already get from the Users page.
+    Counts, not a list - the answer people want here is "is the sync working
+    and what does it own", not a directory listing they can get from the
+    Users page.
     """
 
     users_from_scim: int = Field(description="People the provider created or now manages.")
     groups_from_scim: int
     users_from_login: int = Field(
         description=(
-            "People who arrived by logging in rather than being provisioned. A "
-            "healthy sync makes this number small: it means SCIM had not heard of "
-            "them yet when they first signed in."
+            "People who arrived by logging in rather than being provisioned. "
+            "A healthy sync keeps this number small."
         )
     )
     active_clients: int

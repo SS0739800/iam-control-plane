@@ -1,17 +1,15 @@
 """Shared setup for the SAML endpoint tests.
 
-Not a test module. It holds the pieces that both the assertion-consumer tests and
-the sign-out tests need: unique names for one run, a stand-in for the reader, and
+Not a test module. Holds the pieces both the assertion-consumer tests and the
+sign-out tests need: unique names for one run, a stand-in for the reader, and
 the seeding and querying helpers.
 
-The stub reader is the important thing to understand. reader.py is the only
-module that needs xmlsec and so the only one that can't be imported here or in
-CI. The endpoint takes it as a dependency, so these tests hand it prepared facts
-and exercise everything after the signature check for real: the ten checks,
-creating the person, the session, the cookie, the redirect.
-
-That is a stub in the one place a stub is safe. It replaces "read this XML and
-verify it", never "decide whether this login is acceptable".
+reader.py is the only module that needs xmlsec, so it's the only one that
+can't be imported here or in CI. The endpoint takes it as a dependency, so
+these tests hand it prepared facts and exercise everything after the
+signature check for real: the checks, creating the person, the session, the
+cookie, the redirect. The stub only replaces "read this XML and verify it",
+never "decide whether this login is acceptable".
 """
 
 from __future__ import annotations
@@ -46,10 +44,9 @@ OUR_ACS_URL = f"{BASE_URL}/saml/acs"
 
 STUB_CERT = "-----BEGIN CERTIFICATE-----\nstub\n-----END CERTIFICATE-----"
 
-# The endpoint hands this straight to the stub reader, which ignores it and returns
-# whatever facts the test set up. It is still real base64 of real-looking XML,
-# because a failed login keeps the document for the inspector and a fake that
-# doesn't decode would make that untestable.
+# The endpoint hands this straight to the stub reader, which ignores it and
+# returns whatever facts the test set up. Still real base64 of real-looking
+# XML, since a failed login keeps the document for the inspector.
 POSTED_RESPONSE = base64.b64encode(
     b'<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol">'
     b"<!-- the reader is stubbed; the facts come from the test -->"
@@ -137,9 +134,9 @@ class Scenario:
 class ConsoleUsers:
     """One console user per role, for testing who is allowed to do what.
 
-    Created per test with unique names, because the test database is shared and
-    isn't reset between tests. Nothing is seeded into it, so a test that wants to
-    call an endpoint as an admin has to make one first.
+    Created per test with unique names, since the test database is shared and
+    isn't reset between tests. Nothing is seeded into it, so a test that wants
+    to call an endpoint as an admin has to make one first.
     """
 
     suffix: str
@@ -214,11 +211,10 @@ def new_console_users() -> ConsoleUsers:
 def create_console_users(console: ConsoleUsers) -> None:
     """One user per role, with a real grant behind each one.
 
-    The grant matters. Roles are decided by role_grants now and the column on the
-    user is a cache of them, so a fixture that set only the column would create
-    people the drift check reports and the last-admin guard cannot see. Anything
-    testing "who may do what" would then be testing a state the application can't
-    actually produce.
+    Roles are decided by role_grants; the column on the user is just a cache
+    of them. A fixture that set only the column would create people the drift
+    check reports and the last-admin guard can't see, which would make "who
+    may do what" tests exercise a state the app can't actually produce.
     """
 
     async def work(session: AsyncSession) -> None:
@@ -255,8 +251,8 @@ def remove_console_users(console: ConsoleUsers) -> None:
             delete(SamlRequestState).where(SamlRequestState.idp_slug == console.slug)
         )
         await session.execute(delete(IdentityProvider).where(IdentityProvider.slug == console.slug))
-        # Grants first: they point at these users, and the cascade only fires on a
-        # real DELETE of the parent row, which is what comes next.
+        # Grants first: they point at these users, and the cascade only fires
+        # on a real DELETE of the parent row, which comes next.
         await session.execute(
             delete(RoleGrant).where(
                 RoleGrant.user_id.in_(select(User.id).where(User.user_name.in_(console.user_names)))
@@ -274,8 +270,7 @@ def new_scenario() -> Scenario:
 def clean_up(scenario: Scenario) -> None:
     """Remove everything one test made.
 
-    Audit entries are left behind on purpose — the table refuses DELETE, which is
-    the point of it.
+    Audit entries are left behind, since the table refuses DELETE.
     """
 
     async def work(session: AsyncSession) -> None:
@@ -297,8 +292,8 @@ def clean_up(scenario: Scenario) -> None:
 def seed_provider(scenario: Scenario, *, enabled: bool = True, slo_url: str | None = None) -> None:
     """Register a provider the way POST /api/identity-providers would.
 
-    slo_url is off by default. Plenty of providers have no logout address, it is
-    the simpler case, and the tests that care about single logout ask for one.
+    slo_url is off by default, since plenty of providers have no logout
+    address; tests that care about single logout ask for one.
     """
 
     async def work(session: AsyncSession) -> None:

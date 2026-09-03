@@ -1,29 +1,12 @@
 """The systems we push accounts into, and what we pushed where.
 
-Who gets provisioned is not a new question
-------------------------------------------
+Who gets provisioned to a target is just whoever has access to its
+application, from the same app_assignments rows that decide login access.
+There's no separate list to keep in sync.
 
-A target belongs to an application, and the people pushed to it are the people who
-have access to that application. That is the whole rule, and it is deliberate: this
-phase adds no second notion of who should be where.
-
-``app_assignments`` already answers "who should have this", directly or through a
-group. P5 reads it to decide whether to sign a login. P6 reads the same rows to
-decide whose account to create. So granting somebody access provisions them, and
-removing it deprovisions them, without anybody maintaining a separate list that
-could disagree with the first one.
-
-Why the links table exists
---------------------------
-
-A downstream gives an account its own id, and we have to keep it. Without it the
-only way to update or deactivate somebody is to search by username on every push and
-hope the answer is unique — which fails exactly when it matters, because somebody
-whose username changed is the person most likely to be mid-leaver-process.
-
-So each link is one row saying "our person X is their account Y", plus what happened
-last time we tried. That last part is what makes a failure visible instead of a push
-that quietly stopped happening.
+ProvisioningLink stores the downstream's own id for each account, so a
+later update or deactivation can address it directly instead of searching
+by username (which breaks if the username changed, e.g. mid-leaver).
 """
 
 from __future__ import annotations
@@ -62,22 +45,22 @@ class ProvisioningTarget(UUIDPrimaryKey, Timestamps, Base):
         ForeignKey("applications.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
-        comment="Which application this provisions. Unique: one target per "
-        "application, because two would race each other writing the same accounts.",
+        comment="Which application this provisions. One target per "
+        "application, so two syncs can't race writing the same accounts.",
     )
 
     base_url: Mapped[str] = mapped_column(
         String(500),
         nullable=False,
-        comment="The downstream's SCIM root, e.g. https://example/scim/v2. Checked "
-        "against ADR 0007 when it is set, not on every push.",
+        comment="The downstream's SCIM root, e.g. https://example/scim/v2. "
+        "Checked against ADR 0007 when set, not on every push.",
     )
 
     token_encrypted: Mapped[str] = mapped_column(
         Text,
         nullable=False,
-        comment="The bearer token, encrypted. See iam/secrets.py for why this one is "
-        "encrypted rather than hashed like the inbound tokens.",
+        comment="The bearer token, encrypted (not hashed, unlike inbound "
+        "tokens — see iam/secrets.py).",
     )
 
     enabled: Mapped[bool] = mapped_column(
@@ -85,39 +68,38 @@ class ProvisioningTarget(UUIDPrimaryKey, Timestamps, Base):
         nullable=False,
         default=True,
         server_default=text("true"),
-        comment="Turning a target off stops pushes without losing the links, so "
-        "turning it back on does not recreate every account.",
+        comment="Turning a target off stops pushes without losing the links, "
+        "so turning it back on doesn't recreate every account.",
     )
 
     address_concession: Mapped[str | None] = mapped_column(
         String(255),
-        comment="A rule from ADR 0007 that was relaxed to allow this address — a "
-        "private address, or plain HTTP. Stored so the page can show it was a "
-        "decision rather than an oversight.",
+        comment="An ADR 0007 rule relaxed to allow this address (private, "
+        "or plain HTTP). Stored so the page shows it as a decision, not an "
+        "oversight.",
     )
 
     # ------------------------------------------------------ how it last went
     last_sync_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     last_sync_ok: Mapped[bool | None] = mapped_column(
         Boolean,
-        comment="Null means never tried. The useful question is the negative one: a "
-        "target that last succeeded three weeks ago is one nobody is watching.",
+        comment="Null means never tried. Flags targets nobody's watching, "
+        "e.g. one that last succeeded three weeks ago.",
     )
     last_error: Mapped[str | None] = mapped_column(
         Text,
-        comment="Kept after a failure and cleared on success, so the page shows the "
-        "current problem rather than a history of them.",
+        comment="Cleared on success, so the page shows only the current "
+        "problem, not a history of past ones.",
     )
 
     sweep_lease_until: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True),
         comment=(
-            "Held while a sync is running against this target, so two of them cannot "
-            "run at once. A lease rather than a lock because reconcile() commits "
-            "between every person and a transaction-scoped lock cannot span that, "
-            "while a session-scoped one is unreliable through a transaction pooler "
-            "that may hand out a different backend per transaction. Expires on its "
-            "own, so a worker dying mid-sweep does not wedge the target."
+            "Held while a sync runs against this target, so two can't run "
+            "at once. A time-limited lease rather than a lock, because "
+            "reconcile() commits between users (so a transaction lock can't "
+            "span it) and a session lock isn't reliable through a "
+            "transaction pooler. Expires on its own if a worker dies mid-sweep."
         ),
     )
 
@@ -139,10 +121,9 @@ class ProvisioningTarget(UUIDPrimaryKey, Timestamps, Base):
 class ProvisioningLink(Base):
     """One of our people, as an account in one downstream.
 
-    Kept after the account is deactivated rather than deleted. "We deprovisioned her
-    from Salesforce on the 3rd, and here is the id we deactivated" is the question
-    this table exists to answer, and deleting the row makes it unanswerable — while
-    also meaning a rehire creates a second account instead of reviving the first.
+    Kept after the account is deactivated rather than deleted, so history
+    (who was deprovisioned, when, which account) stays answerable and a
+    rehire revives the old account instead of creating a second one.
     """
 
     __tablename__ = "provisioning_links"
@@ -158,9 +139,9 @@ class ProvisioningLink(Base):
 
     remote_id: Mapped[str | None] = mapped_column(
         String(255),
-        comment="The id the downstream gave this account. Null while a link exists "
-        "but no account does yet — which is the state a failed create leaves behind, "
-        "and is why a retry can tell 'never created' from 'created and then broke'.",
+        comment="The id the downstream gave this account. Null if a create "
+        "attempt failed, so a retry can tell 'never created' from "
+        "'created, then broke'.",
     )
 
     state: Mapped[LinkState] = mapped_column(
@@ -177,8 +158,8 @@ class ProvisioningLink(Base):
         nullable=False,
         default=0,
         server_default=text("0"),
-        comment="Consecutive failures. Reset on success. A link failing forever is "
-        "worth telling somebody about rather than retrying quietly.",
+        comment="Consecutive failures, reset on success. Used to flag a "
+        "link that keeps failing instead of retrying it silently forever.",
     )
 
     created_at: Mapped[dt.datetime] = mapped_column(
@@ -196,10 +177,8 @@ class ProvisioningLink(Base):
         return self.remote_id is not None
 
     __table_args__ = (
-        # One account per person per target. Without it a retry that did not notice
-        # the first attempt succeeded creates a duplicate, and duplicates in a
-        # downstream directory are the hardest kind of mess to unpick — both accounts
-        # look legitimate.
+        # One account per person per target, so a retry can't create a
+        # duplicate if it doesn't notice the first attempt succeeded.
         UniqueConstraint("target_id", "user_id", name="one_account_per_person"),
         # The same remote account must not be claimed by two of our people.
         Index(

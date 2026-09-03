@@ -1,13 +1,13 @@
 """Tests for the parts of SCIM that are pure logic: filters, shapes, mapping.
 
-No database and no network, so these run anywhere. The endpoints that sit on top
-of this get their own tests; what is checked here is the layer they all depend
-on, where a quiet mistake would be wrong everywhere at once.
+No database and no network, so these run anywhere. The endpoints that sit on
+top of this get their own tests; this covers the layer they all depend on,
+where a quiet mistake would be wrong everywhere at once.
 
-The documents in here are shaped the way authentik, Okta and Entra actually send
-them — capital ``Operations``, the enterprise extension URN as a key, extra
-attributes we don't model. A tidied-up invention would pass while the real thing
-failed.
+The documents in here are shaped the way authentik, Okta, and Entra actually
+send them - capital `Operations`, the enterprise extension URN as a key,
+extra attributes we don't model. A tidied-up invention would pass while the
+real thing failed.
 """
 
 from __future__ import annotations
@@ -81,9 +81,9 @@ def make_group(**overrides: object) -> Group:
         # about the capital N.
         ('username eq "ada@demo.local"', "user_name", "ada@demo.local"),
         ('USERNAME EQ "ada@demo.local"', "user_name", "ada@demo.local"),
-        # Unquoted. The spec wants a quoted JSON string here and authentik sends
-        # this instead — found by watching a real sync, which stalled on its very
-        # first request until this was accepted.
+        # Unquoted. The spec wants a quoted JSON string here, but authentik
+        # sends this instead - found by watching a real sync stall on its
+        # very first request until this was accepted.
         ("userName eq akadmin", "user_name", "akadmin"),
         ("externalId eq 6", "external_id", "6"),
     ],
@@ -125,26 +125,25 @@ def test_operators_we_do_not_support_are_refused(expression: str) -> None:
 
 
 def test_an_unquoted_true_is_still_a_boolean() -> None:
-    """Accepting unquoted values must not turn `active eq true` into the string
-    "true", which would match nobody and look like an empty directory."""
+    """Accepting unquoted values shouldn't turn `active eq true` into the
+    string "true", which would match nobody and look like an empty directory."""
     assert parse_user_filter("active eq true").value is True
     assert parse_user_filter("active eq false").value is False
 
 
 def test_a_compound_filter_is_refused_rather_than_half_read() -> None:
-    """The one that matters.
-
-    Reading only the first clause of `userName eq "a" and active eq true` would
-    answer a narrower question than was asked. Worse is treating an unreadable
-    filter as no filter at all: the provider asks "do you have this one person"
-    and gets the whole directory, then writes to whoever came back first.
+    """Reading only the first clause of `userName eq "a" and active eq true`
+    would answer a narrower question than was asked. Worse is treating an
+    unreadable filter as no filter: the provider asks "do you have this one
+    person" and gets the whole directory, then writes to whoever came back
+    first.
     """
     with pytest.raises(ScimError) as raised:
         parse_user_filter('userName eq "ada@demo.local" and active eq true')
 
     assert raised.value.scim_type == ScimType.INVALID_FILTER
 
-    # And the same without quotes, which is the form that made this possible.
+    # Same without quotes, which is the form that made this possible.
     with pytest.raises(ScimError):
         parse_user_filter("userName eq ada and active eq true")
 
@@ -158,9 +157,9 @@ def test_filtering_on_something_we_do_not_index_says_what_is_allowed() -> None:
 
 
 def test_a_conflict_says_uniqueness_so_the_provider_can_recover() -> None:
-    """A provider reading scimType=uniqueness knows to update instead of create.
-    A bare 400 just makes it give up, and the sync reports failure forever over
-    somebody who exists perfectly well."""
+    """A provider reading scimType=uniqueness knows to update instead of
+    create. A bare 400 makes it give up, and the sync reports failure
+    forever over somebody who exists just fine."""
     error = already_exists("userName", "ada@demo.local")
     document = error.as_document()
 
@@ -170,7 +169,7 @@ def test_a_conflict_says_uniqueness_so_the_provider_can_recover() -> None:
 
 
 def test_the_status_is_a_string_not_a_number() -> None:
-    """The spec says so, and providers do reject the numeric form."""
+    """Per the spec - providers do reject the numeric form."""
     document = ScimError(404, "gone").as_document()
 
     assert document["status"] == "404"
@@ -204,8 +203,9 @@ def test_reads_the_document_authentik_posts() -> None:
 
 
 def test_attributes_we_do_not_model_are_kept_not_rejected() -> None:
-    """The spec says ignore what you don't understand. Rejecting means a provider
-    whose default profile has one extra field cannot create anybody here."""
+    """The spec says ignore what you don't understand. Rejecting would mean
+    a provider whose default profile has one extra field can't create
+    anybody here."""
     scim = ScimUser.model_validate(
         {"userName": "ada@demo.local", "locale": "en-US", "phoneNumbers": [{"value": "123"}]}
     )
@@ -230,7 +230,7 @@ def test_the_primary_email_wins_over_the_others() -> None:
 
 
 def test_a_list_of_emails_with_none_marked_primary_still_resolves() -> None:
-    """An account with the wrong one of two addresses beats an account with none."""
+    """An account with the wrong one of two addresses beats one with none."""
     scim = ScimUser.model_validate(
         {"userName": "ada@demo.local", "emails": [{"value": "first@demo.local", "primary": False}]}
     )
@@ -240,8 +240,8 @@ def test_a_list_of_emails_with_none_marked_primary_still_resolves() -> None:
 
 @pytest.mark.parametrize("op", ["replace", "Replace", "REPLACE", " replace "])
 def test_patch_operations_are_case_insensitive(op: str) -> None:
-    """Entra sends "Add", most others send "add". Comparing the raw value works
-    against whichever one you tested with and fails against the other."""
+    """Entra sends "Add", most others send "add". Comparing the raw value
+    would work against whichever one you tested with and fail on the other."""
     patch = PatchRequest.model_validate(
         {"Operations": [{"op": op, "path": "active", "value": False}]}
     )
@@ -250,14 +250,14 @@ def test_patch_operations_are_case_insensitive(op: str) -> None:
 
 
 def test_an_operation_that_is_not_a_real_one_is_refused() -> None:
-    """Normalising the case must not turn into accepting anything at all."""
+    """Normalizing the case shouldn't turn into accepting anything at all."""
     with pytest.raises(ValidationError):
         PatchRequest.model_validate({"Operations": [{"op": "obliterate", "value": 1}]})
 
 
 def test_patch_reads_the_capitalised_operations_key() -> None:
-    """It is capitalised in the spec. A lowercase key would parse as no
-    operations at all, which is a PATCH that returns 200 and changes nothing."""
+    """Capitalized in the spec. A lowercase key would parse as no
+    operations at all - a PATCH that returns 200 and changes nothing."""
     patch = PatchRequest.model_validate(
         {"Operations": [{"op": "replace", "value": {"active": False}}]}
     )
@@ -280,8 +280,8 @@ def test_a_person_comes_back_in_scim_shape() -> None:
 
 
 def test_the_name_is_sent_both_split_and_formatted() -> None:
-    """Providers read whichever one they were built around, and the two
-    disagreeing is why a display name never updates."""
+    """Providers read whichever one they were built around; leaving one
+    out is why a display name never updates for some of them."""
     scim = user_to_scim(make_user(), base_url=BASE_URL)
 
     assert scim.name is not None
@@ -309,8 +309,8 @@ def test_the_version_changes_when_the_row_does() -> None:
 
 
 def test_the_enterprise_extension_only_appears_when_there_is_something_in_it() -> None:
-    """A provider has to name the URN to send these, so we shouldn't claim to
-    support it on a record that has none of it."""
+    """A provider has to name the URN to send these, so we shouldn't claim
+    to support it on a record that has none of it."""
     plain = user_to_scim(make_user(employee_number=None, department=None), base_url=BASE_URL)
     with_hr = user_to_scim(make_user(department="Engineering"), base_url=BASE_URL)
 
@@ -335,8 +335,8 @@ def test_a_group_comes_back_with_its_members() -> None:
 
 
 def test_scim_cannot_set_what_somebody_is_allowed_to_do() -> None:
-    """The important one. Nothing upstream should be able to make itself an admin
-    here by editing a directory record."""
+    """Nothing upstream should be able to make itself an admin here by
+    editing a directory record."""
     assert "platform_role" not in WRITABLE_USER_FIELDS
     assert "source" not in WRITABLE_USER_FIELDS
 
@@ -348,8 +348,8 @@ def test_scim_cannot_set_what_somebody_is_allowed_to_do() -> None:
 
 
 def test_a_document_that_omits_a_field_does_not_blank_it() -> None:
-    """A partial resource on PUT must not read as "set the rest to null", or a
-    sync that tidies one record blanks everybody's department."""
+    """A partial resource on PUT shouldn't read as "set the rest to null",
+    or a sync that tidies one record blanks everybody's department."""
     scim = ScimUser.model_validate({"userName": "ada@demo.local", "active": True})
 
     values = user_fields_from_scim(scim)
@@ -360,8 +360,7 @@ def test_a_document_that_omits_a_field_does_not_blank_it() -> None:
 
 
 def test_deactivating_comes_through_as_a_field_we_write() -> None:
-    """This is deprovisioning. It is the single most important thing this server
-    handles, and it arrives as one boolean."""
+    """This is deprovisioning - it arrives as one boolean."""
     scim = ScimUser.model_validate({"userName": "ada@demo.local", "active": False})
 
     values = user_fields_from_scim(scim)
@@ -374,8 +373,8 @@ def test_deactivating_comes_through_as_a_field_we_write() -> None:
 
 
 def test_a_display_name_is_worked_out_when_the_provider_sends_none() -> None:
-    """authentik sends no displayName for some profiles, and a person with a
-    blank name in the console is a bug people report."""
+    """authentik sends no displayName for some profiles, and a blank name
+    in the console is a bug people report."""
     scim = ScimUser.model_validate(
         {"userName": "ada@demo.local", "name": {"givenName": "Ada", "familyName": "Bergman"}}
     )
@@ -390,8 +389,8 @@ def test_a_person_with_only_a_username_still_gets_a_display_name() -> None:
 
 
 def test_applying_the_same_document_twice_reports_no_changes() -> None:
-    """Providers re-send unchanged records constantly during a full sync. Every
-    one of those writing an audit entry would bury the real changes."""
+    """Providers re-send unchanged records constantly during a full sync.
+    Every one writing an audit entry would bury the real changes."""
     user = make_user()
     values = user_fields_from_scim(user_to_scim(user, base_url=BASE_URL))
 

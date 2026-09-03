@@ -96,9 +96,8 @@ class AffectedPerson(BaseModel):
 class RulePreview(BaseModel):
     """Who a rule would affect, before anybody commits to it.
 
-    The difference between writing a rule confidently and writing one and hoping.
-    A condition that reads correctly and matches four hundred people usually means
-    the value was mistyped, and this is where that gets noticed.
+    A condition that reads correctly but matches four hundred people
+    usually means the value was mistyped — this is where that gets noticed.
     """
 
     sentence: str

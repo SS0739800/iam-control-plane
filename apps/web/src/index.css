@@ -1,17 +1,6 @@
 @import 'tailwindcss';
 
-/* Fluent, near enough.
- *
- * The Entra admin centre is built on Microsoft's Fluent design language, and the
- * things that actually make it recognisable are surprisingly few: one blue, a
- * near-white page behind white surfaces, hairline borders, small radii, and Segoe UI.
- * Getting those right matters more than matching any particular component.
- *
- * These are Fluent's own values rather than approximations — #0078D4 is the
- * communication blue Microsoft uses for primary actions, and the neutral ramp is
- * Fluent's grey scale. Copying a palette is not copying a product: the layout,
- * wording and behaviour here are ours.
- */
+/* Microsoft's actual Fluent values (Entra's design language), not approximations. */
 @theme {
   /* Communication blue: primary actions, links, the selected nav item. */
   --color-fluent-50: #eff6fc;
@@ -23,8 +12,7 @@
   --color-fluent-700: #005a9e;
   --color-fluent-900: #004578;
 
-  /* Fluent's neutral ramp. Slightly warmer and flatter than Tailwind's slate,
-     which is most of why the portal looks the way it does. */
+  /* Fluent's neutral ramp — warmer and flatter than Tailwind's slate. */
   --color-neutral-10: #faf9f8;
   --color-neutral-20: #f3f2f1;
   --color-neutral-30: #edebe9;
@@ -40,15 +28,12 @@
   --color-status-warn: #797775;
   --color-status-bad: #a4262c;
 
-  /* Segoe UI first, then the system stack. Nobody outside Windows has Segoe, and a
-     bad substitute reads worse than a good local font — so the fallbacks are the
-     platform's own UI faces rather than a generic sans. */
+  /* Segoe UI first, falling back to each platform's own UI font rather than a generic sans. */
   --font-sans:
     'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont,
     'Helvetica Neue', system-ui, sans-serif;
 
-  /* Fluent uses small radii throughout. Two pixels reads as "portal"; eight reads
-     as a consumer app. */
+  /* Small radius, like Fluent — 2px reads as a portal, 8px reads as a consumer app. */
   --radius-fluent: 2px;
 }
 
@@ -58,23 +43,19 @@
   }
 
   body {
-    /* Near-white behind white surfaces, which is what gives the portal its layered
-       look without heavy borders or shadows. */
     @apply bg-neutral-20 text-neutral-160 antialiased;
     font-family: var(--font-sans);
   }
 
-  /* Dark is kept, though the real admin centre has none. Imitating a limitation
-     would be a strange thing to do to somebody whose system asked for dark. The
-     values are Fluent's dark neutrals rather than inverted light ones. */
+  /* Entra itself has no dark mode, but we support prefers-color-scheme anyway,
+     using Fluent's own dark neutrals rather than inverting the light ones. */
   @media (prefers-color-scheme: dark) {
     body {
       @apply bg-neutral-190 text-neutral-20;
     }
   }
 
-  /* The portal's focus ring: a visible outline rather than a soft glow. Keyboard
-     users in an admin console need to see exactly where they are. */
+  /* Solid outline instead of a soft glow, so keyboard focus is easy to spot. */
   :focus-visible {
     outline: 2px solid var(--color-fluent-500);
     outline-offset: 1px;

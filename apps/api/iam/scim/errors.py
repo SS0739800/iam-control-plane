@@ -1,13 +1,11 @@
 """SCIM's error shape, which is not FastAPI's.
 
-FastAPI answers errors with ``{"detail": "..."}``. SCIM expects a document with
-its own schema URN, the status as a *string*, and an optional ``scimType`` that
-says which kind of wrong this is. A provider reads scimType to decide what to do
-next — ``uniqueness`` means "it already exists, go and update it instead", while
-a bare 400 means "give up and log something".
-
-So getting this shape right is not pedantry about the spec. It is the difference
-between a provider recovering from a conflict and a provider stopping.
+FastAPI answers errors with `{"detail": "..."}`. SCIM expects a document with
+its own schema URN, the status as a *string*, and an optional `scimType` that
+says what kind of error this is. A provider reads scimType to decide what to
+do next: `uniqueness` means "it already exists, update it instead", while a
+bare 400 means "give up and log something". Getting this shape right is the
+difference between a provider recovering from a conflict and stopping.
 """
 
 from __future__ import annotations
@@ -29,8 +27,8 @@ class ScimType:
     """The filter matched more than we're willing to return."""
 
     UNIQUENESS = "uniqueness"
-    """Something with that userName or externalId already exists. The useful one:
-    a provider seeing this knows to PATCH rather than POST."""
+    """Something with that userName or externalId already exists. A provider
+    seeing this knows to PATCH rather than POST."""
 
     MUTABILITY = "mutability"
     """They tried to change something that can't be changed after creation."""
@@ -54,10 +52,10 @@ class ScimType:
 class ScimError(Exception):
     """An error to answer a SCIM request with.
 
-    Raised anywhere in a SCIM handler and turned into the right document by the
-    exception handler registered in main.py. Doing it that way means individual
-    handlers never build the envelope themselves, so the shape can't drift
-    between endpoints.
+    Raised anywhere in a SCIM handler and turned into the right document by
+    the exception handler registered in main.py, so individual handlers
+    never build the envelope themselves and the shape can't drift between
+    endpoints.
     """
 
     def __init__(
@@ -75,8 +73,8 @@ class ScimError(Exception):
     def as_document(self) -> dict[str, Any]:
         """The body to send back.
 
-        ``status`` is a string, not a number. That is what the spec says, and
-        providers do reject the numeric form.
+        `status` is a string, not a number, per the spec - providers do
+        reject the numeric form.
         """
         document: dict[str, Any] = {
             "schemas": [ERROR_SCHEMA],
@@ -96,11 +94,11 @@ def not_found(resource: str, resource_id: str) -> ScimError:
 
 
 def already_exists(field: str, value: str) -> ScimError:
-    """409 with scimType uniqueness — the one a provider can act on.
+    """409 with scimType uniqueness, which a provider can act on.
 
-    A provider that gets this knows the record is already here and switches to
-    updating it. Answering a plain 400 instead is how you end up with a sync that
-    reports failure forever over somebody who exists perfectly well.
+    A provider that gets this knows the record already exists and switches to
+    updating it. A plain 400 instead would leave a sync reporting failure
+    forever over someone who exists just fine.
     """
     return ScimError(
         status.HTTP_409_CONFLICT,

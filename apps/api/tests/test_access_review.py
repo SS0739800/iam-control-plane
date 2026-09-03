@@ -1,13 +1,11 @@
 """Tests for the access review.
 
-Each check gets two tests: it fires when it should, and it stays quiet when it
-shouldn't. The second half matters more than it looks — a review that reports
-things nobody can act on is one people learn to ignore, and then it catches
-nothing at all.
+Each check gets two tests: it fires when it should, and stays quiet when it
+shouldn't — a review that reports things nobody can act on gets ignored.
 
-The exclusions are tested explicitly for that reason: provider-owned memberships
-and seeded data must not appear, because the leaver flow deliberately leaves the
-first alone and the second isn't real.
+Provider-owned memberships and seeded data are tested as exclusions too:
+the leaver flow always leaves the first alone, and the second isn't real
+data.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -204,8 +202,8 @@ async def test_a_leaver_in_a_group_we_granted_is_flagged(db_session: AsyncSessio
 async def test_a_leaver_in_a_provider_owned_group_is_not_flagged(
     db_session: AsyncSession,
 ) -> None:
-    """The leaver flow deliberately leaves those alone, so flagging them would
-    report our own intended behaviour as a problem, forever."""
+    """The leaver flow always leaves those alone, so flagging them would
+    just report normal behavior as a problem."""
     person = await make_person(db_session, active=False)
     group = await make_group(db_session)
     db_session.add(GroupMember(group_id=group.id, user_id=person.id, source=MembershipSource.SCIM))

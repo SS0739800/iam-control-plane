@@ -1,48 +1,24 @@
 """The background sweep: pushing changes without somebody pressing a button.
 
-Why this exists
----------------
+Before this, provisioning only ran inside the request that asked for it, so a
+leaver's account stayed live in a downstream system until somebody opened the
+console and pressed Sync now. This has actually caused a live gap before: Okta
+deactivated someone at 8:51:40, the last sync had run at 8:51:12, and the account
+stayed active until a person noticed.
 
-Provisioning ran only inside the request that asked for it, so nothing reached a
-downstream system until a person opened the console and pressed Sync now. That was
-stated honestly rather than hidden — the target panel says "changes waiting" and the
-runbook listed it — but it makes the leaver flow depend on somebody remembering.
+This runs reconcile() on a timer instead of a queue, since reconcile() already
+compares "who should have an account" against "what the system currently has" and
+fixes the difference — a missed sweep just means the next one catches it, while a
+dropped queue message means nobody notices. It's also simpler: no broker, no
+dead-letter handling, no ordering questions.
 
-The gap is not theoretical. It has already happened here: Okta deactivated somebody
-at 8:51:40, the last sync had run at 8:51:12, and their account stayed live in the
-HRMS until a person noticed. Twenty-eight seconds of bad luck and a leaver keeps
-their access indefinitely.
-
-Why a sweep rather than a queue
--------------------------------
-
-Because reconcile() is a reconciler, not a reaction. It asks "who should have an
-account here, and what does this system currently have" and fixes the difference —
-so running it on a timer converges on the right answer no matter what happened in
-between, including changes this process never saw.
-
-A queue would be the natural choice for a system that reacts to events, and it would
-be worse here for exactly that reason: a dropped message means a person keeps access
-forever, and nothing notices. A missed sweep means the next one does the work. The
-failure modes are not comparable.
-
-It is also less machinery. No broker, no dead-letter handling, no ordering
-questions, no second thing to run — which matters more than elegance for a
-deployment that is two small machines.
-
-What it deliberately does not do
---------------------------------
-
-It does not force. A forced run retries links that have failed their attempt limit,
-and doing that every few minutes turns a permanently broken target into a permanent
-source of load and log noise. Somebody pressing Sync now can force; a timer should
-not.
-
-It does not run more than one sweep against a target at a time, and that is enforced
-rather than assumed. An earlier version of this docstring claimed it while nothing
-stopped it: the loop below is sequential, so it was true within one process and false
-across two machines, or when somebody pressed "sync now" mid-sweep. reconcile() now
-takes a lease on the target and refuses if another sync holds it.
+This does not force a retry on links that already hit their attempt limit —
+that's left for a person pressing Sync now, since doing it automatically every
+few minutes would turn a permanently broken target into steady load and log
+noise. And it never runs two sweeps against the same target at once: reconcile()
+takes a lease on the target and refuses if another sync already holds it (needed
+across multiple worker machines, since the loop below alone only protects one
+process).
 """
 
 from __future__ import annotations
@@ -73,21 +49,18 @@ async def sweep_once(
 ) -> dict[str, int]:
     """Reconcile every enabled target, once.
 
-    Each target gets its own session and its own correlation id, so one target's
-    failure cannot roll back another's work and the audit entries for a run can be
-    read back as one story.
+    Each target gets its own session and correlation id, so one target's failure
+    can't roll back another's work.
 
-    Returns a small summary for the log line, and for the tests to assert on rather
-    than reaching into the audit table.
+    Returns a small summary for the log line and for tests to assert on.
     """
     async with sessionmaker() as session:
         targets = list(
             await session.scalars(
                 select(ProvisioningTarget)
                 .where(ProvisioningTarget.enabled.is_(True))
-                # The application is read while building audit entries, and a lazy
-                # load there is the MissingGreenlet this codebase has hit three
-                # times. Eager, deliberately.
+                # Eager load: the application is read while building audit
+                # entries, and a lazy load there raises MissingGreenlet.
                 .options(selectinload(ProvisioningTarget.application))
             )
         )
@@ -104,7 +77,7 @@ async def sweep_once(
                     options=[selectinload(ProvisioningTarget.application)],
                 )
                 if fresh is None or not fresh.enabled:
-                    # Removed or paused between the listing and now. Ordinary.
+                    # Removed or paused between the listing and now.
                     continue
 
                 try:
@@ -112,9 +85,8 @@ async def sweep_once(
                         session, fresh, settings, now=now, correlation_id=correlation_id
                     )
                 except AlreadyRunning:
-                    # Somebody else has it — another worker machine, or a person who
-                    # pressed sync now. Skipping is the whole point: the next sweep
-                    # is five minutes away and reconcile converges either way.
+                    # Another worker machine or a manual sync already has the
+                    # lease. Skip it; the next sweep will catch up either way.
                     logger.info("worker.target_busy", extra={"target": fresh.base_url})
                     continue
 
@@ -130,10 +102,8 @@ async def sweep_once(
                     },
                 )
         except Exception:
-            # One target must not stop the others. A downstream that is down, a
-            # token that has been rotated at the far end, a certificate that
-            # expired — all of them are somebody else's outage, and the remaining
-            # targets are still ours to keep in step.
+            # One target failing (downstream down, a rotated token, an expired
+            # certificate) must not stop the rest.
             summary["failed"] += 1
             logger.exception(
                 "worker.target_failed",
@@ -146,9 +116,8 @@ async def sweep_once(
 async def run_forever(settings: Settings | None = None) -> None:
     """Sweep, wait, sweep again, until something stops the process.
 
-    The interval is a floor rather than a schedule: a sweep that takes longer than
-    the interval simply delays the next one, which is what you want. Trying to keep
-    to a fixed cadence would start a second sweep on top of a slow one.
+    The interval is a floor, not a fixed schedule: a slow sweep just delays the
+    next one instead of overlapping it.
     """
     resolved = settings or get_settings()
     configure_logging(resolved.log_level)
@@ -170,9 +139,8 @@ async def run_forever(settings: Settings | None = None) -> None:
                 if summary["pushed"] or summary["failed"]:
                     logger.info("worker.sweep_finished", extra=summary)
             except Exception:
-                # The loop itself must survive anything, including the database
-                # being unreachable. A worker that exits on the first bad minute is
-                # a worker somebody has to notice and restart.
+                # The loop must survive anything, including the database being
+                # unreachable, or somebody has to notice and restart the worker.
                 logger.exception("worker.sweep_failed")
 
             took = dt.datetime.now(dt.UTC) - started

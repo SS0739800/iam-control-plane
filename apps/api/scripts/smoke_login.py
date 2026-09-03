@@ -13,17 +13,15 @@ provider:
     curl -sSL http://localhost:9000/application/saml/iam-console/metadata/ -o idp.xml
     # then POST it to /api/identity-providers — see the README
 
-This exists because CI cannot do it. There is no identity provider in CI, so the
-one thing no test there can check is whether a real assertion from a real provider
-is accepted. That gap is not theoretical: the xpath bug fixed in
-iam/saml/reader.py passed every unit test and failed the first time a genuine
-authentik assertion arrived.
+CI has no identity provider, so this is the only check for whether a real
+assertion from a real provider is accepted — the xpath bug fixed in
+iam/saml/reader.py passed every unit test and only failed on a genuine
+authentik assertion.
 
-authentik drives its own login pages from an API: a browser GETs a flow page, the
-front end asks the executor for a "challenge", posts an answer, and gets the next
-challenge. This walks the same executor, which is why no browser is needed. It is
-therefore tied to authentik's flow API, and an authentik upgrade is the thing most
-likely to break it.
+authentik drives its login pages from an API: a browser GETs a flow page, asks
+the executor for a "challenge", posts an answer, gets the next challenge. This
+walks the same executor instead of a browser, so an authentik upgrade changing
+that API is the most likely thing to break it.
 """
 
 from __future__ import annotations
@@ -85,8 +83,8 @@ class Idp:
     def signed_in_as(self) -> str | None:
         """Who authentik thinks this browser is, or None for nobody.
 
-        The check that says whether single logout actually did anything. Reaching
-        the end of the logout flow is not the same as the session being gone.
+        Confirms single logout actually ended the session, since reaching the
+        end of the logout flow isn't the same thing.
         """
         response = self.http.get("/api/v3/core/users/me/")
         if response.status_code != 200:
@@ -121,8 +119,7 @@ class Idp:
                 return {str(k): str(v) for k, v in attrs.items()}
 
             if component == "xak-flow-redirect":
-                # Off to another flow — the authorization one, which is where the
-                # assertion gets built.
+                # Off to the authorization flow, where the assertion gets built.
                 slug, query = self.flow_at(str(challenge["to"]))
                 print(f"  flow: {slug}")
                 challenge = self.challenge(slug, query)
@@ -164,7 +161,7 @@ def main() -> int:
     print(f"  SAMLResponse: {len(fields['SAMLResponse'])} chars")
     print(f"  RelayState:   {fields.get('RelayState', '(none)')[:24]}…")
 
-    # Somewhere to save the assertion, for use as a test fixture. That is where
+    # Optionally save the assertion as a test fixture — this is where
     # tests/fixtures/authentik-response.b64 came from.
     dump_to = os.environ.get("DUMP_ASSERTION")
     if dump_to:
@@ -181,8 +178,8 @@ def main() -> int:
     print(f"  session cookie set: {bool(accepted.cookies.get('iam_session'))}")
 
     step("4. use the session on /api/me")
-    # Naming a user who does not exist, so the development stand-in cannot be what
-    # answers this. A 200 here means the cookie did it.
+    # Names a user who doesn't exist, so a 200 here can only mean the cookie
+    # worked, not the development stand-in.
     who = console.get("/api/me", headers={"X-Dev-Actor": "nobody@demo.local"})
     print(f"HTTP {who.status_code}")
     print(f"  {who.text}")
@@ -206,9 +203,8 @@ def main() -> int:
     assert idp.signed_in_as() is None, "the provider still has them signed in"
 
     step("7. logging in again has to ask for the password")
-    # The whole point of single logout. Without it this goes straight through and
-    # the person is back in without typing anything, which is a surprising thing to
-    # watch happen immediately after pressing sign out.
+    # Without single logout working, this would go straight through and sign
+    # the person back in without asking for anything.
     restarted = console.get("/saml/login", params={"idp": "authentik"})
     slug, query = idp.flow_at(restarted.headers["location"])
     first_stage = idp.challenge(slug, query).get("component")

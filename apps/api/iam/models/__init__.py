@@ -1,11 +1,8 @@
 """The database tables.
 
-Every model file has to be imported here. Alembic looks at Base.metadata to work
-out what migrations to write, and a table it never imported is simply invisible —
-you get an empty migration instead of an error, which is worse.
-
-It also means SQLAlchemy sorts out the relationships that refer to each other by
-name ("Group", "AppAssignment") on import rather than on the first query.
+Every model file must be imported here so Alembic sees it in Base.metadata.
+A table that isn't imported won't show up in migrations, and you won't get
+an error for it either.
 """
 
 from __future__ import annotations

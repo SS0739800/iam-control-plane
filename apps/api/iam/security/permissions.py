@@ -29,36 +29,34 @@ class Permission(StrEnum):
     ROLES_READ = "roles:read"
     """See who has been given what in this console, and the history of it.
 
-    Review work, so helpdesk and auditor get it. Being able to see that somebody
-    is an admin is not a power; being unable to see it is how an unnoticed admin
-    happens."""
+    Review work, so helpdesk and auditor get it. Being able to see that
+    somebody is an admin isn't a power; being unable to see it is how an
+    unnoticed admin happens."""
 
     ROLES_WRITE = "roles:write"
-    """Grant or revoke a console role. Admin only, and it must never be widened.
+    """Grant or revoke a console role. Admin only, must never be widened.
 
-    Deliberately not part of users:write, which helpdesk holds. If granting a role
-    were a user edit, then anybody who can fix a name could make themselves an
-    admin, and the whole permission table would be decoration. This is the one
-    permission that can create more of itself, which is exactly why it gets its
-    own line and the narrowest possible audience."""
+    Kept separate from users:write, which helpdesk holds. If granting a role
+    were just a user edit, anybody who can fix a name could make themselves
+    an admin. This is the one permission that can create more of itself, so
+    it gets its own line and the narrowest audience."""
 
     IDP_READ = "idp:read"
     IDP_WRITE = "idp:write"
     """Configure which outside systems we believe about identity. Admin only.
 
-    Covers both halves of that: registering an identity provider, and issuing or
-    revoking the tokens that let a system provision people into the directory.
-    They are the same decision asked twice — one at the moment somebody logs in,
-    the other continuously — and both reduce to "whoever controls this can decide
-    who exists here".
+    Covers registering an identity provider and issuing or revoking the
+    tokens that let a system provision people into the directory. Both boil
+    down to "whoever controls this decides who exists here", one checked at
+    login and the other continuously.
 
-    Helpdesk and auditor can look, so they can answer "is SSO configured" and "is
-    the sync running". Neither can change it."""
+    Helpdesk and auditor can look, so they can answer "is SSO configured" and
+    "is the sync running". Neither can change it."""
 
     AUDIT_READ = "audit:read"
     AUDIT_VERIFY = "audit:verify"
-    """Run the tamper check on the audit log. Kept separate from just reading it,
-    because it's the auditor's job rather than everyday lookup."""
+    """Run the tamper check on the audit log. Kept separate from reading it,
+    since it's the auditor's job rather than everyday lookup."""
 
 
 # Spelled out because mypy reads `frozenset(Permission)` as frozenset[str], which

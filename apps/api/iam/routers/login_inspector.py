@@ -1,13 +1,11 @@
 """The login inspector: what happened on every sign-in attempt, and why.
 
-This is the payoff for doing the checks ourselves instead of calling one library
-function. Every login writes all ten named results into its audit entry, so a
-login that stopped working says "the clock is three minutes out" rather than
-"invalid assertion". See docs/adr/0005-validate-assertions-ourselves.md.
+Every login writes all ten named check results into its audit entry, so a
+failed login says "the clock is three minutes out" instead of "invalid
+assertion". See docs/adr/0005-validate-assertions-ourselves.md.
 
-There is no table behind this. It reads the audit log, which means the inspector
-inherits the log's properties for free: entries can't be edited, can't be deleted,
-and the tamper check covers them.
+No table behind this — it reads the audit log directly, so entries can't
+be edited or deleted, and the tamper check covers them too.
 """
 
 from __future__ import annotations
@@ -35,9 +33,9 @@ LOGIN_ACTIONS = ("saml.login_succeeded", "saml.login_failed")
 def _checks(detail: dict[str, Any]) -> list[LoginCheck]:
     """The check results off an audit entry.
 
-    Written defensively on purpose. These entries are permanent, so an entry from
-    an older version of the code has whatever shape it had then, and the inspector
-    has to keep working rather than 500 on the oldest row in the table.
+    Written defensively since entries are permanent — an older entry has
+    whatever shape the code had back then, and this has to keep working on
+    it instead of erroring on the oldest row in the table.
     """
     raw = detail.get("checks")
     if not isinstance(raw, list):
@@ -103,10 +101,9 @@ async def list_login_attempts(
     if outcome is not None:
         filters.append(AuditEvent.outcome == outcome)
     if idp:
-        # From the detail, not from target_label. A successful login names the
-        # provider by its display name and a refused one by its slug, so filtering
-        # on the target would match one and miss the other — and the failures are
-        # the ones anybody comes to this screen for.
+        # From the detail, not target_label — a success names the provider
+        # by display name, a failure by slug, so filtering on target would
+        # miss one of them.
         filters.append(AuditEvent.detail["idp"].as_string() == idp)
 
     if cursor:
@@ -141,12 +138,12 @@ async def list_login_attempts(
 async def get_login_attempt(event_id: int, session: SessionDep) -> LoginAttemptDetail:
     """One login, including the document itself when we kept it.
 
-    Only failures keep the document. A login that passed all ten checks has nothing
-    to look at, and storing an assertion per login forever is a lot of somebody's
-    personal data for no reason.
+    Only failures keep the document — a passing login has nothing to look
+    at, and storing an assertion per login forever is unnecessary personal
+    data.
 
-    The XML comes back as it arrived rather than reformatted. An inspector exists to
-    show what was actually sent — reformatting is the one thing it shouldn't do.
+    The XML comes back as it arrived, not reformatted, so it shows exactly
+    what was sent.
     """
     event = await session.scalar(
         select(AuditEvent).where(AuditEvent.id == event_id, AuditEvent.action.in_(LOGIN_ACTIONS))

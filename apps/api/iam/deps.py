@@ -1,17 +1,16 @@
 """Bits and pieces that route handlers ask for.
 
-Settings come off app.state rather than the cached get_settings() singleton. That
-way a test can build an app with its own settings without having to clear caches
-or reach into module globals.
+Settings come off app.state rather than the cached get_settings() singleton, so a
+test can build an app with its own settings without clearing caches or reaching
+into module globals.
 """
 
 from __future__ import annotations
 
 from typing import Annotated
 
-# These need to be real imports, not TYPE_CHECKING ones. FastAPI reads the type
-# hints on dependency functions when it starts, and it can't resolve a name that
-# only exists for the type checker.
+# Real imports, not TYPE_CHECKING ones: FastAPI reads these type hints at
+# startup and can't resolve a name that only exists for the type checker.
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -1,18 +1,17 @@
 """Checking that a SCIM request is from somebody we let write to the directory.
 
-Bearer tokens, not the session cookie. The two are for different callers and
-conflating them would be a mistake in both directions: a SCIM client is a machine
-with no browser and no login, and a person's session should never be usable to
-rewrite the directory wholesale.
+Uses bearer tokens, not the session cookie. A SCIM client is a machine with
+no browser and no login, and a person's session should never be usable to
+rewrite the whole directory.
 
-That separation is also why this doesn't go through resolve_actor. An Actor is a
-person with a role and a permission set; a SCIM client is not a person and has
-exactly one power, which is to write the directory. Modelling it as an Actor
-would mean inventing a fake user to hang it off, and then something in the
-console would eventually treat that fake user as real.
+This also doesn't go through resolve_actor: an Actor is a person with a role
+and a permission set, but a SCIM client isn't a person - it has exactly one
+power, writing the directory. Modeling it as an Actor would mean inventing a
+fake user for it, and something in the console would eventually treat that
+fake user as real.
 
-Failures answer in SCIM's error shape, because a provider reading a FastAPI
-``{"detail": ...}`` learns nothing it can act on.
+Failures answer in SCIM's error shape, since a provider reading a FastAPI
+`{"detail": ...}` can't act on that.
 """
 
 from __future__ import annotations
@@ -37,18 +36,18 @@ BEARER_PREFIX = "bearer "
 LAST_USED_INTERVAL = dt.timedelta(minutes=5)
 """How stale the last-used stamp has to be before we write a new one.
 
-A full sync is thousands of requests in a couple of minutes. Stamping every one
-would turn a read into a write for no benefit — the question this column answers
-is "has this token been used this month", and five minutes of lag is invisible
-to it.
+A full sync is thousands of requests in a couple of minutes. Stamping every
+one would turn a read into a write for no benefit - this column only needs
+to answer "has this token been used this month", and five minutes of lag
+doesn't matter for that.
 """
 
 
 def _unauthorised(detail: str) -> ScimError:
     """401 in SCIM's shape.
 
-    No scimType: the spec doesn't define one for authentication, and inventing a
-    value is worse than leaving it out.
+    No scimType: the spec doesn't define one for authentication, and
+    inventing a value is worse than leaving it out.
     """
     return ScimError(status.HTTP_401_UNAUTHORIZED, detail)
 
@@ -79,12 +78,12 @@ async def authenticate_scim_client(
 ) -> ScimClient:
     """Work out which SCIM client is calling, or refuse the request.
 
-    The token is looked up by its hash, so a database that leaks doesn't hand
+    The token is looked up by its hash, so a leaked database doesn't hand
     anybody the ability to write to the directory.
 
-    Every failure says the same thing. "No such token" and "that token was
-    revoked" are different facts, and telling them apart out loud would let
-    somebody with a list of candidate tokens learn which ones were once real.
+    Every failure says the same thing, even though "no such token" and "that
+    token was revoked" are different facts - telling them apart would let
+    someone with a list of candidate tokens learn which ones were once real.
 
     Raises:
         ScimError: 401 for a missing, unknown, revoked or disabled token.

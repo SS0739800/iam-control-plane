@@ -1,13 +1,8 @@
-"""Who has been given what, and why.
+"""Who has been given a console role, by whom, and when.
 
-Until now someone's console role was a column on their row, which answers "what
-can this person do" and nothing else. It can't answer who decided that, when,
-whether it was supposed to be temporary, or whether anyone ever took it away.
-Those are the questions an access review is made of, so the grant becomes a row
-of its own and the column becomes a cache of it.
-
-One active grant per person, enforced by the database rather than by hope. See
-the index at the bottom for why that constraint is the whole design.
+Each grant is its own row (who granted it, when, whether it expired or was
+revoked) instead of just a role column on the user. A user can have at most
+one active grant, enforced by the unique index at the bottom.
 """
 
 from __future__ import annotations
@@ -28,10 +23,10 @@ if TYPE_CHECKING:
 
 
 class RevokedGrantReason:
-    """Why a grant stopped applying. Recorded so a review can say which."""
+    """Why a grant stopped applying."""
 
     REVOKED = "revoked"
-    """Somebody took it away on purpose."""
+    """Someone took it away."""
 
     SUPERSEDED = "superseded"
     """A different role was granted, replacing this one."""
@@ -40,16 +35,14 @@ class RevokedGrantReason:
     """It had an end date and the date passed."""
 
     USER_DEACTIVATED = "user_deactivated"
-    """They left. The leaver flow cut it."""
+    """They left, and the leaver flow cut it."""
 
 
 class RoleGrant(UUIDPrimaryKey, Timestamps, Base):
     """One decision to give one person a console role.
 
-    Kept forever, revoked rather than deleted. "She was an admin for three weeks
-    in March, granted by Priya for the migration, and it expired on its own" is
-    exactly the sentence an access review needs to be able to produce, and
-    deleting the row makes it unsayable.
+    Rows are kept and revoked, never deleted, so an access review can see
+    full history (who granted what, when, and why it ended).
     """
 
     __tablename__ = "role_grants"
@@ -62,7 +55,7 @@ class RoleGrant(UUIDPrimaryKey, Timestamps, Base):
     role: Mapped[PlatformRole] = mapped_column(
         enum_type(PlatformRole),
         nullable=False,
-        comment="Never 'employee' — that's the absence of a grant, not a grant.",
+        comment="Never 'employee'. That role means no grant, not a grant of it.",
     )
 
     source: Mapped[GrantSource] = mapped_column(
@@ -74,8 +67,7 @@ class RoleGrant(UUIDPrimaryKey, Timestamps, Base):
 
     reason: Mapped[str | None] = mapped_column(
         Text,
-        comment="Why they were given it. Free text, because the real reasons don't "
-        "fit a dropdown.",
+        comment="Why they were given it. Free text.",
     )
 
     # ------------------------------------------------------------ who did it
@@ -85,8 +77,8 @@ class RoleGrant(UUIDPrimaryKey, Timestamps, Base):
     granted_by_label: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        comment="Copy of the granter's name, kept because the id goes null if they "
-        "are ever deleted and 'granted by nobody' is not an acceptable answer.",
+        comment="Copy of the granter's name. Kept even if the granter is later "
+        "deleted, since granted_by_id would go null.",
     )
 
     expires_at: Mapped[dt.datetime | None] = mapped_column(
@@ -102,7 +94,7 @@ class RoleGrant(UUIDPrimaryKey, Timestamps, Base):
     revoked_by_label: Mapped[str | None] = mapped_column(String(255))
     revoked_reason: Mapped[str | None] = mapped_column(
         String(200),
-        comment="One of RevokedGrantReason, or free text for a person's own wording.",
+        comment="One of RevokedGrantReason, or free text.",
     )
 
     user: Mapped[User] = relationship(
@@ -111,23 +103,16 @@ class RoleGrant(UUIDPrimaryKey, Timestamps, Base):
     )
 
     def is_live(self, *, now: dt.datetime) -> bool:
-        """Whether this grant is actually giving anybody anything right now."""
+        """Whether this grant is currently in effect."""
         if self.revoked_at is not None:
             return False
         return not (self.expires_at is not None and self.expires_at <= now)
 
     __table_args__ = (
-        # At most one grant per person that hasn't been revoked. This is the
-        # constraint the whole module is built around, and it is in the database
-        # rather than in Python because two simultaneous grants would otherwise
-        # race: both read "no existing grant", both insert, and the person now has
-        # two roles with no defined winner.
-        #
-        # Expiry is deliberately not part of this. An expired grant still occupies
-        # the slot until something revokes it with reason 'expired', which keeps
-        # the invariant a plain "one unrevoked row" that the database can check.
-        # Granting a new role supersedes whatever was there, expired or not, so
-        # this never blocks a legitimate change.
+        # At most one unrevoked grant per user. Enforced in the database so two
+        # concurrent grants can't both succeed and leave two "active" roles.
+        # An expired grant still counts as unrevoked until something revokes it
+        # with reason 'expired' — granting a new role supersedes it either way.
         Index(
             "one_live_role_grant_per_user",
             "user_id",

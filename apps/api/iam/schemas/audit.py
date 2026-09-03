@@ -1,8 +1,7 @@
 """Audit entries and the tamper check, as the API sends them.
 
-The fingerprints are included on purpose. They aren't secret, they're the proof.
-Showing them turns "we have an audit log" into something you can actually look at,
-and the P2 login inspector builds on the same idea.
+Hashes are included because they aren't secret, they're the proof the log
+is intact.
 """
 
 from __future__ import annotations

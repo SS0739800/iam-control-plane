@@ -1,10 +1,9 @@
 """Tests for /scim/v2/Groups and the discovery documents.
 
-Membership is what these are about. The test that matters most is the pair
-covering ``add`` against ``replace``: add puts somebody in and leaves everyone
-else alone, replace sets the list to exactly what arrived. Treating an add as a
-replace empties groups, and does it quietly — the request succeeds and the
-members are simply gone.
+Membership is what these are about. The pair that matters most covers `add`
+vs `replace`: add puts somebody in and leaves everyone else alone, replace
+sets the list to exactly what arrived. Treating an add as a replace empties
+a group quietly - the request succeeds and the members are simply gone.
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -77,8 +76,9 @@ def patch(client: TestClient, caller: ScimCaller, group_id: str, *ops: dict[str,
 
 
 def test_what_we_claim_to_support_is_what_we_do(db_client: TestClient, caller: ScimCaller) -> None:
-    """A provider plans its whole sync around this document. Overstating support
-    doesn't get us more functionality — it gets a provider confidently doing something we refuse.
+    """A provider plans its whole sync around this document. Overstating
+    support doesn't get more functionality - it gets a provider confidently
+    doing something we then refuse.
     """
     document = db_client.get("/scim/v2/ServiceProviderConfig", headers=caller.headers).json()
 
@@ -106,8 +106,7 @@ def test_the_resource_types_are_the_ones_we_serve(
 def test_the_schemas_say_group_membership_is_read_only_on_a_person(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The load-bearing line in that document: it is how a provider is told to
-    write membership on the group rather than on the person."""
+    """Tells a provider to write membership on the group, not the person."""
     document = db_client.get("/scim/v2/Schemas", headers=caller.headers).json()
     user_schema = next(s for s in document["Resources"] if s["id"] == USER_SCHEMA)
     groups = next(a for a in user_schema["attributes"] if a["name"] == "groups")
@@ -189,7 +188,7 @@ def test_a_group_that_is_not_there(db_client: TestClient, caller: ScimCaller) ->
 def test_add_puts_somebody_in_without_removing_anybody(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """Half of the pair that matters. Add is not replace."""
+    """Half of the pair that matters: add is not replace."""
     first = make_person(db_client, caller, caller.user_name)
     second = make_person(db_client, caller, caller.other_user_name)
     group = make_group(db_client, caller, [first])
@@ -207,8 +206,8 @@ def test_add_puts_somebody_in_without_removing_anybody(
 def test_replace_sets_the_membership_to_exactly_what_arrived(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """The other half. Replace removes anybody not in the list, which is what it
-    means and why it must never be reached by a request that said add."""
+    """The other half: replace removes anybody not in the list. Must never
+    be reached by a request that said add."""
     first = make_person(db_client, caller, caller.user_name)
     second = make_person(db_client, caller, caller.other_user_name)
     group = make_group(db_client, caller, [first, second])
@@ -224,7 +223,7 @@ def test_replace_sets_the_membership_to_exactly_what_arrived(
 
 
 def test_removing_one_person_by_id(db_client: TestClient, caller: ScimCaller) -> None:
-    """The path form a provider sends when somebody leaves a team."""
+    """The form a provider sends when somebody leaves a team."""
     first = make_person(db_client, caller, caller.user_name)
     second = make_person(db_client, caller, caller.other_user_name)
     group = make_group(db_client, caller, [first, second])
@@ -240,7 +239,7 @@ def test_removing_one_person_by_id(db_client: TestClient, caller: ScimCaller) ->
 
 
 def test_removing_with_no_ids_clears_the_group(db_client: TestClient, caller: ScimCaller) -> None:
-    """What a provider means when it empties a group. The spec allows it."""
+    """What a provider means when it empties a group - the spec allows it."""
     first = make_person(db_client, caller, caller.user_name)
     group = make_group(db_client, caller, [first])
 
@@ -252,7 +251,7 @@ def test_removing_with_no_ids_clears_the_group(db_client: TestClient, caller: Sc
 def test_adding_the_same_person_twice_is_harmless(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """Providers re-send during a full sync and assume repeating themselves is safe."""
+    """Providers re-send during a full sync, assuming repeats are safe."""
     person = make_person(db_client, caller, caller.user_name)
     group = make_group(db_client, caller, [person])
 
@@ -269,7 +268,7 @@ def test_adding_the_same_person_twice_is_harmless(
 def test_a_member_who_does_not_exist_is_skipped_not_fatal(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """One stale id in a list of two hundred should not lose the other 199."""
+    """One stale id in a list of two hundred shouldn't lose the other 199."""
     person = make_person(db_client, caller, caller.user_name)
     group = make_group(db_client, caller)
 
@@ -305,7 +304,7 @@ def test_a_member_id_that_is_not_an_id_is_skipped(
 
 
 def test_the_person_sees_the_group_they_are_in(db_client: TestClient, caller: ScimCaller) -> None:
-    """Read-only on that side, and the reflection has to actually work."""
+    """Read-only on that side, but the reflection has to actually work."""
     person = make_person(db_client, caller, caller.user_name)
     make_group(db_client, caller, [person])
 
@@ -375,8 +374,8 @@ def test_put_replaces_the_membership_wholesale(db_client: TestClient, caller: Sc
 
 
 def test_deleting_a_group_keeps_the_people(db_client: TestClient, caller: ScimCaller) -> None:
-    """A group is a container, not somebody's record. Deleting it takes the
-    membership rows and nothing else."""
+    """A group is a container, not somebody's record - deleting it takes
+    the membership rows and nothing else."""
     person = make_person(db_client, caller, caller.user_name)
     group = make_group(db_client, caller, [person])
 

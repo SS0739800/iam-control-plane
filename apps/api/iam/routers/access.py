@@ -1,19 +1,17 @@
 """Granting and revoking console roles.
 
-Until now the only way to make somebody an admin was the development stand-in or
-a hand-written UPDATE. This is what replaces that.
+Before this, the only way to make somebody an admin was the dev stand-in or
+a hand-written UPDATE.
 
-Two safeguards are worth reading before changing anything here.
+Two things worth knowing:
 
-**roles:write, not users:write.** Helpdesk holds users:write. If granting a role
-were an ordinary user edit, anybody who can correct a misspelled name could make
-themselves an admin, and the permission table would be decoration.
+This requires roles:write, not users:write. Helpdesk holds users:write, and
+if granting a role were an ordinary user edit, anyone who can fix a
+misspelled name could make themselves admin.
 
-**The last admin cannot be removed.** Not as a convenience — as the difference
-between a system you can recover and one you cannot. There is no root account and
-no back door, so the last admin leaving means nobody can grant anything ever
-again, and the fix would be a hand-written UPDATE, which is the thing this module
-exists to eliminate.
+The last admin can't be removed. There's no root account or back door, so
+if the last admin goes, nobody can grant anything again except by a
+hand-written UPDATE — the thing this module exists to replace.
 """
 
 from __future__ import annotations
@@ -205,8 +203,8 @@ async def create_role_grant(
                 "role": str(payload.role),
                 "reason": payload.reason,
                 "expires_at": payload.expires_at.isoformat() if payload.expires_at else None,
-                # Recorded because "who made whom an admin" is the first question
-                # asked after anything goes wrong.
+                # Recorded since "who made whom an admin" is usually the
+                # first question after something goes wrong.
                 "granted_by": actor.user_name,
                 "self_grant": actor.user_id == user.id,
             },

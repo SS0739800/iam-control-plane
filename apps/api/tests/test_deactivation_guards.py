@@ -1,23 +1,17 @@
 """Refusing the two deactivations that cannot be undone.
 
-Marking somebody as having left is the most consequential thing the console does:
-it revokes every session they hold immediately, and ``/saml/acs`` refuses their next
-login — a provider will happily sign them in, and ours is the answer that counts.
+Marking somebody as having left revokes every session immediately, and
+``/saml/acs`` refuses their next login. There's no self-service way back —
+``active`` only gets set true when a user row is created, so recovery means
+SSH and hand-written SQL.
 
-There is no self-service way back. ``active`` is set to true only when a user row is
-*created*, so logging in again does not rescue anybody, and ``grant_first_admin``
-grants a role rather than reactivating a person. Recovery means SSH and hand-written
-SQL.
-
-Two cases turn that from a strong action into an unrecoverable one, and neither was
-guarded when the console first grew a button for this:
-
-**Deactivating yourself.** Your sessions end mid-request and you cannot sign back in.
-
-**Deactivating the last admin.** Nobody is left who can grant anything, including the
-ability to undo it. The rule already existed for *revoking* an admin's grant, in
-iam/routers/access.py — but switching somebody off empties the same set just as
-surely, and that door was open.
+Two cases would turn that into a real problem, and neither was guarded
+when the console first grew a button for this: deactivating yourself (your
+own sessions end mid-request and you can't sign back in), and deactivating
+the last admin (nobody left who can grant anything, including undoing it —
+the same rule already existed for revoking an admin's grant, in
+iam/routers/access.py, but switching someone off empties the set just as
+surely).
 
 These need Postgres and skip without IAM_TEST_DATABASE_URL.
 """
@@ -50,12 +44,11 @@ BOOTSTRAP = Granter(user_id=None, label="tests")
 def somebody(console: ConsoleUsers) -> Iterator[uuid.UUID]:
     """An ordinary person, safe to deactivate.
 
-    Cleaned up afterwards, and that matters more than it looks here. One test promotes
-    this person to admin, and "is this the last admin" is a question about the whole
-    database — so a leaked admin from a failed run makes the last-admin test pass for
-    the wrong reason on the next one. That is exactly what happened while writing this
-    file: two leftover admins sat in the test database and the guard correctly declined
-    to fire.
+    Cleanup matters here: one test promotes this person to admin, and "is
+    this the last admin" depends on the whole database, so a leaked admin
+    from a failed run would make the last-admin test pass for the wrong
+    reason next time. This actually happened once — two leftover admins
+    sat in the test database and the guard correctly declined to fire.
     """
     user_name = f"leaver.{console.suffix}@demo.local"
 
@@ -141,8 +134,8 @@ def test_you_cannot_mark_yourself_as_having_left(
 def test_the_refusal_says_what_it_would_have_done(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """Not just "no". Somebody who wanted this needs to know why it is refused and
-    what to do instead, or they will reach for the database."""
+    """Not just "no" — needs to say why, and what to do instead, or
+    someone will reach for the database."""
     me = console.id_of(console.admin)
 
     refused = db_client.patch(f"/api/users/{me}", json={"active": False}, headers=console.as_admin)
@@ -171,7 +164,7 @@ def test_somebody_who_is_not_an_admin_also_cannot_deactivate_themselves(
 def test_you_may_still_change_your_own_other_fields(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """The guard is narrow on purpose: only `active: false`, only for yourself."""
+    """The guard is narrow: only `active: false`, only for yourself."""
     me = console.id_of(console.admin)
 
     response = db_client.patch(
@@ -183,8 +176,8 @@ def test_you_may_still_change_your_own_other_fields(
 
 
 def test_reactivating_yourself_is_not_refused(db_client: TestClient, console: ConsoleUsers) -> None:
-    """Only `active: false` is dangerous. Sending true is a no-op for somebody who is
-    already active, and refusing it would be a rule with no purpose."""
+    """Only `active: false` is dangerous — sending true is a no-op for
+    someone already active."""
     me = console.id_of(console.admin)
 
     response = db_client.patch(f"/api/users/{me}", json={"active": True}, headers=console.as_admin)
@@ -198,14 +191,12 @@ def test_reactivating_yourself_is_not_refused(db_client: TestClient, console: Co
 def test_the_last_admin_cannot_be_marked_as_having_left(
     db_client: TestClient, console: ConsoleUsers
 ) -> None:
-    """Deactivating an admin empties the set of people who can grant anything, exactly
-    as revoking their grant would — and that door was already shut.
+    """Deactivating an admin empties the set of people who can grant
+    anything, same as revoking their grant.
 
-    Asked by helpdesk rather than by the admin themselves. Helpdesk holds users:write,
-    so they are allowed to deactivate people, and routing the request through somebody
-    else is what makes this test about the last-admin rule instead of the
-    self-deactivation one. The first version had the admin target themselves and passed
-    for entirely the wrong reason.
+    Asked by helpdesk, not the admin themselves, so this tests the
+    last-admin rule and not the self-deactivation one. The first version
+    had the admin target themselves and passed for the wrong reason.
     """
     admin_id = console.id_of(console.admin)
 
@@ -267,10 +258,9 @@ def test_a_non_admin_can_be_deactivated_even_when_they_are_the_only_one_of_their
 def test_a_deactivated_admin_stops_counting_towards_the_last_admin_rule(
     console: ConsoleUsers, somebody: uuid.UUID
 ) -> None:
-    """The point of count_live_admins excluding inactive people.
-
-    An admin who cannot sign in is no help when the last other admin is being removed,
-    so they must not keep the count above one.
+    """count_live_admins excludes inactive people: an admin who can't sign
+    in is no help when the last other admin is being removed, so they
+    shouldn't keep the count up.
     """
     now = dt.datetime.now(dt.UTC)
 
@@ -301,11 +291,9 @@ def test_a_deactivated_admin_stops_counting_towards_the_last_admin_rule(
 
 
 def test_the_dashboard_counts_live_admins(db_client: TestClient, console: ConsoleUsers) -> None:
-    """So the console can say "nobody can administer this" instead of only failing.
-
-    Counted from the grants rather than users.platform_role, which is a cache. This
-    number is the difference between "somebody can fix this" and "somebody needs a
-    shell", so it must not depend on a cache being right.
+    """So the console can say "nobody can administer this" instead of
+    just failing. Counted from the grants, not the cached platform_role
+    column, so it doesn't depend on the cache being right.
     """
     counts = db_client.get("/api/dashboard", headers=console.as_admin)
 
@@ -314,11 +302,9 @@ def test_the_dashboard_counts_live_admins(db_client: TestClient, console: Consol
 
 
 def test_a_deactivated_admin_does_not_count(db_client: TestClient, console: ConsoleUsers) -> None:
-    """The case that locked this deployment out.
-
-    Okta deactivated the only admin, which revoked the grant. An admin who cannot
-    sign in is no help, so they must not keep the number above zero and make the
-    console look healthy.
+    """Regression test for a real lockout: Okta deactivated the only
+    admin, which revoked the grant. An admin who can't sign in shouldn't
+    keep this count above zero and make the console look healthy.
     """
     before = db_client.get("/api/dashboard", headers=console.as_admin).json()["live_admins"]
 

@@ -1,21 +1,20 @@
-"""/scim/v2/Users — the provider writing people into our directory.
+"""/scim/v2/Users - the provider writing people into our directory.
 
-This is the endpoint that makes P2's just-in-time creation a fallback rather than
-the plan. Somebody created here exists from the moment HR added them upstream,
-with their department and their manager, instead of appearing as a bare username
-the first time they happen to log in.
+Somebody created here exists from the moment HR added them upstream, with
+department and manager already set, instead of appearing as a bare username
+the first time they happen to log in (P2's just-in-time creation is now just
+a fallback).
 
-Two behaviours are worth reading before changing anything.
+Two things worth knowing before changing anything:
 
-**DELETE deactivates.** It does not delete. The row stays, `active` goes false,
-and every session they have is cut. That is what a provider means by DELETE —
-"this person has left" — and it is the only reading compatible with an audit log
-that still has to answer what they had access to. See the handler.
-
-**Everything is idempotent.** Providers re-send during a full sync, retry on
-timeouts, and generally assume that doing the same thing twice is safe. Creating
-somebody who exists answers 409 with the id, deactivating somebody already
-inactive answers 200, and neither writes an audit entry saying nothing changed.
+- DELETE deactivates, it doesn't delete. The row stays, `active` goes false,
+  and every session they have is cut. That's what a provider means by
+  DELETE ("this person has left"), and it's what lets the audit log still
+  answer what they had access to. See the handler.
+- Everything is idempotent. Providers re-send during a full sync and retry
+  on timeouts, so creating somebody who exists answers 409 with the id,
+  deactivating somebody already inactive answers 200, and neither writes an
+  audit entry saying nothing changed.
 """
 
 from __future__ import annotations
@@ -53,9 +52,8 @@ router = APIRouter(prefix=f"{SCIM_PREFIX}/Users", tags=["scim"])
 async def _load(session: SessionDep, user_id: str) -> User:
     """One person by id, or a SCIM 404.
 
-    The id comes off the URL as whatever the provider put there, so a malformed
-    one has to answer 404 rather than raising on the UUID parse. A provider
-    asking about a resource that cannot exist is asking about one that doesn't.
+    The id comes off the URL as whatever the provider put there, so a
+    malformed one answers 404 instead of raising on the UUID parse.
     """
     try:
         parsed = uuid.UUID(user_id)
@@ -92,10 +90,9 @@ async def _record(
 ) -> None:
     """Write down what the provider did.
 
-    Attributed to the SCIM client rather than to a person, because no person was
-    involved. "authentik deactivated this account at 02:14" is the sentence
-    somebody needs six months later, and it is not available if this is logged as
-    though the user did it to themselves.
+    Attributed to the SCIM client, not a person, since no person was
+    involved - so someone can find "authentik deactivated this account at
+    02:14" six months later instead of it looking like the user did it.
     """
     await append_event(
         session,
@@ -128,17 +125,18 @@ async def list_users(
 ) -> Response:
     """People, filtered and paged the way SCIM asks for.
 
-    Almost every call here is a provider asking "do you already have this one?"
-    before deciding whether to create or update. That is why an unreadable filter
-    is an error rather than being ignored — see iam/scim/filters.py.
+    Almost every call here is a provider asking "do you already have this
+    one?" before deciding whether to create or update, which is why an
+    unreadable filter is an error rather than being ignored - see
+    iam/scim/filters.py.
     """
     conditions = []
     if filter_:
         comparison = parse_user_filter(filter_)
         column = getattr(User, comparison.column)
-        # Case-insensitive on the text columns, because providers are not
-        # consistent about the case of an email address and matching exactly
-        # would create a second account for the same person.
+        # Case-insensitive on the text columns, since providers aren't
+        # consistent about the case of an email address, and matching
+        # exactly would create a second account for the same person.
         conditions.append(
             column.is_(comparison.value)
             if comparison.is_boolean
@@ -188,25 +186,24 @@ async def create_user(
 ) -> Response:
     """Add somebody the provider has told us about.
 
-    A userName that already exists answers 409 with scimType uniqueness rather
-    than creating a duplicate. That is not just correctness about the spec: it is
-    what lets a provider recover, because it reads that code and switches to
-    updating the person instead of reporting a failed sync forever.
+    A userName that already exists answers 409 with scimType uniqueness
+    instead of creating a duplicate, so the provider can recover by reading
+    that code and switching to update instead of retrying a failed sync
+    forever.
 
-    Somebody who already exists gets a 409 whatever created them, including
-    somebody P2 created just-in-time at their first login. That is not a dead end:
-    a provider searches by userName before creating, finds them, and updates them
-    instead — and that update is what promotes a just-in-time record to a
-    SCIM-managed one. See _adopt.
+    That includes somebody P2 created just-in-time at their first login: the
+    provider searches by userName, finds them, and updates them instead -
+    that update is what promotes a just-in-time record to a SCIM-managed
+    one. See _adopt.
     """
     values = user_fields_from_scim(payload)
     user_name = str(values["user_name"])
 
-    # SCIM does not require an email and our column does. A provider that sends
-    # none gets the userName used instead, which is nearly always an address —
-    # the same fallback read_claims makes for a SAML login, for the same reason.
-    # If it isn't one, refuse clearly rather than letting the insert fail: a 500
-    # tells the provider nothing, and it would retry forever.
+    # SCIM doesn't require an email but our column does. A provider that
+    # sends none gets the userName used instead (usually an address anyway,
+    # same fallback as a SAML login). If it isn't one, refuse clearly rather
+    # than letting the insert fail - a 500 tells the provider nothing and it
+    # would retry forever.
     if "email" not in values:
         if "@" in user_name:
             values["email"] = user_name
@@ -264,10 +261,10 @@ async def replace_user(
 ) -> Response:
     """Overwrite what the provider owns, leave the rest alone.
 
-    "Replace" in SCIM means the resource, not the row. Fields the document does
-    not carry keep their values rather than being blanked, and fields SCIM is not
-    allowed to write — what somebody may do in this console, most of all — are
-    untouched whatever the document says. See WRITABLE_USER_FIELDS.
+    "Replace" in SCIM means the resource, not the row. Fields the document
+    doesn't carry keep their values instead of being blanked, and fields
+    SCIM can't write - console permissions, most of all - are untouched no
+    matter what the document says. See WRITABLE_USER_FIELDS.
     """
     user = await _load(session, user_id)
     values = user_fields_from_scim(payload)
@@ -296,9 +293,9 @@ async def replace_user(
     if was_active and not user.active:
         await _cut_access(session, request, client, user)
     elif touches_rules(changed) or (not was_active and user.active):
-        # Reactivation counts. A rule is a standing statement about attributes, not
-        # a past decision, so it applies again — see the note in iam/access/rules.py
-        # on why that isn't a contradiction of the leaver flow.
+        # Reactivation counts too - a rule is a standing statement about
+        # attributes, not a past decision, so it applies again. See the note
+        # in iam/access/rules.py on why that doesn't contradict the leaver flow.
         await _apply_rules(session, request, client, user)
 
     await session.commit()
@@ -312,14 +309,14 @@ async def replace_user(
 def _adopt(user: User) -> bool:
     """Promote a just-in-time record to a SCIM-managed one, if that's what happened.
 
-    Somebody created by logging in exists as a bare username. The first time the
-    provider writes to them, they stop being that: the directory upstream now owns
-    the record, and the console should stop offering to hand-edit fields the next
-    sync would overwrite anyway.
+    Somebody created by logging in exists as a bare username. The first
+    time the provider writes to them, the directory upstream now owns the
+    record, and the console should stop offering to hand-edit fields the
+    next sync would overwrite anyway.
 
-    Deliberately decided here rather than read off the document. `source` is not
-    in WRITABLE_USER_FIELDS, so a provider cannot set it to anything it likes —
-    this is us drawing a conclusion from the fact that SCIM wrote at all.
+    Decided here rather than read off the document - `source` isn't in
+    WRITABLE_USER_FIELDS, so a provider can't set it directly. This just
+    draws the conclusion from the fact that SCIM wrote at all.
     """
     if user.source is IdentitySource.JIT:
         user.source = IdentitySource.SCIM
@@ -332,14 +329,14 @@ async def _cut_access(
 ) -> None:
     """Take everything away, because the provider just switched them off.
 
-    The part that makes deprovisioning mean something. Setting a flag while
-    leaving them signed in for the next eight hours is the failure mode this
-    whole design exists to avoid — see the note on SamlSession about why sessions
-    are rows.
+    This is what makes deprovisioning mean something - setting a flag while
+    leaving them signed in for the next eight hours would defeat the point.
+    See the note on SamlSession about why sessions are rows.
 
-    This used to cut sessions only, which left somebody who had been given admin
-    still holding it after they left the company. iam/access/lifecycle.py now owns
-    the whole removal, and everything that can mean "they left" goes through it.
+    This used to cut sessions only, which left someone who'd been given
+    admin still holding it after they left the company. iam/access/lifecycle.py
+    now owns the whole removal, and everything meaning "they left" goes
+    through it.
     """
     removed = await cut_access(
         session,
@@ -349,9 +346,8 @@ async def _cut_access(
     )
 
     if removed.anything_happened:
-        # One entry for the whole departure. Four separate entries would be
-        # impossible to line up afterwards, and lining them up is the entire
-        # point of writing them down.
+        # One entry for the whole departure - four separate entries would be
+        # hard to line up afterwards.
         await _record(
             session,
             request,
@@ -376,10 +372,10 @@ async def _apply_rules(
 ) -> None:
     """Put them in whatever groups the rules now want, and record it if that moved.
 
-    Called after a create and after any update that touched an attribute a rule
-    reads. This is the joiner and mover half of the lifecycle arriving through the
-    provider, which is how it actually arrives: somebody's department changes in
-    the HR system, the provider syncs it, and their group membership follows.
+    Called after a create and after any update that touched an attribute a
+    rule reads - this is how the joiner/mover lifecycle arrives through the
+    provider: somebody's department changes in the HR system, the provider
+    syncs it, and their group membership follows.
     """
     outcome = await reconcile(session, user)
 
@@ -402,24 +398,24 @@ def _patch_values(patch: PatchRequest) -> dict[str, object]:
         {"op": "replace", "path": "active", "value": false}
         {"op": "replace", "value": {"active": false}}
 
-    The second is Entra's habit — no path, and the value is a partial resource.
-    Handling only the first works in testing against authentik and then quietly
-    ignores every deactivation Entra sends, which is the worst possible failure
-    for this endpoint.
+    The second is Entra's habit: no path, and the value is a partial
+    resource. Handling only the first works fine against authentik, then
+    silently ignores every deactivation Entra sends - the worst possible
+    failure for this endpoint.
 
     Raises:
         ScimError: The operation is one we don't support, or names a path we
-            can't act on. Refused rather than ignored: a PATCH that answers 200
-            and changes nothing tells the provider the person was deactivated
-            when they were not.
+            can't act on. Refused rather than ignored, since a PATCH that
+            answers 200 and changes nothing would tell the provider someone
+            was deactivated when they weren't.
     """
     values: dict[str, object] = {}
 
     for operation in patch.operations:
         if operation.operation == "remove":
-            # Removing an attribute from a person is not something a provider
-            # does for the fields we hold; removing group membership is a PATCH
-            # on the group, not on the person.
+            # Removing an attribute from a person isn't something a provider
+            # does for the fields we hold; group membership is changed via
+            # PATCH on the group, not the person.
             raise bad_path(
                 "remove is not supported on a User. Group membership is changed by "
                 "PATCHing the Group."
@@ -450,18 +446,18 @@ def _patch_values(patch: PatchRequest) -> dict[str, object]:
 
 # What a PATCH may touch, by the SCIM attribute name the provider uses.
 #
-# `active` is the one that matters most, because that is how deprovisioning
-# arrives. The employment fields matter for the opposite reason: they are how the
-# *mover* case arrives. Somebody changes department in the HR system, and if this
-# map doesn't accept it, the access rules never hear about it — the endpoint
-# refuses with a 400 and the person keeps the groups from a job they have left.
+# `active` matters most since that's how deprovisioning arrives. The
+# employment fields matter for the mover case: somebody changes department
+# in the HR system, and if this map doesn't accept it, the access rules
+# never hear about it - the endpoint refuses with a 400 and the person keeps
+# the groups from a job they've left.
 #
-# PUT already accepted department through the enterprise extension, so leaving it
-# out here meant the same change was accepted one way and refused the other,
-# depending only on which verb the provider happened to use. Entra uses PATCH.
+# PUT already accepted department through the enterprise extension, so this
+# map needs it too, or the same change would be accepted one way and
+# refused the other depending on which verb the provider uses. Entra uses PATCH.
 #
-# Both spellings of the enterprise fields are here. The spec puts them under the
-# extension URN, and providers send them both with and without it.
+# Both spellings of the enterprise fields are here since the spec puts them
+# under the extension URN but providers send them both with and without it.
 _ENTERPRISE = ENTERPRISE_USER_SCHEMA.lower()
 
 _PATCHABLE = {
@@ -493,10 +489,9 @@ async def patch_user(
 ) -> Response:
     """Apply a partial change. This is how deprovisioning arrives.
 
-    When somebody leaves, a provider does not delete them — it sends
-    ``replace active false``. That single operation is the most important thing
-    this endpoint handles, and it has to end their sessions as well as set the
-    flag.
+    When somebody leaves, a provider doesn't delete them - it sends
+    `replace active false`. That single operation has to end their sessions
+    as well as set the flag.
     """
     user = await _load(session, user_id)
     values = _patch_values(patch)
@@ -521,9 +516,9 @@ async def patch_user(
     if was_active and not user.active:
         await _cut_access(session, request, client, user)
     elif touches_rules(changed) or (not was_active and user.active):
-        # Reactivation counts. A rule is a standing statement about attributes, not
-        # a past decision, so it applies again — see the note in iam/access/rules.py
-        # on why that isn't a contradiction of the leaver flow.
+        # Reactivation counts too - a rule is a standing statement about
+        # attributes, not a past decision, so it applies again. See the note
+        # in iam/access/rules.py on why that doesn't contradict the leaver flow.
         await _apply_rules(session, request, client, user)
 
     await session.commit()
@@ -541,15 +536,15 @@ async def delete_user(
     session: SessionDep,
     client: ScimClientDep,
 ) -> Response:
-    """Switch somebody off. Deliberately not a delete.
+    """Switch somebody off. Not a real delete.
 
-    A provider sending DELETE means "this person has left", and the useful
-    response to that is to end their access, not to erase the evidence of what
-    they had. The row stays, active goes false, and their sessions are cut — the
-    same thing PATCH active false does, because they mean the same thing.
+    A provider sending DELETE means "this person has left", so the useful
+    response is to end their access, not erase the record of what they had.
+    The row stays, active goes false, and their sessions are cut - the same
+    thing PATCH active false does.
 
-    Answers 204 either way. A provider retrying a delete it already sent should
-    not get an error for being thorough.
+    Answers 204 either way, so a provider retrying a delete it already sent
+    doesn't get an error for being thorough.
     """
     user = await _load(session, user_id)
 

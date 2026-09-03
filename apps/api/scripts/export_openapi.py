@@ -24,12 +24,10 @@ OUTPUT_PATH = Path(__file__).resolve().parent.parent / "openapi.json"
 
 def main() -> None:
     # Fixed settings so the output doesn't change depending on your .env. Nothing
-    # here touches the database; we only ask FastAPI to describe itself.
+    # here touches the database; we only ask FastAPI to describe its own routes.
     app = create_app(
         Settings(
             app_env="ci",
-            # Not a secret. Nothing signs anything here, we only ask FastAPI to
-            # describe its own routes.
             session_secret="schema-export-only",  # noqa: S106
             database_url="postgresql+asyncpg://unused:unused@127.0.0.1:1/unused",
             log_level="ERROR",

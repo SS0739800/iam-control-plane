@@ -28,9 +28,8 @@ if TYPE_CHECKING:
 class IdentityProvider(UUIDPrimaryKey, Timestamps, Base):
     """Somewhere we accept logins from.
 
-    More than one on purpose. authentik runs locally, Okta is the free cloud one,
-    and Entra comes last on a trial. Testing against all three is what stops us
-    accidentally depending on one vendor's quirks.
+    Supports more than one provider (authentik, Okta, Entra) so we can test
+    against all three and avoid depending on one vendor's quirks.
     """
 
     __tablename__ = "identity_providers"
@@ -59,15 +58,15 @@ class IdentityProvider(UUIDPrimaryKey, Timestamps, Base):
 
     signing_cert: Mapped[str] = mapped_column(
         Text,
-        comment="The provider's certificate. This is the whole basis of trust: a "
-        "login is only believed if it was signed with the matching key.",
+        comment="The provider's certificate. A login is only trusted if it's "
+        "signed with the matching key.",
     )
 
     want_signed_assertions: Mapped[bool] = mapped_column(
         default=True,
-        comment="Whether to insist the assertion itself is signed, not just the "
-        "response wrapped around it. Signing only the wrapper leaves room for "
-        "swapping the contents, so this stays on unless a provider can't do it.",
+        comment="Require the assertion itself to be signed, not just the "
+        "response wrapper (an unsigned assertion inside a signed wrapper "
+        "could still be swapped). Turn off only if a provider can't sign it.",
     )
 
     def __repr__(self) -> str:
@@ -77,13 +76,10 @@ class IdentityProvider(UUIDPrimaryKey, Timestamps, Base):
 class SamlRequestState(Base):
     """A login we've sent someone off to do, that we're waiting to hear back on.
 
-    This is kept in the database rather than a cookie, and that's the point. The
-    provider sends the answer back as a cross-site form POST, and browsers don't
-    include Lax cookies on those. A cookie here would simply be missing when the
-    answer arrived. See docs/adr/0003-single-origin.md.
-
-    Looking the row up also gives us the replay protection for free: an answer
-    that doesn't match a request we're waiting on gets rejected.
+    Kept in the database, not a cookie, because the provider answers via a
+    cross-site form POST and browsers drop Lax cookies on those. See
+    docs/adr/0003-single-origin.md. Looking the row up also gives replay
+    protection: an answer matching no pending request is rejected.
     """
 
     __tablename__ = "saml_request_state"
@@ -97,9 +93,8 @@ class SamlRequestState(Base):
     request_id: Mapped[str] = mapped_column(
         String(128),
         unique=True,
-        comment="The id inside the login request we sent. The answer has to quote "
-        "it back, which is what proves it's answering us and not arriving "
-        "unprompted.",
+        comment="The id inside the login request we sent. The answer must "
+        "quote it back to prove it's a response to us.",
     )
 
     idp_slug: Mapped[str] = mapped_column(String(64))
@@ -107,8 +102,8 @@ class SamlRequestState(Base):
     return_to: Mapped[str] = mapped_column(
         String(500),
         default="/",
-        comment="Where to send the person once they're in. Checked against a list "
-        "of allowed paths before use, so this can't become an open redirect.",
+        comment="Where to send the person once they're in. Checked against "
+        "an allowlist before use, to prevent an open redirect.",
     )
 
     created_at: Mapped[dt.datetime] = mapped_column(
@@ -119,8 +114,8 @@ class SamlRequestState(Base):
     expires_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        comment="Rows past this are dead. Stops a request being answered hours "
-        "later, and stops this table growing without limit.",
+        comment="Rows past this are dead: caps how late an answer can arrive "
+        "and keeps this table from growing forever.",
     )
 
     __table_args__ = (Index("ix_saml_request_state_expires_at", "expires_at"),)
@@ -132,13 +127,10 @@ class SamlRequestState(Base):
 class SamlSession(Base):
     """Somebody who is currently signed in.
 
-    Sessions live here rather than in a signed token, because P4 has to be able to
-    cut someone off the moment they're deactivated. You can't take back a token
-    you've already handed out; you can delete a row.
-
-    The cookie holds a random token and this table holds its hash, the same way
-    passwords are handled. Someone who reads this table still can't sign in as
-    anyone.
+    Stored server-side rather than as a signed token, so a session can be
+    revoked immediately (a token already handed out can't be taken back).
+    The cookie holds a random value; this table stores only its hash, like
+    a password, so reading this table alone doesn't let anyone sign in.
     """
 
     __tablename__ = "saml_sessions"
@@ -167,8 +159,8 @@ class SamlSession(Base):
 
     session_index: Mapped[str | None] = mapped_column(
         String(255),
-        comment="The provider's own name for this session. When it tells us "
-        "someone logged out elsewhere, this is how we know which session it means.",
+        comment="The provider's own name for this session, used to match a "
+        "logout notification to it.",
     )
 
     created_at: Mapped[dt.datetime] = mapped_column(
@@ -187,8 +179,7 @@ class SamlSession(Base):
     )
     revoked_at: Mapped[dt.datetime | None] = mapped_column(
         DateTime(timezone=True),
-        comment="Set instead of deleting the row, so 'signed out at 14:32' stays "
-        "answerable afterwards.",
+        comment="Set instead of deleting the row, to keep sign-out time on record.",
     )
     revoked_reason: Mapped[str | None] = mapped_column(String(100))
 
@@ -217,13 +208,9 @@ class SamlSession(Base):
 class SamlAssertionSeen(Base):
     """A login we've already accepted.
 
-    Every login has a unique id in it. If the same one turns up twice, the second
-    time is someone reusing a captured login, so it gets rejected. Without this,
-    anyone who gets hold of one valid login response can use it over and over
-    until it expires.
-
-    Rows can be cleared out once they're past not_on_or_after, since an expired
-    login fails the timing check anyway and doesn't need remembering.
+    Each login carries a unique id; seeing it twice means the login response
+    is being replayed, so the second one is rejected. Rows can be cleared
+    once past not_on_or_after, since an expired login fails on timing anyway.
     """
 
     __tablename__ = "saml_assertion_seen"

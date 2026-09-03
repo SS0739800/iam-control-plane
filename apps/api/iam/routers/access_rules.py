@@ -1,23 +1,15 @@
 """Managing the rules that grant group membership from attributes.
 
-Guarded by ``groups:write``, which is admin-only, and that reuse is deliberate
-rather than lazy. A rule is automated group membership and nothing more — it can
-do exactly what somebody with ``groups:write`` could do by hand, to more people at
-once. Inventing a separate permission would suggest it was a different kind of
-power, and then the two could drift apart.
+Guarded by ``groups:write``, which is admin-only. A rule automates exactly
+what someone with ``groups:write`` could already do by hand, to more people
+at once, so it reuses that permission rather than inventing a new one.
+(Role grants needed their own permission because ``users:write`` was *not*
+an equivalent power — reuse a permission when the action really is the
+same one, not just nearby.)
 
-That is the opposite of the reasoning for role grants, which needed their own
-permission precisely because ``users:write`` was *not* an equivalent power. Worth
-noticing the difference: reuse a permission when the action really is the same
-action, not when it is merely nearby.
-
-Writing a rule applies it immediately
--------------------------------------
-
-Every write here runs the rule against everybody afterwards. A rule that only took
-effect when somebody's department next changed would look broken for weeks, and
-disabling one has to take back what it granted or turning it off would mean
-nothing.
+Every write here applies the rule immediately, against everybody. A rule
+that only took effect on someone's next attribute change would look broken
+for weeks, and disabling one has to take back what it granted.
 """
 
 from __future__ import annotations
@@ -265,9 +257,9 @@ async def create_rule(
             detail={
                 "sentence": rule.sentence,
                 "enabled": rule.enabled,
-                # The whole effect of creating it, in one entry. A rule that
-                # unexpectedly moved two hundred people should be visible here
-                # rather than as two hundred separate memberships.
+                # The full effect in one entry, so a rule that unexpectedly
+                # moves two hundred people is visible here, not as two
+                # hundred separate memberships.
                 "granted_to": outcome.added[:50],
                 "granted_count": len(outcome.added),
             },
@@ -357,21 +349,19 @@ async def delete_rule(
 ) -> RuleRunResult:
     """Remove a rule, and remove the access it was giving people.
 
-    Deleted rather than kept, unlike a role grant. A rule is a statement of intent
-    rather than a record of something that happened to somebody, and the audit entry
-    holds what it said and who deleted it.
+    Deleted rather than kept, unlike a role grant — a rule is a statement
+    of intent, not a record of something that happened, and the audit
+    entry already holds what it said.
 
-    The memberships it granted go with it. Leaving them behind would turn automatic
-    access into permanent access that nothing explains, which is exactly the
-    situation access reviews exist to find.
+    The memberships it granted are removed too. Leaving them would turn
+    automatic access into permanent access that nothing explains.
     """
     rule = await _load(session, rule_id)
     sentence = rule.sentence
     name = rule.name
 
-    # Disabled first, then reconciled, so the engine sees a world without this rule
-    # and removes what only it was granting. Deleting the row first would work too,
-    # but this way the membership rows pointing at it are gone before the row is.
+    # Disabled first, then reconciled, so the engine removes what only this
+    # rule was granting before the row itself is deleted.
     rule.enabled = False
     await session.flush()
     outcome = await reconcile_group(session, rule)
@@ -416,10 +406,10 @@ async def run_rule(
 ) -> RuleRunResult:
     """Re-run a rule over everybody.
 
-    Normally unnecessary — writes here apply immediately and attribute changes
-    reconcile as they arrive — so this is for the case where somebody edited the
-    database directly, or wants to confirm the current state matches the rules.
-    A run that reports nothing changed is the answer you want.
+    Normally unnecessary since writes apply immediately and attribute
+    changes reconcile as they happen — this is for a direct database edit,
+    or to confirm nothing has drifted. A run reporting no changes is the
+    good outcome.
     """
     rule = await _load(session, rule_id)
     outcome = await reconcile_group(session, rule)

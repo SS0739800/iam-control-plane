@@ -1,28 +1,17 @@
 """Rules that give people access because of who they are.
 
-The joiner and mover half of the lifecycle. Somebody arrives in Engineering and
-lands in the Engineering group without anybody clicking anything; somebody moves
-to Sales and stops being in it.
+Handles joiners and movers automatically: e.g. someone joining Engineering
+lands in the Engineering group with no one clicking anything, and leaving
+it removes them.
 
-One comparison per rule, deliberately
--------------------------------------
+Each rule is one condition, one group ("department is Engineering, so put
+them in Engineering") rather than a boolean expression tree, since rules
+are read (in audits) far more than they're written, and need to stay easy
+to state correctly. Multiple rules can point at the same group.
 
-A rule is a single readable sentence: "department is Engineering, so put them in
-Engineering". Not a boolean expression tree, not a small language.
-
-The temptation is real — dynamic group syntax in the commercial products lets you
-write nested conditions — and the reason to resist it is that access rules are
-read far more often than they are written. Somebody in an audit has to say what
-this rule does and be right. Two rules pointing at the same group compose
-perfectly well and each one still reads as a sentence.
-
-Attributes are a fixed list
----------------------------
-
-``ATTRIBUTES`` names the columns a rule may look at. It is not "any column on the
-user", because a rule reading ``platform_role`` would let group membership depend
-on console privilege, which is backwards and circular — and one reading
-``token_hash`` should be unthinkable rather than merely unlikely.
+ATTRIBUTES is a fixed allowlist of user columns a rule may reference, not
+"any column" — otherwise a rule could read platform_role (letting group
+membership depend on console privilege) or token_hash.
 """
 
 from __future__ import annotations
@@ -48,8 +37,8 @@ ATTRIBUTES: dict[str, str] = {
 }
 """The user fields a rule is allowed to look at, and how to label them.
 
-Add to this only on purpose. Every entry is a thing group membership can now
-depend on, and some columns on the user table have no business being one.
+Adding an entry means group membership can now depend on that field, so
+add deliberately.
 """
 
 VALUELESS_OPERATORS = frozenset({RuleOperator.IS_SET, RuleOperator.IS_NOT_SET})
@@ -59,10 +48,9 @@ VALUELESS_OPERATORS = frozenset({RuleOperator.IS_SET, RuleOperator.IS_NOT_SET})
 class AccessRule(UUIDPrimaryKey, Timestamps, Base):
     """One condition, one group.
 
-    Enabled rules run when somebody is created and whenever the attributes they
-    look at change. A disabled rule is left in place with its history rather than
-    deleted, because "we used to give everybody in Sales the CRM" is a question
-    that gets asked.
+    Enabled rules run when a user is created and whenever the attribute
+    they check changes. Disabling a rule keeps it (and its history) rather
+    than deleting it, for questions like "did we used to grant this."
     """
 
     __tablename__ = "access_rules"
@@ -104,8 +92,8 @@ class AccessRule(UUIDPrimaryKey, Timestamps, Base):
     created_by_label: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        comment="Who wrote the rule. A copy of their name, so it survives their "
-        "record being deleted.",
+        comment="Who wrote the rule. A copy of their name, so it survives "
+        "their account being deleted.",
     )
 
     group: Mapped[Group] = relationship(back_populates="rules")
@@ -127,8 +115,7 @@ class AccessRule(UUIDPrimaryKey, Timestamps, Base):
         return f"{label} {readable} {self.value!r}"
 
     __table_args__ = (
-        # The same condition twice pointing at the same group is a duplicate, and
-        # two rules that disagree about one group would just both add them.
+        # The same condition can't point at the same group twice.
         UniqueConstraint(
             "attribute", "operator", "value", "group_id", name="one_rule_per_condition_and_group"
         ),

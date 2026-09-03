@@ -1,22 +1,7 @@
 /**
- * Small pieces the pages share, in the shape the Entra admin centre uses.
- *
- * Nearly all of the visual change lives here rather than in the eleven pages, which
- * is the payoff for having routed everything through these in the first place: the
- * pages ask for a Panel or a Th and get whatever a Panel currently looks like.
- *
- * What actually makes the portal recognisable
- * -------------------------------------------
- *
- * Fewer things than you would expect, and none of them are components. One blue for
- * anything actionable. Hairline borders instead of shadows. Two-pixel radii — eight
- * reads as a consumer app. Sentence-case headings rather than the uppercase monospace
- * labels this console had, which read as a terminal. And density: a portal shows you
- * a lot of rows, so the padding is smaller than feels comfortable at first.
- *
- * Colour is never the only signal. Status here is a coloured dot *and* a word, which
- * matters for the eight percent of men with a colour vision deficiency, and matters
- * more in a console where the difference between states is somebody's access.
+ * Shared UI pieces, styled after the Entra admin center: one blue, hairline borders,
+ * 2px radii, sentence-case headings, dense rows. Status is always a dot plus a word,
+ * not color alone, so it still reads for colorblind users.
  */
 
 import type { ReactNode } from 'react'
@@ -47,13 +32,7 @@ export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
   )
 }
 
-/**
- * Section wrapper with a heading. The heading names it for screen readers.
- *
- * The title is sentence case now. It was uppercase monospace with wide tracking,
- * which is a handsome look and the wrong one — it read as a build tool rather than
- * as somewhere you administer people's access.
- */
+/** Section wrapper with a heading, used for screen readers too. */
 export function Panel({
   title,
   action,
@@ -125,10 +104,7 @@ export function Loading() {
   return <Empty>Loading…</Empty>
 }
 
-/**
- * A failure, in the shape Fluent calls a MessageBar: a bar across the content with a
- * coloured edge, rather than a tinted box. The left border is the tell.
- */
+/** An error, shown as a Fluent-style MessageBar: a colored left edge, not a tinted box. */
 export function ErrorBox({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error)
   return (
@@ -178,12 +154,7 @@ export function Td({
   )
 }
 
-/**
- * A row of actions above a list, which the portal calls a command bar.
- *
- * Text beside any icon, always. An icon-only toolbar is a guessing game, and this is
- * a console where the guesses are about somebody's access.
- */
+/** Row of actions above a list. Always label icons with text — no icon-only guessing. */
 export function CommandBar({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-neutral-30 pb-2 dark:border-neutral-160">
@@ -275,12 +246,7 @@ export function LinkCell({ to, children }: { to: string; children: ReactNode }) 
   )
 }
 
-/**
- * Where you are, across the top of a page.
- *
- * The portal leans on these because its navigation goes deep. Ours goes two levels,
- * so this is mostly a way back — but "mostly a way back" is what a breadcrumb is for.
- */
+/** Breadcrumb trail across the top of a page. */
 export function Breadcrumbs({ trail }: { trail: { label: string; to?: string }[] }) {
   return (
     <nav aria-label="Breadcrumb" className="text-sm text-neutral-130 dark:text-neutral-60">

@@ -1,74 +1,35 @@
 """Deciding what to push, and pushing it.
 
-The client makes requests. This decides which requests to make, and it is the part
-with the actual judgement in it.
+The client makes requests. This module decides which requests to make.
 
-Reconciling, not reacting
--------------------------
+A few things worth knowing about how this works:
 
-``reconcile`` works out the whole set of accounts a target should have and makes it
-so. It does not take a list of changes.
-
-That is the same shape as the access rules engine and for the same reason: a
-change-driven pusher handles the joiner and gets the leaver wrong the first time a
-message is lost, a process restarts mid-run, or somebody edits the database. Anything
-that can drift needs something that can converge, and converging means computing the
-whole answer.
-
-Reacting is still worth doing on top — pushing one person immediately when their
-access changes, rather than waiting for the next full pass — but it is an
-optimisation over a correct baseline, not the baseline.
-
-How staleness is detected without a new column
-----------------------------------------------
-
-A person needs re-pushing when their record changed after we last pushed it. That is
-``user.updated_at > link.last_pushed_at``, which both tables already carry.
-
-The alternative was storing a hash of the last payload. This is cheaper and has one
-useful property a hash does not: a row touched with no real change still gets
-re-pushed, which is the safe direction to be wrong in.
-
-One run, one correlation id
----------------------------
-
-Every audit entry a run produces carries the same ``correlation_id``. That column has
-existed since P1 with a comment saying P6 would rely on it, and this is why: a sync
-that creates forty accounts and fails on three is one event to a person and forty
-three rows in the log. The id is what turns the second back into the first.
-
-One transaction per person, not one per run
-------------------------------------------
-
-Every audit entry this module writes is committed as it is written, so the HTTP calls
-happen with no database lock held. That is required rather than tidy, and finding out
-why cost an afternoon.
-
-``append_event`` takes ``pg_advisory_xact_lock`` and holds it until commit, because
-the log is a hash chain and two writers would produce two rows claiming the same
-predecessor. A run that kept one transaction open would therefore hold that lock
-across every request it makes: one slow downstream would block every audit write in
-the whole application, and pointing the sync at our own SCIM server deadlocks
-outright — it holds the lock, then makes a request that needs it.
-
-The commit lives inside ``_record`` rather than at the call sites, so the rule holds
-by construction, and there is a second commit immediately before each push so that
-nothing else — a freshly inserted link row, a read — is holding a transaction open
-either. The invariant is simply: no open transaction while talking to a downstream.
-
-The useful side effect is that a run interrupted halfway leaves the people it
-finished done instead of rolling all of them back.
-
-Failures do not stop the run, except one
-----------------------------------------
-
-A downstream refusing one person is that person's problem, and working through the
-rest is right — otherwise one bad record blocks everybody behind it.
-
-An authentication failure is different and stops immediately. The token is wrong, so
-every remaining push will fail identically, and grinding through a thousand people to
-collect a thousand copies of the same 401 helps nobody and looks like a retry storm
-from the far end.
+- `reconcile` computes the whole set of accounts a target should have and
+  makes it so, rather than taking a list of changes. A change-driven pusher
+  gets the leaver case wrong the first time a message is lost or a process
+  restarts mid-run, so this recomputes the full answer each time. `push_one`
+  still exists on top of that for pushing one person right away, but it's an
+  optimization over reconcile, not a replacement - if it's never called, the
+  next reconcile still catches up.
+- Staleness is `user.updated_at > link.last_pushed_at`, using columns both
+  tables already have, instead of hashing the last payload. A row touched
+  with no real change still gets re-pushed, which is the safe direction to
+  be wrong in.
+- Every audit entry a run produces shares one `correlation_id`, so a sync
+  that creates forty accounts and fails on three shows up as one event
+  instead of forty-three unrelated rows.
+- Every audit entry is committed as soon as it's written, so no database
+  lock is held while an HTTP call is in flight. `append_event` holds
+  `pg_advisory_xact_lock` until commit (the audit log is a hash chain), so
+  keeping one transaction open for a whole run would hold that lock across
+  every downstream request - and pointing the sync at our own SCIM server
+  would deadlock. The commit lives inside `_record` so this holds by
+  construction; there's also a commit right before each push so nothing else
+  is holding a transaction open either. A side benefit: a run interrupted
+  halfway leaves the people it finished done, instead of rolling them back.
+- A downstream rejecting one person doesn't stop the run - the rest still get
+  processed. An authentication failure does stop the run immediately, since
+  the token is wrong and every remaining push would fail the same way.
 """
 
 from __future__ import annotations
@@ -96,10 +57,10 @@ logger = logging.getLogger(__name__)
 MAX_ATTEMPTS = 5
 """How many consecutive failures before a link stops being retried automatically.
 
-Not a give-up so much as a stop-shouting. A link failing five times in a row is
-failing for a reason a retry will not fix, and continuing to try it every run buries
-the ones that are genuinely transient. It still shows on the target's page, and a
-manual sync retries it regardless.
+A link failing five times in a row is failing for a reason a retry won't
+fix, and retrying it every run buries the failures that are actually
+transient. It still shows on the target's page, and a manual sync retries it
+regardless.
 """
 
 
@@ -112,9 +73,9 @@ class SyncOutcome:
     adopted: int = 0
     """Accounts that already existed downstream and were linked rather than created.
 
-    Counted separately because the two mean different things to whoever reads the
-    result: creating forty accounts is provisioning, adopting forty is onboarding a
-    system that already had them."""
+    Counted separately because they mean different things: creating forty
+    accounts is provisioning, adopting forty is onboarding a system that
+    already had them."""
 
     updated: int = 0
     deactivated: int = 0
@@ -134,9 +95,9 @@ class SyncOutcome:
     def touched(self) -> int:
         """How many accounts this pass actually moved.
 
-        Distinct from `changed`, which is a yes-or-no. Summing that across targets
-        would count a target rather than an account, which reads as "1 pushed" when
-        forty people were provisioned.
+        Distinct from `changed`, which is a yes-or-no. Summing `changed`
+        across targets would count targets, not accounts - showing "1
+        pushed" when forty people were provisioned.
         """
         return self.created + self.adopted + self.updated + self.deactivated + self.reactivated
 
@@ -161,11 +122,10 @@ class SyncOutcome:
 async def entitled_people(db: AsyncSession, target: ProvisioningTarget) -> list[User]:
     """Who should have an account in this target.
 
-    The people with access to its application — directly or through a group — and
-    active. This phase adds no new notion of who belongs where: these are the same
-    rows P5 reads before it will sign a login.
+    Active people with access to its application, directly or through a
+    group - the same rows used to decide whether a login gets signed.
 
-    Deactivated people are excluded rather than absent, which matters: they will have
+    Deactivated people are excluded here, not just absent: they still have
     links, and a link with no entitled person behind it is what triggers
     deprovisioning.
     """
@@ -193,29 +153,29 @@ async def entitled_people(db: AsyncSession, target: ProvisioningTarget) -> list[
 SWEEP_LEASE = dt.timedelta(minutes=15)
 """How long a sync holds its target before another one may take over.
 
-Longer than any sync should take — a first run against 1,200 accounts is about forty
-seconds — and short enough that a worker killed mid-sweep does not wedge the target
-for an afternoon. Nothing renews it, deliberately: a sync that somehow runs longer
-than this loses its claim, and the worst case is the overlap this exists to prevent,
-bounded to once.
+Longer than any sync should take (a first run against 1,200 accounts takes
+about forty seconds), and short enough that a worker killed mid-sweep
+doesn't wedge the target for an afternoon. Nothing renews it: a sync that
+somehow runs longer than this loses its claim, but the worst case is just
+one overlap.
 """
 
 
 class AlreadyRunning(Exception):
     """Another sync holds this target, so this one should not start.
 
-    Not an error in the ordinary sense. The sweep skips and tries again in five
-    minutes; the console tells whoever pressed the button to wait. Both are better
-    than two reconciles working the same links.
+    Not really an error - the sweep just skips and tries again in five
+    minutes, and the console tells whoever pressed the button to wait. Both
+    beat two reconciles working the same links.
     """
 
 
 async def take_lease(db: AsyncSession, target: ProvisioningTarget, *, now: dt.datetime) -> None:
     """Claim this target, or refuse to run.
 
-    One conditional UPDATE, which is what makes this safe: the database decides who
-    wins, and the loser sees zero rows affected rather than a stale read. Two workers
-    issuing this at the same instant cannot both succeed.
+    Uses one conditional UPDATE so the database decides who wins - the loser
+    sees zero rows affected rather than a stale read. Two workers issuing
+    this at the same instant can't both succeed.
 
     Raises:
         AlreadyRunning: Somebody else holds an unexpired lease.
@@ -243,9 +203,8 @@ async def take_lease(db: AsyncSession, target: ProvisioningTarget, *, now: dt.da
 async def release_lease(db: AsyncSession, target_id: uuid.UUID) -> None:
     """Give the target back, so the next sync need not wait for the lease to expire.
 
-    Best effort by design. If this never runs — the process was killed, the database
-    went away — the lease expiry is what recovers, which is the whole reason it is a
-    lease and not a flag.
+    Best effort. If this never runs (process killed, database went away),
+    the lease just expires on its own - that's why it's a lease and not a flag.
     """
     await db.execute(
         update(ProvisioningTarget)
@@ -258,21 +217,16 @@ async def release_lease(db: AsyncSession, target_id: uuid.UUID) -> None:
 async def count_waiting(db: AsyncSession, target: ProvisioningTarget) -> int:
     """How many people a sync would touch if it ran right now.
 
-    This exists because the target summary could say "in step" while a leaver sat
-    unpushed. The counts next to it are link *states* — active, failed, orphaned — and
-    none of them answers "has anything changed since we last pushed". With no
-    background worker, nothing pushes on its own, so a health indicator that only
-    reads the last run's outcome tells somebody a leaver is offboarded everywhere when
-    they are not.
+    This exists because the target summary could otherwise say "in step"
+    while a leaver sat unpushed - the link *states* (active, failed,
+    orphaned) don't answer "has anything changed since we last pushed". With
+    no background worker, nothing pushes on its own, so this needs to be
+    checked directly rather than inferred from the last run's outcome.
 
-    Deliberately built out of the same two pieces reconcile() decides with —
-    entitled_people and _needs_push — rather than a second query that approximates
-    them. If the two ever disagree, the number on the screen becomes a lie, and the
-    kind of lie that matters: somebody reading "nothing waiting" about somebody who
-    still has access.
-
-    It costs what a sync's read phase costs, which is one pass over the entitled
-    people. That is the price of the number being true rather than close.
+    Built from the same two pieces reconcile() uses (entitled_people and
+    _needs_push) rather than a separate approximate query, so it can't drift
+    out of sync with what reconcile would actually do. Costs one pass over
+    the entitled people, same as a sync's read phase.
     """
     people = await entitled_people(db, target)
     links = await _links_by_user(db, target)
@@ -286,9 +240,8 @@ async def count_waiting(db: AsyncSession, target: ProvisioningTarget) -> int:
         if link is None or not link.exists_downstream or _needs_push(link, person):
             waiting += 1
 
-    # And the other direction: somebody with a live account downstream who is no
-    # longer entitled, or who has been marked as having left. They are the reason
-    # this count exists.
+    # The other direction: somebody with a live account downstream who is no
+    # longer entitled. This is the case this count exists to catch.
     for user_id, link in links.items():
         if user_id not in entitled and link.state is LinkState.ACTIVE:
             waiting += 1
@@ -306,9 +259,10 @@ async def _links_by_user(
 def _payload_for(person: User) -> dict[str, object]:
     """What we tell the downstream about somebody.
 
-    externalId is our own id rather than anything about them, so a downstream can
-    match its account back to us even after their name, email or username changes.
-    Using an email here is the mistake that makes a marriage look like a new person.
+    externalId is our own id, not anything about them, so a downstream can
+    match its account back to us even after their name, email, or username
+    changes. Using email here would make something like a marriage/name
+    change look like a new person.
     """
     return user_payload(
         user_name=person.user_name,
@@ -325,18 +279,17 @@ def _payload_for(person: User) -> dict[str, object]:
 def _needs_push(link: ProvisioningLink, person: User) -> bool:
     """Whether this person has changed since we last pushed them.
 
-    ``updated_at`` against ``last_pushed_at``, which both rows already carry. A row
-    touched without a real change gets pushed again, which is the safe direction:
-    the cost is one request, and the alternative direction is somebody's details
-    silently never arriving.
+    Compares `updated_at` against `last_pushed_at`, which both rows already
+    carry. A row touched without a real change gets pushed again - wasteful
+    but safe, versus the alternative of details silently never arriving.
 
-    Worth knowing: the two timestamps come from different clocks. ``updated_at`` is
-    stamped by Postgres through ``func.now()``, while ``last_pushed_at`` is whatever
-    the caller handed reconcile(). If the API's clock runs behind the database's,
-    everybody looks stale on every pass and a full sync re-pushes the whole directory
-    — around 1,200 requests and forty seconds against the seeded data. Still correct,
-    per the paragraph above, just wasteful. A fixed literal here is worse than
-    wasteful, which the test fixture found out the hard way.
+    Note: the two timestamps come from different clocks. `updated_at` is
+    stamped by Postgres via `func.now()`, while `last_pushed_at` is whatever
+    the caller passed to reconcile(). If the API's clock runs behind the
+    database's, everybody looks stale on every pass and a full sync re-pushes
+    the whole directory (about 1,200 requests / forty seconds against the
+    seeded data). Still correct, just wasteful - but a fixed literal here
+    would be worse, as the test fixture found out the hard way.
     """
     if link.state is not LinkState.ACTIVE:
         return True
@@ -348,16 +301,14 @@ def _needs_push(link: ProvisioningLink, person: User) -> bool:
 async def _create_or_adopt(client: OutboundScim, person: User) -> tuple[str, str]:
     """Create the account, or take over one that is already there.
 
-    A downstream answering 409 is saying an account with this userName exists and
-    we do not know its id. That is not a failure to retry — retrying produces the
-    same 409 forever — and it is not fatal either. It is what onboarding a
-    downstream that already has people looks like, which is the normal case for
-    anything other than an empty system.
+    A 409 means an account with this userName already exists and we don't
+    know its id - not a failure to retry (that would just repeat the 409
+    forever), and not fatal. It's what onboarding a downstream that already
+    has people looks like.
 
-    So the id is looked up and the account adopted, then brought into line with what
-    we hold. find_user refuses to guess when more than one account matches, and that
-    refusal is left to propagate: linking to an account at random is a mistake nobody
-    can see afterwards.
+    So we look up the id, adopt the account, and bring it into line with what
+    we hold. find_user refuses to guess when more than one account matches;
+    that exception is left to propagate rather than picking one at random.
 
     Returns the remote id and the audit action describing what happened.
     """
@@ -372,8 +323,8 @@ async def _create_or_adopt(client: OutboundScim, person: User) -> tuple[str, str
 
         existing = await client.find_user(person.user_name)
         if existing is None:
-            # The downstream said the name was taken and then could not find it.
-            # Nothing sensible to do, and inventing a retry would loop.
+            # The downstream said the name was taken, then couldn't find it.
+            # Nothing sensible to do here, and retrying would just loop.
             raise PushFailed(
                 f"the target refused to create {person.user_name} because it already "
                 "exists, then could not find it. Its uniqueness rule and its search "
@@ -397,28 +348,26 @@ async def _record(
 ) -> None:
     """One audit entry, tied to the run that produced it, committed immediately.
 
-    The commit is the important part and it is here rather than at the call sites so
-    the rule holds everywhere by construction: nothing this module writes to the
-    audit log stays in an open transaction.
+    The commit lives here, not at the call sites, so nothing this module
+    writes to the audit log stays in an open transaction.
 
-    ``append_event`` takes ``pg_advisory_xact_lock`` and holds it until commit,
-    because the log is a hash chain and two writers would produce two rows claiming
-    the same predecessor. A sync that kept one transaction open for the whole run
-    would hold that lock across every HTTP request it makes — so one slow downstream
-    would block every audit write in the application, and pointing the sync at our own
-    SCIM server deadlocks outright.
+    `append_event` holds `pg_advisory_xact_lock` until commit, since the log
+    is a hash chain and two writers would otherwise produce two rows
+    claiming the same predecessor. Keeping one transaction open for a whole
+    run would hold that lock across every HTTP request - one slow downstream
+    would block every audit write in the app, and pointing the sync at our
+    own SCIM server would deadlock outright.
 
-    Committing per entry also means a run interrupted halfway leaves the people it
-    finished done, instead of rolling all of them back.
+    Committing per entry also means a run interrupted halfway leaves the
+    people it finished done, instead of rolling all of them back.
     """
     await append_event(
         db,
         AuditDraft(
             action=action,
-            # SYSTEM, not the person who triggered it. A sync is our own job acting on
-            # decisions other people already made, and attributing forty account
-            # creations to whoever clicked the button would misrepresent who decided
-            # each one — that is what the assignment's own audit entry is for.
+            # SYSTEM, not the person who triggered it. A sync acts on
+            # decisions other people already made; the assignment's own
+            # audit entry is what records who actually decided.
             actor_type=ActorType.SYSTEM,
             actor_label=f"provisioning sync -> {target.application.name}"
             if target.application
@@ -437,8 +386,9 @@ async def _record(
 def _client_for(target: ProvisioningTarget, settings: Settings) -> OutboundScim:
     """Build the client, decrypting the token at the last moment.
 
-    Decrypted here rather than held on the target object, so the plaintext exists for
-    as short a time as possible and never on a model that might get logged.
+    Decrypted here rather than held on the target object, so the plaintext
+    exists as briefly as possible and never sits on a model that might get
+    logged.
     """
     return OutboundScim(
         base_url=target.scim_root,
@@ -457,17 +407,17 @@ async def reconcile(
 ) -> SyncOutcome:
     """Make the target's accounts match who is entitled to them.
 
-    Creates what is missing, updates what has changed, deactivates what should no
-    longer be there, and revives what has come back. Failures on one person do not
-    stop the others.
+    Creates what is missing, updates what has changed, deactivates what
+    should no longer be there, and revives what has come back. Failures on
+    one person do not stop the others.
 
     Args:
         force: Push everybody regardless of whether they look unchanged, and retry
             links that have exhausted their attempts. What a manual "sync now" means.
 
-    Takes a lease on the target first, so two syncs cannot work the same links. That
-    covers both doors: two worker machines, and somebody pressing "sync now" while a
-    sweep is already running.
+    Takes a lease on the target first, so two syncs can't work the same
+    links - covers both two worker machines and someone pressing "sync now"
+    while a sweep is already running.
 
     Returns:
         What it did, including the correlation id every audit entry shares.
@@ -481,8 +431,7 @@ async def reconcile(
             db, target, settings, now=now, correlation_id=correlation_id, force=force
         )
     finally:
-        # Best effort. If this never runs the lease expiry recovers, which is why it
-        # is a lease rather than a flag.
+        # Best effort - if this never runs, the lease just expires on its own.
         await release_lease(db, target.id)
 
 
@@ -497,8 +446,8 @@ async def _reconcile_holding_lease(
 ) -> SyncOutcome:
     """The work itself, with the target already claimed.
 
-    Split out rather than nested so the lease handling reads as three lines and this
-    keeps the shape it had before the lease existed.
+    Split out so the lease handling in reconcile() stays a few lines and
+    this function keeps the shape it had before the lease existed.
     """
     run = SyncOutcome(correlation_id=correlation_id or uuid.uuid4())
 
@@ -509,8 +458,8 @@ async def _reconcile_holding_lease(
     try:
         client = _client_for(target, settings)
     except CannotDecrypt as exc:
-        # Nothing can be pushed and no amount of retrying helps, so this is a target
-        # level failure rather than a per-person one.
+        # Nothing can be pushed and retrying won't help - this is a
+        # target-level failure, not a per-person one.
         run.stopped_early = str(exc)
         target.last_sync_at = now
         target.last_sync_ok = False
@@ -549,8 +498,8 @@ async def _reconcile_holding_lease(
             links[person.id] = link
 
         if link.attempts >= MAX_ATTEMPTS and not force:
-            # Left alone rather than retried. Still visible on the target's page, and
-            # a manual sync picks it up.
+            # Left alone rather than retried. Still visible on the target's
+            # page, and a manual sync picks it up.
             run.skipped_exhausted += 1
             continue
 
@@ -558,17 +507,17 @@ async def _reconcile_holding_lease(
             run.unchanged += 1
             continue
 
-        # Nothing open while we talk to somebody else's server. The audit chain lock
-        # is transaction scoped, so any transaction still open here would hold it for
-        # the length of a network round trip — and against our own SCIM server, which
-        # is what the tests point at, that deadlocks outright.
+        # Nothing open while we talk to somebody else's server - an open
+        # transaction here would hold the audit chain lock for the length of
+        # a network round trip, and against our own SCIM server (what the
+        # tests point at) that deadlocks outright.
         await db.commit()
 
         try:
             if link.exists_downstream:
                 if link.state is LinkState.DEPROVISIONED:
-                    # A rehire. Reactivating revives the account and everything
-                    # attached to it, where creating a second one would not.
+                    # A rehire. Reactivating revives the account and
+                    # everything attached to it; creating a new one wouldn't.
                     await client.set_active(link.remote_id or "", active=True)
                     run.reactivated += 1
                     action = "provisioning.account_reactivated"
@@ -621,8 +570,8 @@ async def _reconcile_holding_lease(
             )
 
             if exc.is_authentication:
-                # Everything after this fails the same way. Stopping is kinder to the
-                # far end and much clearer in the log than a thousand identical rows.
+                # Everything after this fails the same way, so stop instead
+                # of logging a thousand identical rows.
                 run.stopped_early = (
                     "the target rejected our token, so the rest of the run was "
                     "abandoned rather than repeating the same failure"
@@ -637,8 +586,8 @@ async def _reconcile_holding_lease(
             if link.state in (LinkState.DEPROVISIONED, LinkState.PENDING):
                 continue
             if not link.exists_downstream:
-                # Nothing out there to switch off. Recorded as deprovisioned so it
-                # stops being considered every run.
+                # Nothing out there to switch off. Mark deprovisioned so it
+                # stops being considered on future runs.
                 link.state = LinkState.DEPROVISIONED
                 continue
 
@@ -662,15 +611,14 @@ async def _reconcile_holding_lease(
                     person=leaver,
                     detail={
                         "remote_id": link.remote_id,
-                        # Why they lost it, which is the question asked afterwards.
                         "reason": "no longer has access to this application",
                     },
                 )
 
             except PushFailed as exc:
-                # ORPHANED rather than FAILED, and the distinction is the point: we
-                # were told to remove somebody's access and could not. They still have
-                # it. That is the finding an access review has to surface.
+                # ORPHANED, not FAILED: we were told to remove access and
+                # couldn't, so they still have it. That's what an access
+                # review needs to surface.
                 link.state = LinkState.ORPHANED
                 link.last_error = str(exc)
                 link.attempts += 1
@@ -712,10 +660,10 @@ async def _reconcile_holding_lease(
         extra={
             "target": target.base_url,
             "correlation_id": str(run.correlation_id),
-            # Nested rather than splatted. LogRecord already has a `created`
-            # attribute — the timestamp — and logging raises KeyError rather than
-            # letting `extra` shadow it. as_detail() has a `created` count, so
-            # splatting it here failed every single sync.
+            # Nested, not splatted. LogRecord already has a `created`
+            # attribute (the timestamp), and logging raises KeyError instead
+            # of letting `extra` shadow it. as_detail() has its own `created`
+            # count, so splatting it here failed every single sync.
             "outcome": run.as_detail(),
         },
     )
@@ -733,10 +681,10 @@ async def push_one(
 ) -> bool:
     """Push one person immediately, without a full pass.
 
-    For reacting to a change as it happens — somebody granted access should get an
-    account now, not at the next sync. An optimisation over reconcile rather than a
-    replacement: if this fails or is never called, the next reconcile still converges,
-    which is exactly the property a change-driven design on its own would not have.
+    For reacting to a change as it happens - somebody granted access should
+    get an account now, not at the next sync. An optimization over reconcile,
+    not a replacement: if this fails or is never called, the next reconcile
+    still catches up.
 
     Returns whether it worked.
     """
@@ -756,7 +704,7 @@ async def push_one(
 
     run_id = correlation_id or uuid.uuid4()
 
-    # Same rule as reconcile: nothing open across the request.
+    # Same rule as reconcile: nothing open while the request is in flight.
     await db.commit()
 
     try:
@@ -812,7 +760,6 @@ async def push_one(
             detail={
                 "error": str(exc),
                 "immediate": True,
-                # The reassurance that matters: this is not lost.
                 "note": "the next full sync will try again",
             },
         )
