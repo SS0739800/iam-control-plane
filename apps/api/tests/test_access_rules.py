@@ -117,7 +117,7 @@ def test_is_set_and_is_not_set() -> None:
 
 
 def test_not_equals_does_not_match_somebody_with_no_value() -> None:
-    """"Department is not Sales" should describe people who have a
+    """ "Department is not Sales" should describe people who have a
     department, not people who have none — otherwise it would also catch
     every blank record."""
     rule = make_rule(operator=RuleOperator.NOT_EQUALS, value="Sales")

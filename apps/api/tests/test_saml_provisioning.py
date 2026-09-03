@@ -3,8 +3,8 @@
 Two halves. Reading the claims is pure and runs anywhere. Matching against the
 directory needs Postgres, so those are marked integration and skip without it.
 
-The claim-reading tests deliberately use the real attribute names each provider
-sends, ugly URIs and all. Made-up names would pass while the actual authentik
+The claim-reading tests use the real attribute names each provider sends,
+ugly URIs and all. Made-up names would pass while the actual authentik
 attribute went unread.
 
 No xmlsec here, so the first half runs on Windows.
@@ -169,8 +169,8 @@ def test_a_declared_email_format_does_not_override_the_shape_check() -> None:
 
 
 def test_an_email_attribute_beats_the_name_id() -> None:
-    """The fallback is a last resort. An attribute is the provider stating a fact
-    deliberately; a NameID that happens to look like an address is not."""
+    """The fallback is a last resort. An attribute is the provider stating a
+    fact on record; a NameID that happens to look like an address is not."""
     claims = read_claims(
         facts(
             attributes={"email": ["ada.bergman@demo.local"]},

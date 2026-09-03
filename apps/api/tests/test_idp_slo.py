@@ -1,14 +1,15 @@
 """Tests for /idp/slo — an application telling us somebody signed out.
 
-This endpoint was advertised in our metadata before it existed, and it could not
-have been written earlier: the SessionIndex we put in every assertion was generated
-fresh and never stored, so a logout request quoting one had nothing to match. The
-first test below is the one that would have failed then and passes now.
+This endpoint was advertised in our metadata before it existed. It couldn't
+have been written earlier: the SessionIndex we put in every assertion was
+generated fresh and never stored, so a logout request quoting one had
+nothing to match. The first test below is the one that would have failed
+then and passes now.
 
-What is deliberately not tested here is fan-out to the *other* applications
-somebody is signed into, because it is not built. The last test pins that gap in
-place rather than leaving it to a docstring — if somebody implements fan-out, that
-test should fail and be rewritten, which is the point of it.
+Not tested here: fan-out to the other applications somebody is signed into,
+since it isn't built. The last test pins that gap in place rather than
+leaving it to a docstring — if somebody implements fan-out, that test
+should fail and get rewritten.
 
 No xmlsec: the reader and the signer are the two seams. Needs Postgres.
 """
@@ -371,12 +372,13 @@ def test_the_other_applications_are_not_notified_yet(
 ) -> None:
     """Pins a gap in place rather than leaving it in a docstring.
 
-    Signing out at one application does not tell the others. The table now makes
-    fan-out possible — one browser session, several rows, each naming an address —
-    but it is not built, and the audit entry says so explicitly so that anybody
-    auditing a logout can see it.
+    Signing out at one application doesn't tell the others. The table now
+    makes fan-out possible (one browser session, several rows, each naming
+    an address), but it isn't built, and the audit entry says so explicitly
+    so anybody auditing a logout can see it.
 
-    If somebody implements fan-out, this test should fail. That is what it is for.
+    If somebody implements fan-out, this test should fail — that's what
+    it's for.
     """
     seed_application(app_scenario)
     seed_person(app_scenario)

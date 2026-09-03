@@ -1,14 +1,15 @@
 """Tests for the documents we publish and the logins we issue.
 
-The escaping tests are the reason this file exists. Everywhere else in the SAML
-code we are validating what somebody else signed; here we are signing, and an
-assertion we sign is believed by every application holding our certificate. A
-display name that can inject XML into it is a way for somebody to grant themselves
-attributes, under our signature, with no second opinion anywhere.
+The escaping tests are the reason this file exists. Everywhere else in the
+SAML code we're validating what somebody else signed; here we're signing,
+and an assertion we sign is believed by every application holding our
+certificate. A display name that can inject XML into it is a way for
+somebody to grant themselves attributes, under our signature, with no
+second opinion anywhere.
 
-The rest checks that we produce what we ourselves demand. checks.py lists ten
-things we refuse a login for; an assertion missing any of them would be one our own
-service provider rejects, which is the fastest possible way to find out that a
+The rest checks that we produce what we ourselves demand. checks.py lists
+ten things we refuse a login for; an assertion missing any of them would be
+one our own service provider rejects, the fastest way to find out a
 provider asks for more than it gives.
 
 No xmlsec and no database, so these run anywhere. Signing is signer.py's job.
@@ -349,13 +350,14 @@ def test_ids_and_session_indexes_are_unique() -> None:
 
 
 def test_the_metadata_endpoint_needs_no_session(client: TestClient) -> None:
-    """Not behind a login, on purpose.
+    """Not behind a login.
 
-    It holds nothing secret, and needing a session to fetch the document you need in
-    order to set sessions up at all is a loop somebody has to break by hand.
+    It holds nothing secret, and needing a session to fetch the document
+    you need to set sessions up at all would be a loop.
 
-    No database either, which is why this test lives beside the builder rather than
-    with the endpoint tests: the client here points at a Postgres that is not there.
+    No database either, which is why this test lives beside the builder
+    rather than with the endpoint tests: the client here points at a
+    Postgres that isn't there.
     """
     response = client.get("/idp/metadata")
 

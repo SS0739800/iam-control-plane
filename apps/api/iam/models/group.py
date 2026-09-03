@@ -93,8 +93,7 @@ class GroupMember(Base):
         nullable=False,
         default=MembershipSource.MANUAL,
         server_default=MembershipSource.MANUAL.value,
-        comment="Why they are in this group. Only 'rule' rows are removed by "
-        "the rule engine.",
+        comment="Why they are in this group. Only 'rule' rows are removed by " "the rule engine.",
     )
 
     added_by_rule_id: Mapped[uuid.UUID | None] = mapped_column(

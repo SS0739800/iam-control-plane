@@ -34,8 +34,7 @@ class ScimClient(UUIDPrimaryKey, Timestamps, Base):
     token_hash: Mapped[str] = mapped_column(
         String(64),
         unique=True,
-        comment="SHA-256 of the bearer token. Shown once at creation, never "
-        "stored in full.",
+        comment="SHA-256 of the bearer token. Shown once at creation, never " "stored in full.",
     )
 
     enabled: Mapped[bool] = mapped_column(

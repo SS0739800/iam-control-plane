@@ -1,32 +1,27 @@
 """Signing the logout request, the way the redirect binding wants it.
 
-Why this exists
----------------
+Single logout used to silently do nothing against Okta. Our session ended,
+Okta's didn't, and the next login walked straight back in without a
+password — the opposite of what pressing sign out is supposed to do. Okta
+refuses an unsigned LogoutRequest, and the note in sp.py had said so since
+P2: "a provider that does insist needs a key of ours, which arrives in P5".
+P5 arrived; this is that deferred work.
 
-Single logout silently did nothing against Okta. Our session ended, Okta's did not,
-and the next login walked straight back in without asking for a password — which is
-the opposite of what somebody pressing sign out believes they have done. Okta refuses
-an unsigned LogoutRequest, and the note in sp.py had said so since P2: "a provider
-that does insist needs a key of ours, which arrives in P5". P5 arrived; this is the
-work that was deferred.
+This signs the query string, not the document. The rule is exact: build
+``SAMLRequest=…&RelayState=…&SigAlg=…`` in that order with each value
+URL-encoded, sign those bytes, append ``Signature=``. Not the decoded XML,
+not a different parameter order, not the string after somebody re-encodes
+it — any of those produces a signature that verifies against nothing, and
+the provider just says "invalid signature".
 
-The signing is not XML signing
-------------------------------
+So these tests verify the way a provider does — with the public key, over
+the exact octets from the URL — rather than just checking that a signature
+is present. A test that only asserted "Signature is in the query string"
+would have passed against every wrong implementation above.
 
-That is the whole difficulty. The redirect binding signs the *query string*, not the
-document, and the rule is exact: build ``SAMLRequest=…&RelayState=…&SigAlg=…`` in that
-order with each value URL-encoded, sign those bytes, append ``Signature=``. Not the
-decoded XML, not a different parameter order, not the string after somebody
-re-encodes it. Every one of those produces a signature that verifies against nothing,
-and the provider says only "invalid signature".
-
-So these tests verify the way a provider does — with the public key, over the exact
-octets from the URL — rather than checking that a signature is merely present. A test
-that only asserted "Signature is in the query string" would have passed against every
-one of the wrong implementations above.
-
-No xmlsec here, so these run everywhere. That is a happy consequence of it being
-query-string signing: it is the one part of SAML that needs no native library.
+No xmlsec here, so these run everywhere: a happy consequence of
+query-string signing being the one part of SAML that needs no native
+library.
 """
 
 from __future__ import annotations
@@ -71,17 +66,19 @@ def a_request() -> str:
 def verify_like_a_provider(url: str, public_key: rsa.RSAPublicKey) -> bool:
     """Check the signature the way the receiving end does.
 
-    Two subtleties, and the second one caught a mistake in this helper rather than in
-    the code under test.
+    Two things matter, and the second one caught a mistake in this helper
+    rather than in the code under test.
 
-    The signed octets are used exactly as they arrived, not parsed and re-encoded.
-    Rebuilding them would hide the bug where we sign one string and send another.
+    The signed octets are used exactly as they arrived, not parsed and
+    re-encoded — rebuilding them would hide a bug where we sign one string
+    and send another.
 
-    And the signature covers only the SAML parameters — SAMLRequest or SAMLResponse,
-    RelayState, SigAlg — not whatever query string the provider's own endpoint already
-    carried. The first version of this took everything before "&Signature=", which
-    swept the endpoint's own parameters in and failed only for providers whose SLO
-    address has a query string. Those exist, which is why there is a test for it.
+    The signature covers only the SAML parameters (SAMLRequest or
+    SAMLResponse, RelayState, SigAlg), not whatever query string the
+    provider's own endpoint already carried. An earlier version of this
+    took everything before "&Signature=", which swept the endpoint's own
+    parameters in and failed only for providers whose SLO address has a
+    query string. Those exist, hence the test for it.
     """
     query = urlparse(url).query
     marker = "&Signature="

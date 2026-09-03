@@ -1,23 +1,23 @@
 """Tests for reading and signature-checking a real login response.
 
-Everything here is skipped unless xmlsec is importable, which means it runs inside
-the container and in the `images` CI job, and skips on Windows. That is the whole
-reason the rest of the SAML code is arranged to avoid needing it — but reader.py
-does need it, and it is the one module where being wrong means accepting forged
-logins, so it cannot go untested.
+Everything here is skipped unless xmlsec is importable, so it runs inside
+the container and in the `images` CI job, and skips on Windows. reader.py
+is the one module where being wrong means accepting forged logins, so it
+can't go untested even though the rest of the SAML code avoids needing
+xmlsec.
 
-The response in tests/fixtures/ is a genuine assertion produced by authentik, kept
-exactly as it arrived, signed with the certificate next to it. It is a much better
-fixture than anything hand-written: hand-written XML tests whatever the author
-believed the format to be, and this tests what a real provider actually sends.
+The response in tests/fixtures/ is a genuine assertion produced by
+authentik, kept exactly as it arrived, signed with the certificate next to
+it. Hand-written XML tests whatever the author believed the format to be;
+this tests what a real provider actually sends.
 
-Nothing secret is committed. A signed document and a public certificate are both
-things a provider hands out, and this one came from a throwaway identity provider
-on a laptop.
+Nothing secret is committed. A signed document and a public certificate are
+both things a provider hands out, and this one came from a throwaway
+identity provider on a laptop.
 
-The assertion has long since expired. That is fine, because nothing here checks
-timing — read_response only reads and verifies. Deciding whether a login is
-acceptable is checks.py's job and is covered in test_saml_checks.py.
+The assertion has long since expired. That's fine, since nothing here
+checks timing — read_response only reads and verifies. Deciding whether a
+login is acceptable is checks.py's job, covered in test_saml_checks.py.
 """
 
 from __future__ import annotations
@@ -243,11 +243,11 @@ def test_the_inspector_says_so_rather_than_raising_on_rubbish() -> None:
 
 # ------------------------------------------ requests applications send to us
 
-# The direction where we are the one being asked. An AuthnRequest carries no claims
-# — it only says "somebody at this application would like to sign in" — so anybody
-# can send one, and nothing read out of it may be treated as an instruction. These
-# tests are about reading it correctly, and about never reporting a signature as
-# checked when it was not.
+# The direction where we're the one being asked. An AuthnRequest carries no
+# claims, it only says "somebody at this application would like to sign
+# in", so anybody can send one, and nothing read out of it may be treated
+# as an instruction. These tests are about reading it correctly, and about
+# never reporting a signature as checked when it wasn't.
 
 OUR_SP = ServiceProvider.from_base_url("https://expenses.test")
 

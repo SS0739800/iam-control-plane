@@ -1,20 +1,20 @@
 """Tests for signing the messages we issue.
 
-Skipped unless xmlsec is importable, so this runs in the container and in the
-`images` CI job and skips on Windows — the same arrangement as test_saml_reader.py,
-and for the same reason. Signing is the one thing on this side that genuinely needs
-the native library, so it is also the one thing that cannot be left untested.
+Skipped unless xmlsec is importable, so this runs in the container and in
+the `images` CI job and skips on Windows — same arrangement as
+test_saml_reader.py, same reason: signing is the one thing on this side
+that genuinely needs the native library.
 
-The test that matters most is the round trip: sign an assertion here, then read it
-back with our own service provider reader from P2 and confirm the signature
-verifies. Those two halves were written months apart against the spec rather than
-against each other, so if they interoperate, the document is very likely real
-rather than merely plausible.
+The test that matters most is the round trip: sign an assertion here, then
+read it back with our own service provider reader from P2 and confirm the
+signature verifies. Those two halves were written against the spec rather
+than against each other, so if they interoperate, the document is very
+likely real, not just plausible.
 
-The second most important is where the signature lands. Signing the response
-instead of the assertion is a change nobody would notice — the login still works —
-and it leaves the part carrying the claims unprotected the moment a receiver pulls
-the assertion out on its own.
+The second most important is where the signature lands. Signing the
+response instead of the assertion is a change nobody would notice, the
+login still works, but it leaves the part carrying the claims unprotected
+the moment a receiver pulls the assertion out on its own.
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ from iam.saml.signer import SigningFailed, sign_assertion, sign_document  # noqa
 
 ISSUER = Issuer.from_base_url("http://localhost:8080")
 
-# One keypair for the module. Generating RSA keys is slow enough to notice if every
-# test made its own, and nothing here depends on them differing.
+# One keypair for the module. Generating RSA keys is slow enough to notice
+# if every test made its own, and nothing here depends on them differing.
 PAIR = generate(common_name="http://localhost:8080")
 OTHER_PAIR = generate(common_name="http://localhost:8080")
 
@@ -81,9 +81,10 @@ def sign(login: LoginToIssue | None = None, *, pair: object = PAIR) -> str:
 
 
 def test_the_signature_is_inside_the_assertion() -> None:
-    """Signing the response instead would still produce a working login, and would
-    leave the claims unprotected the moment a receiver reads the assertion alone.
-    That is the signature-wrapping shape reader.py refuses from the other side."""
+    """Signing the response instead would still produce a working login, but
+    would leave the claims unprotected the moment a receiver reads the
+    assertion alone — the signature-wrapping shape reader.py refuses from
+    the other side."""
     root = etree.fromstring(sign().encode())  # noqa: S320
 
     parents = [
@@ -106,9 +107,10 @@ def test_the_certificate_travels_with_the_signature() -> None:
 
 
 def test_signing_uses_sha256_not_sha1() -> None:
-    """SHA-1 is still the default in several libraries and is refused by current
-    versions of the same libraries on the receiving side. Being explicit is what
-    stops a login that works today failing after somebody else upgrades."""
+    """SHA-1 is still the default in several libraries and gets refused by
+    current versions of the same libraries on the receiving side. Being
+    explicit is what stops a login that works today failing after somebody
+    else upgrades."""
     signed = sign()
 
     assert "rsa-sha256" in signed
@@ -122,9 +124,9 @@ def test_signing_uses_sha256_not_sha1() -> None:
 def test_our_own_reader_verifies_our_own_signature() -> None:
     """The strongest evidence available that what we issue is real.
 
-    The reader was written in P2 against the spec, the signer in P5 against the
-    spec, and neither against the other. If they interoperate, the document is very
-    likely correct rather than merely plausible.
+    The reader was written in P2 against the spec, the signer in P5 against
+    the spec, neither against the other. If they interoperate, the
+    document is very likely correct, not just plausible.
     """
     signed = sign()
 
@@ -161,7 +163,7 @@ def test_a_different_certificate_does_not_verify() -> None:
 
 
 def test_tampering_with_the_assertion_breaks_the_signature() -> None:
-    """The whole point of signing it. Changing a single attribute value after the
+    """The reason to sign it: changing a single attribute value after the
     fact has to be detectable."""
     signed = sign().replace("ada@demo.local", "attacker@evil.test")
 
@@ -182,9 +184,9 @@ def test_an_ampersand_in_a_group_name_survives_signing() -> None:
 
 
 def test_an_injection_attempt_survives_as_text_and_stays_signed() -> None:
-    """The escaping test from test_saml_idp.py, carried through signing — because
-    escaping that held in the builder could still be undone by a round trip through
-    lxml."""
+    """The escaping test from test_saml_idp.py, carried through signing:
+    escaping that held in the builder could still be undone by a round
+    trip through lxml."""
     attack = '</saml:AttributeValue></saml:Attribute><saml:Attribute Name="admin">'
     signed = sign(a_login(attributes={"displayName": [attack]}))
 
@@ -199,8 +201,8 @@ def test_an_injection_attempt_survives_as_text_and_stays_signed() -> None:
 
 
 def test_a_response_with_no_assertion_is_refused() -> None:
-    """A failure response has no assertion by design, and signing is not a thing
-    that should quietly do nothing when there is nothing to sign."""
+    """A failure response has no assertion, and signing shouldn't quietly
+    do nothing when there's nothing to sign."""
     failure = build_failure_response(
         issuer=ISSUER,
         acs_url="http://localhost:8080/saml/acs",
@@ -227,9 +229,9 @@ def test_a_document_that_is_not_xml_is_refused() -> None:
 
 
 def test_a_bad_key_raises_rather_than_returning_an_unsigned_document() -> None:
-    """An unsigned assertion looks almost identical and is rejected by the receiver
-    with a signature error, which sends whoever is debugging it to the wrong end of
-    the connection."""
+    """An unsigned assertion looks almost identical and gets rejected by the
+    receiver with a signature error, which sends whoever's debugging it to
+    the wrong end of the connection."""
     with pytest.raises(SigningFailed, match="refused to sign"):
         sign_assertion(
             build_response(a_login(), issuer=ISSUER),
@@ -254,9 +256,9 @@ def a_logout_confirmation() -> str:
 def test_a_logout_confirmation_signs_and_verifies() -> None:
     """The same round trip as the assertion one, for the other kind of message.
 
-    Signed here with sign_document, then read back by the reader our own service
-    provider uses for a provider's logout confirmation. Both halves were written
-    against the spec rather than against each other.
+    Signed here with sign_document, then read back by the reader our own
+    service provider uses for a provider's logout confirmation. Both halves
+    were written against the spec, not against each other.
     """
     signed = sign_document(
         a_logout_confirmation(),
@@ -295,10 +297,10 @@ def test_a_logout_confirmation_does_not_verify_with_a_different_key() -> None:
 
 
 def test_the_signature_lands_on_the_root_of_a_logout_confirmation() -> None:
-    """There is nothing nested here to protect, so the root is the right thing.
+    """There's nothing nested here to protect, so the root is the right thing.
 
-    Worth pinning, because the assertion signer deliberately does the opposite. The
-    two behaving the same way would mean one of them was wrong.
+    Worth pinning, since the assertion signer does the opposite. The two
+    behaving the same way would mean one of them was wrong.
     """
     signed = sign_document(
         a_logout_confirmation(),
@@ -316,9 +318,10 @@ def test_the_signature_lands_on_the_root_of_a_logout_confirmation() -> None:
 def test_the_assertion_signer_refuses_a_logout_confirmation() -> None:
     """Why the two functions are separate rather than one with a flag.
 
-    sign_assertion looks for an assertion and refuses when there is none, which is
-    what stops it signing a wrapper and leaving claims unprotected. A LogoutResponse
-    has no assertion, so it has to be refused here and routed to sign_document.
+    sign_assertion looks for an assertion and refuses when there's none,
+    which is what stops it signing a wrapper and leaving claims unprotected.
+    A LogoutResponse has no assertion, so it has to be refused here and
+    routed to sign_document.
     """
     with pytest.raises(SigningFailed, match="no assertion"):
         sign_assertion(

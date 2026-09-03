@@ -1,27 +1,29 @@
 """Tests for the logins we issue to applications.
 
-The other direction from test_saml_acs.py. There we were checking somebody else's
-word; here an application takes ours, and an assertion we sign is believed by
-everything holding our certificate with no second opinion anywhere.
+The other direction from test_saml_acs.py. There we were checking somebody
+else's word; here an application takes ours, and an assertion we sign is
+believed by everything holding our certificate with no second opinion
+anywhere.
 
 Three tests earn the file on their own:
 
-*The address in the request is ignored.* An AuthnRequest names where to send the
-answer, and honouring it hands whoever sent it a genuine signed assertion for
-whoever happened to be logged in. The registered address is the only one used, and
-`test_the_address_in_the_request_is_never_used` is what stops that quietly changing.
+The address in the request is ignored. An AuthnRequest names where to send
+the answer, and honouring it hands whoever sent it a genuine signed
+assertion for whoever happened to be logged in. The registered address is
+the only one used, and `test_the_address_in_the_request_is_never_used` is
+what stops that quietly changing.
 
-*Nobody gets an assertion without an assignment.* This is where P4's entitlements
-stop being a report and start being enforcement.
+Nobody gets an assertion without an assignment. This is where P4's
+entitlements stop being a report and start being enforcement.
 
-*A refusal comes back as SAML.* Somebody halfway through signing in should land at
-the application with something it can explain, not on our domain looking at an error
-page — and the audit log should say why.
+A refusal comes back as SAML. Somebody halfway through signing in should
+land at the application with something it can explain, not stuck on our
+domain looking at an error page, and the audit log should say why.
 
-Reading the request and signing the response are stubbed, because both need xmlsec.
-Everything between them — registered, signed in, allowed, what the assertion says,
-what is written down — is the real code against a real database. See
-tests/idp_harness.py for exactly what the stubs replace.
+Reading the request and signing the response are stubbed, since both need
+xmlsec. Everything between them — registered, signed in, allowed, what the
+assertion says, what gets written down — is the real code against a real
+database. See tests/idp_harness.py for exactly what the stubs replace.
 """
 
 from __future__ import annotations

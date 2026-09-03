@@ -55,8 +55,7 @@ class AuditEvent(Base):
     actor_label: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
-        comment="The actor's name, copied in at write time so it survives "
-        "account deletion.",
+        comment="The actor's name, copied in at write time so it survives " "account deletion.",
     )
 
     # ----------------------------------------------------------------- action

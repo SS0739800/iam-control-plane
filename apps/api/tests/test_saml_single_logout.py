@@ -2,16 +2,17 @@
 
 Two different things arrive at /saml/sls and they are easy to conflate:
 
-A `SAMLResponse` is the provider confirming it did what we asked. Our session
-ended before we asked, so there is nothing left to do.
+A `SAMLResponse` is the provider confirming it did what we asked. Our
+session ended before we asked, so there's nothing left to do.
 
-A `SAMLRequest` is the provider telling us to sign somebody out. That one is the
-reason single logout matters: it is what makes "remove their access" reach the
-sessions somebody already has, rather than only the ones they start later.
+A `SAMLRequest` is the provider telling us to sign somebody out. That's the
+reason single logout matters: it's what makes "remove their access" reach
+sessions somebody already has, not just ones they start later.
 
-These need Postgres and skip without IAM_TEST_DATABASE_URL. Reading the XML is
-stubbed — see tests/saml_harness.py for what that does and does not replace — and
-the real thing is checked against a live authentik by scripts/smoke_login.py.
+These need Postgres and skip without IAM_TEST_DATABASE_URL. Reading the XML
+is stubbed — see tests/saml_harness.py for what that does and doesn't
+replace — and the real thing is checked against a live authentik by
+scripts/smoke_login.py.
 """
 
 from __future__ import annotations

@@ -1,14 +1,13 @@
 """Reading claims from the three providers this is meant to work with.
 
-The point of these is that adding a provider should be a data change, not a code
-change. Each test below is one provider's real attribute shape, and the same
+These check that adding a provider is a data change, not a code change.
+Each test is one provider's real attribute shape, and the same
 ``read_claims`` handles all of them with no branching.
 
-They are also the cheapest possible insurance against the failure that is most
-annoying to diagnose in this area: a login that succeeds and produces a person with
-a blank name, or one refused with "the login carries no email address or username"
-while the assertion visibly contains one. Both come from a claim name that is
-almost right.
+They're also cheap insurance against the most annoying failure in this
+area: a login that succeeds with a blank name, or one refused with "the
+login carries no email address or username" while the assertion visibly
+contains one. Both come from a claim name that's almost right.
 
 No database and no xmlsec, so these run anywhere.
 """

@@ -19,10 +19,8 @@ export interface paths {
         put?: never;
         /**
          * Ask for access to a group
-         * @description Raise a request for yourself.
-         *
-         *     No permission required, on purpose. An employee holds no permissions, and a
-         *     request system they cannot use is not a request system. Asking grants nothing.
+         * @description Raise a request for yourself. No permission required — an employee
+         *     holds no permissions, so asking grants nothing.
          *
          *     Raises:
          *         HTTPException: 400 if the request doesn't make sense, 404 for a group that
@@ -44,11 +42,9 @@ export interface paths {
         };
         /**
          * Every request ever raised for one group
-         * @description The history for a group, decided ones included.
-         *
-         *     Denied requests are the interesting ones here. "Three people asked for this and
-         *     were all refused" says something about the group that its membership list does
-         *     not.
+         * @description The history for a group, decided ones included. Denied requests
+         *     matter here too — "three people asked and were all refused" says
+         *     something the membership list alone doesn't.
          */
         get: operations["for_group_api_access_requests_group__group_id__get"];
         put?: never;
@@ -179,11 +175,8 @@ export interface paths {
         put?: never;
         /**
          * Take back a request you raised
-         * @description Withdraw your own request.
-         *
-         *     No permission needed, because it is your own. Somebody else closing it is a
-         *     denial and goes through the other endpoint — the two are different answers to
-         *     the same question and the record should say which happened.
+         * @description Withdraw your own request. No permission needed, since it's yours —
+         *     somebody else closing it is a denial and goes through the other endpoint.
          */
         post: operations["withdraw_request_api_access_requests__request_id__withdraw_post"];
         delete?: never;
@@ -203,9 +196,9 @@ export interface paths {
          * Things worth asking about
          * @description Run every check and report what turned up, worst first.
          *
-         *     Computed on request rather than stored. The answer changes whenever anybody
-         *     grants anything, and a cached review is one that tells an auditor about a
-         *     problem somebody fixed last week.
+         *     Computed on request, not stored — the answer changes whenever anyone
+         *     grants anything, and a cached review could tell an auditor about a
+         *     problem that's already fixed.
          */
         get: operations["access_review_api_access_review_get"];
         put?: never;
@@ -308,13 +301,12 @@ export interface paths {
          * Delete a rule and take back what it granted
          * @description Remove a rule, and remove the access it was giving people.
          *
-         *     Deleted rather than kept, unlike a role grant. A rule is a statement of intent
-         *     rather than a record of something that happened to somebody, and the audit entry
-         *     holds what it said and who deleted it.
+         *     Deleted rather than kept, unlike a role grant — a rule is a statement
+         *     of intent, not a record of something that happened, and the audit
+         *     entry already holds what it said.
          *
-         *     The memberships it granted go with it. Leaving them behind would turn automatic
-         *     access into permanent access that nothing explains, which is exactly the
-         *     situation access reviews exist to find.
+         *     The memberships it granted are removed too. Leaving them would turn
+         *     automatic access into permanent access that nothing explains.
          */
         delete: operations["delete_rule_api_access_rules__rule_id__delete"];
         options?: never;
@@ -362,10 +354,10 @@ export interface paths {
          * Apply this rule to everybody now
          * @description Re-run a rule over everybody.
          *
-         *     Normally unnecessary — writes here apply immediately and attribute changes
-         *     reconcile as they arrive — so this is for the case where somebody edited the
-         *     database directly, or wants to confirm the current state matches the rules.
-         *     A run that reports nothing changed is the answer you want.
+         *     Normally unnecessary since writes apply immediately and attribute
+         *     changes reconcile as they happen — this is for a direct database edit,
+         *     or to confirm nothing has drifted. A run reporting no changes is the
+         *     good outcome.
          */
         post: operations["run_rule_api_access_rules__rule_id__run_post"];
         delete?: never;
@@ -388,19 +380,15 @@ export interface paths {
          * Register an application from its metadata, or update one
          * @description Read an application's metadata and store what it says.
          *
-         *     ``apps:write``, reused rather than given a permission of its own. Registering an
-         *     application is managing an application, and the audience is already the narrowest
-         *     one — admin. Inventing a separate permission would suggest it was a different
-         *     kind of power and then let the two drift apart. The opposite call was made for
-         *     role grants, where ``users:write`` was genuinely *not* an equivalent power.
+         *     Reuses ``apps:write`` rather than a permission of its own, since registering
+         *     an application is just managing one.
          *
-         *     The document is pasted in, never fetched from a URL. Same reasoning as
-         *     registering an identity provider, and it applies here for the same reason: our
-         *     server can reach things the person pasting cannot. See
-         *     docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         *     The document is pasted in, never fetched from a URL — same reasoning as
+         *     registering an identity provider: our server can reach things the person
+         *     pasting cannot. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
          *
-         *     Registering the same slug again replaces the details, which is how a certificate
-         *     or an address change is handled — paste the new metadata and the row updates.
+         *     Registering the same slug again replaces the details, so a certificate or
+         *     address change is just pasting the new metadata again.
          *
          *     Raises:
          *         HTTPException: 400 if the metadata can't be read or is missing something.
@@ -442,9 +430,8 @@ export interface paths {
          * Give a group access to an application
          * @description Grant through a group, which is how access should usually be given.
          *
-         *     Needs groups:write as well as apps:write. Giving one person access affects one
-         *     person; giving a group access affects everybody in it now and everybody added to
-         *     it later, including by an access rule nobody re-reads.
+         *     Needs groups:write as well as apps:write, since it affects everybody in the
+         *     group now and everybody added to it later.
          */
         put: operations["assign_group_api_applications__app_id__groups__group_id__put"];
         post?: never;
@@ -479,10 +466,9 @@ export interface paths {
          * Take away one person's access to an application
          * @description Safe to call twice.
          *
-         *     Deleted rather than marked, unlike a role grant. An assignment carries no reason
-         *     or expiry of its own, so there is nothing in the row worth keeping — the audit
-         *     entry holds who removed it and when, which is the part somebody asks about.
-         *     That asymmetry is a known one; see the note in models/application.py.
+         *     Deleted rather than marked, unlike a role grant — an assignment has no reason
+         *     or expiry of its own, so there's nothing in the row worth keeping. The audit
+         *     entry records who removed it and when. See the note in models/application.py.
          */
         delete: operations["unassign_user_api_applications__app_id__users__user_id__delete"];
         options?: never;
@@ -542,9 +528,8 @@ export interface paths {
          * Headline counts
          * @description Every count in one trip to the database.
          *
-         *     Little subqueries inside one SELECT, instead of one query each. This is the first
-         *     thing that loads on every visit, and that many round trips to a hosted database
-         *     over the internet is a delay you can see. One isn't.
+         *     One SELECT with subqueries instead of one query each, since this loads on
+         *     every visit and several round trips to a hosted database is a visible delay.
          */
         get: operations["dashboard_api_dashboard_get"];
         put?: never;
@@ -664,8 +649,8 @@ export interface paths {
          * List the providers we accept logins from
          * @description Every registered provider, enabled or not.
          *
-         *     Not paginated. There are three of these at most, and there is never going to
-         *     be a fourth page of identity providers.
+         *     Not paginated. There are three of these at most, and there's never going
+         *     to be a fourth page of identity providers.
          */
         get: operations["list_identity_providers_api_identity_providers_get"];
         put?: never;
@@ -673,15 +658,15 @@ export interface paths {
          * Register a provider from its metadata, or update one
          * @description Read a provider's metadata and store what it says.
          *
-         *     Registering the same slug again replaces the details, which is what makes this
-         *     the way to handle a certificate rotation: paste the new metadata, and the row
-         *     updates. It's a POST that isn't a create-only, on purpose — a separate "update"
-         *     endpoint would take the same document and do the same work, and having two
-         *     would just mean guessing which one to use.
+         *     Registering the same slug again replaces the details, which is how this
+         *     handles a certificate rotation: paste the new metadata, the row updates.
+         *     A POST that isn't create-only, since a separate "update" endpoint would
+         *     take the same document and do the same work, and having two would just
+         *     mean guessing which one to use.
          *
-         *     Rotations are worth watching, so the audit entry records the old and new
-         *     certificate fingerprints whenever the key changes. A key changing when nobody
-         *     rotated one is exactly the event you want to find in a log.
+         *     The audit entry records the old and new certificate fingerprints
+         *     whenever the key changes, so a key changing when nobody rotated one
+         *     shows up in the log.
          *
          *     Raises:
          *         HTTPException: 400 if the metadata can't be read or is missing something.
@@ -705,21 +690,22 @@ export interface paths {
          * Ways to sign in, for somebody who is not signed in yet
          * @description The providers a signed-out visitor can choose from.
          *
-         *     Unauthenticated on purpose, and the only endpoint here that is. Everything else
-         *     about a provider needs idp:read, but a login screen cannot ask for a permission —
-         *     the person reading it has no session yet, which is the entire reason they are
-         *     looking at it.
+         *     Unauthenticated, the only endpoint here that is. Everything else about a
+         *     provider needs idp:read, but a login screen can't ask for a permission —
+         *     the person reading it has no session yet, which is why they're looking
+         *     at it.
          *
-         *     The console used to solve this by hard-coding ?idp=authentik into the sign-in
-         *     button, which worked locally and pointed at a provider that did not exist in
-         *     production. Somebody had to be handed a URL to get in at all.
+         *     The console used to solve this by hard-coding ?idp=authentik into the
+         *     sign-in button, which worked locally and pointed at a provider that
+         *     didn't exist in production. Somebody had to be handed a URL to get in
+         *     at all.
          *
-         *     Only enabled providers, because a disabled one is not a way to sign in, and
+         *     Only enabled providers: a disabled one isn't a way to sign in, and
          *     offering it would produce a refusal that looks like a fault.
          *
-         *     Declared before the "" route below it: FastAPI matches in order, and "/{slug}"
-         *     would otherwise swallow this path and try to look up a provider called
-         *     "sign-in-options".
+         *     Declared before the "" route below it: FastAPI matches in order, and
+         *     "/{slug}" would otherwise swallow this path and try to look up a
+         *     provider called "sign-in-options".
          */
         get: operations["sign_in_options_api_identity_providers_sign_in_options_get"];
         put?: never;
@@ -758,9 +744,8 @@ export interface paths {
          * The person this request is coming from
          * @description Report the current person.
          *
-         *     No permission check on this one on purpose: everybody is allowed to know who
-         *     they are. Being signed in at all is the only requirement, and that's what
-         *     resolving the actor already established.
+         *     No permission check: everybody is allowed to know who they are. Being
+         *     signed in is the only requirement, which resolving the actor already checks.
          */
         get: operations["me_api_me_get"];
         put?: never;
@@ -782,9 +767,9 @@ export interface paths {
          * What the provisioning systems have been doing
          * @description Recent directory writes that came from a SCIM client.
          *
-         *     A view over the audit log, filtered to entries a provisioning system made. It
-         *     answers the question this screen exists for — "is anything actually arriving,
-         *     and what" — without making somebody scroll the whole log looking for it.
+         *     A view over the audit log, filtered to entries a provisioning system
+         *     made, so someone doesn't have to scroll the whole log to see what's
+         *     actually arriving.
          */
         get: operations["activity_api_provisioning_activity_get"];
         put?: never;
@@ -806,8 +791,8 @@ export interface paths {
          * The systems allowed to write to the directory
          * @description Every client, revoked ones included.
          *
-         *     Not filtered to the usable ones. A revoked token is exactly what somebody is
-         *     looking for when they are working out why a sync stopped.
+         *     Not filtered to usable ones - a revoked token is exactly what someone
+         *     is looking for when working out why a sync stopped.
          */
         get: operations["list_clients_api_provisioning_clients_get"];
         put?: never;
@@ -815,11 +800,11 @@ export interface paths {
          * Issue a token for a provisioning system
          * @description Create a client and hand back its token, once.
          *
-         *     The token is in this response and nowhere else, ever. We keep only its hash,
-         *     so there is nothing to show later even if the screen offered to.
+         *     The token is in this response and nowhere else. We keep only its hash,
+         *     so there's nothing to show later even if the screen offered to.
          *
-         *     The audit entry records that a token was issued and by whom. It does not
-         *     record the token, which would rather defeat the point of not storing it.
+         *     The audit entry records that a token was issued and by whom, not the
+         *     token itself.
          */
         post: operations["issue_client_api_provisioning_clients_post"];
         delete?: never;
@@ -841,12 +826,11 @@ export interface paths {
          * Stop accepting a token
          * @description Stop a token working, and record why.
          *
-         *     Marked rather than deleted. Revoking one is the thing you do when you think it
-         *     has leaked, and that is precisely when you want the row to survive so the
-         *     audit log's references to it still resolve.
+         *     Marked rather than deleted, so the audit log's references to it still
+         *     resolve - useful since revoking usually means you think it leaked.
          *
-         *     Revoking an already-revoked client leaves the original reason and timestamp
-         *     alone. When it was cut off is the fact that matters.
+         *     Revoking an already-revoked client leaves the original reason and
+         *     timestamp alone; when it was cut off is the fact that matters.
          */
         post: operations["revoke_client_api_provisioning_clients__client_id__revoke_post"];
         delete?: never;
@@ -866,9 +850,9 @@ export interface paths {
          * What provisioning has done to this directory
          * @description The numbers that say whether the sync is doing its job.
          *
-         *     ``users_from_login`` is the one worth watching. Somebody arriving by logging
-         *     in means SCIM had not told us about them yet, which is fine occasionally and a
-         *     sign of a broken or narrow sync if it keeps happening.
+         *     `users_from_login` is worth watching: someone arriving by login means
+         *     SCIM hadn't told us about them yet. Fine occasionally, a sign of a
+         *     broken or narrow sync if it keeps happening.
          */
         get: operations["overview_api_provisioning_overview_get"];
         put?: never;
@@ -890,7 +874,7 @@ export interface paths {
          * The systems we push accounts into
          * @description Every target, switched off ones included.
          *
-         *     A disabled target is exactly what somebody is looking for when they are working
+         *     A disabled target is exactly what someone is looking for when working
          *     out why a downstream stopped receiving people.
          */
         get: operations["list_targets_api_provisioning_targets_get"];
@@ -899,10 +883,9 @@ export interface paths {
          * Register a system to push accounts into
          * @description Register a downstream, after checking we are willing to talk to it.
          *
-         *     The address is checked here rather than on every push. That is the trade ADR 0007
-         *     describes: a hostname that later resolves somewhere private is not caught, and
-         *     resolving before every request would be slower, still racy, and would feel like it
-         *     had solved that. The row being reviewable is the actual control.
+         *     The address is checked here, not on every push - see ADR 0007. A
+         *     hostname that later resolves somewhere private isn't caught by this, but
+         *     the row being reviewable is the actual control, not the resolve check.
          *
          *     Raises:
          *         HTTPException: 400 for an address we refuse, 404 for a missing application,
@@ -929,15 +912,13 @@ export interface paths {
          * Stop provisioning into a system
          * @description Remove a target and forget which account belonged to whom.
          *
-         *     It does not deactivate anybody downstream, and that is deliberate rather than
-         *     lazy: deleting a target is what somebody does when a system is being
-         *     decommissioned or was registered by mistake, and silently switching off a few
-         *     hundred accounts on the way out would be a much bigger action than the button
-         *     suggests. Disable the target and run one more sync to deprovision people, then
-         *     delete it.
+         *     Does not deactivate anybody downstream. Silently switching off a few
+         *     hundred accounts on the way out would be a much bigger action than the
+         *     button suggests - disable the target and run one more sync to
+         *     deprovision people first, then delete it.
          *
-         *     The audit entry says how many links were forgotten, because that is the number
-         *     somebody will want afterwards.
+         *     The audit entry records how many links were forgotten, since that's the
+         *     number someone will want afterwards.
          */
         delete: operations["delete_target_api_provisioning_targets__target_id__delete"];
         options?: never;
@@ -960,8 +941,8 @@ export interface paths {
          * Who has an account in this system, and who does not
          * @description The links, newest problems first.
          *
-         *     Ordered so failures and orphans come before the accounts that are working, because
-         *     a list of two hundred working accounts is not what anybody opens this for.
+         *     Ordered so failures and orphans come before working accounts - a list of
+         *     two hundred working accounts isn't what anyone opens this for.
          */
         get: operations["target_accounts_api_provisioning_targets__target_id__accounts_get"];
         put?: never;
@@ -985,8 +966,8 @@ export interface paths {
          * Check a target answers and accepts our token
          * @description Read the target's ServiceProviderConfig, which describes nobody.
          *
-         *     The right thing to call after registering one: it proves the address and the token
-         *     before the first person depends on them, and changes nothing either way.
+         *     Good to call right after registering a target - it proves the address
+         *     and token work before anyone depends on them, and changes nothing.
          */
         post: operations["probe_target_api_provisioning_targets__target_id__probe_post"];
         delete?: never;
@@ -1008,10 +989,9 @@ export interface paths {
          * Push accounts to a target now
          * @description Reconcile the target's accounts with who is entitled to them.
          *
-         *     Runs in the request, which is honest about there being no background worker: the
-         *     response is the result rather than a job id that never gets polled. It means a
-         *     large first sync takes a while, and the alternative — a queue nothing drains —
-         *     would be worse.
+         *     Runs in the request rather than a background job, so a large first sync
+         *     takes a while. There's no worker to drain a queue, so a job id nobody
+         *     could poll would be worse.
          */
         post: operations["sync_target_api_provisioning_targets__target_id__sync_post"];
         delete?: never;
@@ -1054,12 +1034,12 @@ export interface paths {
          * One attempt, with the assertion that arrived
          * @description One login, including the document itself when we kept it.
          *
-         *     Only failures keep the document. A login that passed all ten checks has nothing
-         *     to look at, and storing an assertion per login forever is a lot of somebody's
-         *     personal data for no reason.
+         *     Only failures keep the document — a passing login has nothing to look
+         *     at, and storing an assertion per login forever is unnecessary personal
+         *     data.
          *
-         *     The XML comes back as it arrived rather than reformatted. An inspector exists to
-         *     show what was actually sent — reformatting is the one thing it shouldn't do.
+         *     The XML comes back as it arrived, not reformatted, so it shows exactly
+         *     what was sent.
          */
         get: operations["get_login_attempt_api_saml_logins__event_id__get"];
         put?: never;
@@ -1081,10 +1061,9 @@ export interface paths {
          * List users
          * @description The user list, filtered and split into pages.
          *
-         *     The filtering and paging happen in Postgres, not the browser. There are 1,284
-         *     users in the demo data; sending all of them so the frontend can filter would
-         *     be slow, and it would also hand out every record to anyone who can load one
-         *     page.
+         *     Filtering and paging happen in Postgres, not the browser — sending every
+         *     user so the frontend can filter would be slow and would leak every record
+         *     to anyone who can load one page.
          */
         get: operations["list_users_api_users_get"];
         put?: never;
@@ -1215,9 +1194,9 @@ export interface paths {
          * Our details, for registering an application against this system
          * @description Hand this to whoever is setting up an application.
          *
-         *     Not behind a login, the same as the SP metadata and for the same reason: it
-         *     contains nothing secret, and requiring a session to fetch the document you need
-         *     in order to set up signing in would be an awkward loop.
+         *     Not behind a login, same as the SP metadata and for the same reason: it
+         *     contains nothing secret, and requiring a session to fetch the document
+         *     you need to set up signing in would be a loop.
          */
         get: operations["metadata_idp_metadata_get"];
         put?: never;
@@ -1239,13 +1218,12 @@ export interface paths {
          * An application telling us somebody signed out
          * @description The redirect binding, which is what our metadata advertises.
          *
-         *     This address was in the metadata before it was in the code, which is worth
-         *     naming plainly: we published a document promising an endpoint that answered 404.
+         *     This address was in the metadata before it was in the code: we
+         *     published a document promising an endpoint that answered 404.
          *
-         *     It could not simply be written, either. The reason is in
-         *     iam/models/idp_session.py — the SessionIndex we put in every assertion was
-         *     generated fresh and never stored, so a logout request quoting one had nothing to
-         *     be matched against.
+         *     It couldn't just be written either. See iam/models/idp_session.py — the
+         *     SessionIndex we put in every assertion was generated fresh and never
+         *     stored, so a logout request quoting one had nothing to match against.
          */
         get: operations["slo_redirect_idp_slo_get"];
         put?: never;
@@ -1271,10 +1249,10 @@ export interface paths {
          * Sign somebody in to an application
          * @description The redirect binding, and the one most applications use.
          *
-         *     Also handles a login we start ourselves: with ``?app=slug`` and no SAMLRequest,
-         *     somebody clicking an application in the console gets signed straight in. That is
-         *     what an application calls IdP-initiated, and it is legal — the assertion simply
-         *     carries no InResponseTo.
+         *     Also handles a login we start ourselves: with ``?app=slug`` and no
+         *     SAMLRequest, somebody clicking an application in the console gets
+         *     signed straight in. That's what an application calls IdP-initiated,
+         *     and it's legal — the assertion simply carries no InResponseTo.
          */
         get: operations["sso_redirect_idp_sso_get"];
         put?: never;
@@ -1282,7 +1260,7 @@ export interface paths {
          * Sign somebody in to an application (POST binding)
          * @description The POST binding. Same decisions, different envelope.
          *
-         *     Offered because our metadata says we offer it, and an application that reads
+         *     Offered because our metadata says we offer it; an application that reads
          *     metadata and then finds only one binding working has been lied to.
          */
         post: operations["sso_post_idp_sso_post"];
@@ -1303,9 +1281,9 @@ export interface paths {
          * Sign in to an application by name
          * @description A tidy link for a login we start ourselves.
          *
-         *     Exists so the console can offer "open this application" without anybody
-         *     constructing a query string, and so a bookmark to an application is a normal
-         *     looking URL.
+         *     Exists so the console can offer "open this application" without
+         *     anybody constructing a query string, and so a bookmark to an
+         *     application looks like a normal URL.
          */
         get: operations["sso_for_app_idp_sso__app_slug__get"];
         put?: never;
@@ -1330,21 +1308,21 @@ export interface paths {
          * @description Accept a login from the provider, or refuse it and say which check failed.
          *
          *     This is the endpoint that has to be right. Everything the provider sends
-         *     arrives through the person's own browser, so all of it is under the control of
-         *     whoever is trying to get in. Nothing here is trusted until it has been through
-         *     every check in checks.py, and nothing is trusted a second time because the
-         *     request it answers is consumed whether the login is accepted or not.
+         *     arrives through the person's own browser, so all of it is under the
+         *     control of whoever is trying to get in. Nothing here is trusted until it
+         *     has passed every check in checks.py, and the request it answers is
+         *     consumed either way so it can't be retried.
          *
-         *     The order is: find the request this is answering, work out which provider that
-         *     was, read and verify the document, run every check, and only then look up a
-         *     person. Reading identity out of a document before checking it is the mistake
-         *     that makes all the other checks pointless.
+         *     Order: find the request this is answering, work out which provider that
+         *     was, read and verify the document, run every check, and only then look
+         *     up a person. Reading identity out of a document before checking it would
+         *     make all the other checks pointless.
          *
-         *     Only replies to logins we started. A provider can also start one by itself,
-         *     from a tile in its own dashboard, and that has no request to match against —
-         *     which means giving up the check that stops someone posting a login at us out
-         *     of the blue. checks.py handles that case, so turning it on later is a small
-         *     change, but it stays off until there's a reason to want it.
+         *     Only replies to logins we started. A provider can also start one itself,
+         *     from a tile in its own dashboard, with no request to match against —
+         *     which means giving up the check that stops someone posting a login at us
+         *     out of the blue. checks.py handles that case already, so turning it on
+         *     is a small change, but it stays off until there's a reason to want it.
          *
          *     Raises:
          *         HTTPException: 400 for a login that can't be matched, read, or identified.
@@ -1368,13 +1346,14 @@ export interface paths {
          * Start signing in
          * @description Send someone to their provider to sign in.
          *
-         *     Three things happen before the redirect: we check the provider is one we know,
-         *     we check where they've asked to be sent afterwards, and we write down the
-         *     request so the answer can be matched to it later.
+         *     Three things happen before the redirect: check the provider is one we
+         *     know, check where they've asked to be sent afterwards, and write down
+         *     the request so the answer can be matched to it later.
          *
          *     That last part is why this can't be stateless. The answer arrives as a
-         *     cross-site form POST and browsers don't send our cookies on those, so the
-         *     request has to be remembered server-side, keyed by a token that travels with it.
+         *     cross-site form POST, and browsers don't send our cookies on those, so
+         *     the request has to be remembered server-side, keyed by a token that
+         *     travels with it.
          */
         get: operations["login_saml_login_get"];
         put?: never;
@@ -1398,25 +1377,23 @@ export interface paths {
          * Sign out
          * @description End this session, clear the cookie, and tell the provider.
          *
-         *     A POST, not a GET. A sign-out you can trigger with a link means any page on
-         *     the internet can sign our users out with an image tag pointed at it. Annoying
-         *     rather than dangerous, but it costs nothing to get right, and the Lax cookie
-         *     means a cross-site POST doesn't carry the session anyway.
+         *     A POST, not a GET: a sign-out triggerable by a link means any page on the
+         *     internet could sign our users out with an image tag. Annoying rather
+         *     than dangerous, but costs nothing to get right, and the Lax cookie means
+         *     a cross-site POST doesn't carry the session anyway.
          *
-         *     If the provider has a logout address, this ends with a redirect to it carrying
-         *     a LogoutRequest, and the provider signs them out too. Without that step,
-         *     clicking login again puts them straight back in without a password prompt,
-         *     because the provider still thinks they're signed in — which is a surprising
-         *     thing to watch happen right after pressing "sign out".
+         *     If the provider has a logout address, this ends with a redirect to it
+         *     carrying a LogoutRequest, so the provider signs them out too. Without
+         *     that step, clicking login again puts them straight back in without a
+         *     password prompt, since the provider still thinks they're signed in.
          *
-         *     Our own session is ended before the redirect, not after. If the provider is
-         *     down or never answers, the person is still signed out here, which is the part
-         *     we're responsible for.
+         *     Our own session ends before the redirect, not after — if the provider is
+         *     down or never answers, the person is still signed out here, which is the
+         *     part we're responsible for.
          *
-         *     Always succeeds. No cookie, an unknown one, one that expired an hour ago:
-         *     they all end with the person signed out and the cookie gone, which is what
-         *     they asked for. Reporting an error for "you were already signed out" would be
-         *     technically accurate and useless.
+         *     Always succeeds. No cookie, an unknown one, one that expired an hour
+         *     ago: they all end with the person signed out and the cookie gone, which
+         *     is what they asked for.
          */
         post: operations["logout_saml_logout_post"];
         delete?: never;
@@ -1436,9 +1413,9 @@ export interface paths {
          * Our details, for registering this app with a provider
          * @description Hand this to whoever runs the identity provider.
          *
-         *     Deliberately not behind a login. It contains nothing secret — just our name and
-         *     the address to send answers to — and needing to be signed in to fetch the thing
-         *     you need in order to sign in would be an awkward loop.
+         *     Not behind a login. It contains nothing secret, just our name and the
+         *     address to send answers to, and needing to sign in to fetch the thing
+         *     you need in order to sign in would be a loop.
          */
         get: operations["metadata_saml_metadata_get"];
         put?: never;
@@ -1460,29 +1437,29 @@ export interface paths {
          * Single logout, in both directions
          * @description Handle a logout, whichever side started it.
          *
-         *     Two different things arrive here and they are told apart by which parameter is
+         *     Two different things arrive here, told apart by which parameter is
          *     present, not by the method:
          *
-         *     A `SAMLResponse` is the provider confirming it signed somebody out because we
-         *     asked. Our session was already ended before we sent that request, so there's
-         *     nothing left to do but check it and send the person home.
+         *     A `SAMLResponse` is the provider confirming it signed somebody out
+         *     because we asked. Our session already ended before we sent that
+         *     request, so there's nothing left to do but check it and send the person
+         *     home.
          *
-         *     A `SAMLRequest` is the provider telling us somebody signed out somewhere else,
-         *     or was signed out by an administrator. That one matters: it's the message that
-         *     makes "remove their access" actually remove their access, everywhere, rather
-         *     than only in the places they happen to visit next.
+         *     A `SAMLRequest` is the provider telling us somebody signed out somewhere
+         *     else, or was signed out by an administrator. This one matters: it's the
+         *     message that makes "remove their access" actually remove access
+         *     everywhere, not just in places they happen to visit next.
          *
-         *     Accepts GET and POST because providers differ on which they use, and the message
-         *     is the same either way.
+         *     Accepts GET and POST since providers differ on which they use; the
+         *     message is the same either way.
          *
-         *     We don't sign our answer. A provider that insists on signed logout messages
-         *     won't accept it, and that needs a key of ours, which arrives in P5. authentik
-         *     doesn't insist, so this works today; Okta and Entra may not, and that's a known
-         *     limit rather than a surprise.
+         *     We don't sign our answer. A provider that insists on signed logout
+         *     messages won't accept it, and that needs a key of ours, arriving in P5.
+         *     authentik doesn't insist, so this works today; Okta and Entra may not.
          *
-         *     Unsigned requests are refused. We can't tell who sent one, and accepting it
-         *     would let anybody sign out anybody whose NameID they can guess. That's only a
-         *     nuisance rather than a way in, but refusing costs nothing.
+         *     Unsigned requests are refused. We can't tell who sent one, and accepting
+         *     it would let anybody sign out anybody whose NameID they can guess —
+         *     a nuisance rather than a way in, but refusing costs nothing.
          */
         get: operations["single_logout_redirect_binding"];
         put?: never;
@@ -1490,29 +1467,29 @@ export interface paths {
          * Single logout, in both directions
          * @description Handle a logout, whichever side started it.
          *
-         *     Two different things arrive here and they are told apart by which parameter is
+         *     Two different things arrive here, told apart by which parameter is
          *     present, not by the method:
          *
-         *     A `SAMLResponse` is the provider confirming it signed somebody out because we
-         *     asked. Our session was already ended before we sent that request, so there's
-         *     nothing left to do but check it and send the person home.
+         *     A `SAMLResponse` is the provider confirming it signed somebody out
+         *     because we asked. Our session already ended before we sent that
+         *     request, so there's nothing left to do but check it and send the person
+         *     home.
          *
-         *     A `SAMLRequest` is the provider telling us somebody signed out somewhere else,
-         *     or was signed out by an administrator. That one matters: it's the message that
-         *     makes "remove their access" actually remove their access, everywhere, rather
-         *     than only in the places they happen to visit next.
+         *     A `SAMLRequest` is the provider telling us somebody signed out somewhere
+         *     else, or was signed out by an administrator. This one matters: it's the
+         *     message that makes "remove their access" actually remove access
+         *     everywhere, not just in places they happen to visit next.
          *
-         *     Accepts GET and POST because providers differ on which they use, and the message
-         *     is the same either way.
+         *     Accepts GET and POST since providers differ on which they use; the
+         *     message is the same either way.
          *
-         *     We don't sign our answer. A provider that insists on signed logout messages
-         *     won't accept it, and that needs a key of ours, which arrives in P5. authentik
-         *     doesn't insist, so this works today; Okta and Entra may not, and that's a known
-         *     limit rather than a surprise.
+         *     We don't sign our answer. A provider that insists on signed logout
+         *     messages won't accept it, and that needs a key of ours, arriving in P5.
+         *     authentik doesn't insist, so this works today; Okta and Entra may not.
          *
-         *     Unsigned requests are refused. We can't tell who sent one, and accepting it
-         *     would let anybody sign out anybody whose NameID they can guess. That's only a
-         *     nuisance rather than a way in, but refusing costs nothing.
+         *     Unsigned requests are refused. We can't tell who sent one, and accepting
+         *     it would let anybody sign out anybody whose NameID they can guess —
+         *     a nuisance rather than a way in, but refusing costs nothing.
          */
         post: operations["single_logout_post_binding"];
         delete?: never;
@@ -1555,9 +1532,9 @@ export interface paths {
          * Replace a group
          * @description Set the group to exactly what arrived, members included.
          *
-         *     PUT means replace, so the membership becomes the list in the document and
-         *     anybody missing from it is removed. That is the destructive reading and it is
-         *     the correct one here — unlike PATCH add, which only ever puts people in.
+         *     PUT means replace: the membership becomes the list in the document, and
+         *     anybody missing from it is removed. That's correct here, unlike PATCH
+         *     `add`, which only ever puts people in.
          */
         put: operations["replace_group_scim_v2_Groups__group_id__put"];
         post?: never;
@@ -1565,10 +1542,9 @@ export interface paths {
          * Delete a group
          * @description Remove a group. Unlike a person, this really does delete.
          *
-         *     A group is a container, not somebody's record. Keeping an emptied group
-         *     around forever would clutter the directory without answering any question the
-         *     audit log doesn't already answer — the entries saying who was in it and when
-         *     they were removed survive this, because the audit log is append-only.
+         *     A group is a container, not somebody's record, so there's no reason to
+         *     keep an emptied one around. The audit log's entries about who was in it
+         *     survive this since the log is append-only.
          *
          *     The membership rows go with it through the cascade; the people do not.
          */
@@ -1579,13 +1555,12 @@ export interface paths {
          * Change part of a group
          * @description Add or remove members, or rename the group.
          *
-         *     This is how membership actually changes in practice: somebody joins a team
-         *     upstream and the provider sends one ``add`` with one member in it.
+         *     This is how membership actually changes in practice: somebody joins a
+         *     team upstream and the provider sends one `add` with one member in it.
          *
-         *     The distinction that matters is between ``add`` and ``replace`` on
-         *     ``members``. Add puts people in and leaves everyone else alone. Replace sets
-         *     the list to exactly what arrived, removing anybody absent from it. Treating
-         *     an add as a replace empties groups, and does it quietly.
+         *     `add` puts people in and leaves everyone else alone. `replace` sets the
+         *     list to exactly what arrived, removing anybody absent from it. Treating
+         *     an add as a replace empties a group quietly.
          */
         patch: operations["patch_group_scim_v2_Groups__group_id__patch"];
         trace?: never;
@@ -1635,12 +1610,12 @@ export interface paths {
          * What this server supports
          * @description What we can do, answered honestly.
          *
-         *     ``patch`` is true and it matters more than the rest: it is how deprovisioning
-         *     arrives. A provider told patch is unsupported falls back to PUT, which means
-         *     sending a whole resource to change one boolean.
+         *     `patch` is true - this is how deprovisioning arrives. A provider told
+         *     patch is unsupported falls back to PUT, sending a whole resource to
+         *     change one boolean.
          *
-         *     ``bulk`` is false. A provider that believes otherwise will post a bundle of
-         *     operations to an endpoint that does not exist.
+         *     `bulk` is false. A provider that thinks otherwise would post a bundle of
+         *     operations to an endpoint that doesn't exist.
          */
         get: operations["service_provider_config_scim_v2_ServiceProviderConfig_get"];
         put?: never;
@@ -1662,9 +1637,10 @@ export interface paths {
          * List or search people
          * @description People, filtered and paged the way SCIM asks for.
          *
-         *     Almost every call here is a provider asking "do you already have this one?"
-         *     before deciding whether to create or update. That is why an unreadable filter
-         *     is an error rather than being ignored — see iam/scim/filters.py.
+         *     Almost every call here is a provider asking "do you already have this
+         *     one?" before deciding whether to create or update, which is why an
+         *     unreadable filter is an error rather than being ignored - see
+         *     iam/scim/filters.py.
          */
         get: operations["list_users_scim_v2_Users_get"];
         put?: never;
@@ -1672,16 +1648,15 @@ export interface paths {
          * Create a person
          * @description Add somebody the provider has told us about.
          *
-         *     A userName that already exists answers 409 with scimType uniqueness rather
-         *     than creating a duplicate. That is not just correctness about the spec: it is
-         *     what lets a provider recover, because it reads that code and switches to
-         *     updating the person instead of reporting a failed sync forever.
+         *     A userName that already exists answers 409 with scimType uniqueness
+         *     instead of creating a duplicate, so the provider can recover by reading
+         *     that code and switching to update instead of retrying a failed sync
+         *     forever.
          *
-         *     Somebody who already exists gets a 409 whatever created them, including
-         *     somebody P2 created just-in-time at their first login. That is not a dead end:
-         *     a provider searches by userName before creating, finds them, and updates them
-         *     instead — and that update is what promotes a just-in-time record to a
-         *     SCIM-managed one. See _adopt.
+         *     That includes somebody P2 created just-in-time at their first login: the
+         *     provider searches by userName, finds them, and updates them instead -
+         *     that update is what promotes a just-in-time record to a SCIM-managed
+         *     one. See _adopt.
          */
         post: operations["create_user_scim_v2_Users_post"];
         delete?: never;
@@ -1703,24 +1678,24 @@ export interface paths {
          * Replace a person
          * @description Overwrite what the provider owns, leave the rest alone.
          *
-         *     "Replace" in SCIM means the resource, not the row. Fields the document does
-         *     not carry keep their values rather than being blanked, and fields SCIM is not
-         *     allowed to write — what somebody may do in this console, most of all — are
-         *     untouched whatever the document says. See WRITABLE_USER_FIELDS.
+         *     "Replace" in SCIM means the resource, not the row. Fields the document
+         *     doesn't carry keep their values instead of being blanked, and fields
+         *     SCIM can't write - console permissions, most of all - are untouched no
+         *     matter what the document says. See WRITABLE_USER_FIELDS.
          */
         put: operations["replace_user_scim_v2_Users__user_id__put"];
         post?: never;
         /**
          * Deactivate a person
-         * @description Switch somebody off. Deliberately not a delete.
+         * @description Switch somebody off. Not a real delete.
          *
-         *     A provider sending DELETE means "this person has left", and the useful
-         *     response to that is to end their access, not to erase the evidence of what
-         *     they had. The row stays, active goes false, and their sessions are cut — the
-         *     same thing PATCH active false does, because they mean the same thing.
+         *     A provider sending DELETE means "this person has left", so the useful
+         *     response is to end their access, not erase the record of what they had.
+         *     The row stays, active goes false, and their sessions are cut - the same
+         *     thing PATCH active false does.
          *
-         *     Answers 204 either way. A provider retrying a delete it already sent should
-         *     not get an error for being thorough.
+         *     Answers 204 either way, so a provider retrying a delete it already sent
+         *     doesn't get an error for being thorough.
          */
         delete: operations["delete_user_scim_v2_Users__user_id__delete"];
         options?: never;
@@ -1729,10 +1704,9 @@ export interface paths {
          * Change part of a person
          * @description Apply a partial change. This is how deprovisioning arrives.
          *
-         *     When somebody leaves, a provider does not delete them — it sends
-         *     ``replace active false``. That single operation is the most important thing
-         *     this endpoint handles, and it has to end their sessions as well as set the
-         *     flag.
+         *     When somebody leaves, a provider doesn't delete them - it sends
+         *     `replace active false`. That single operation has to end their sessions
+         *     as well as set the flag.
          */
         patch: operations["patch_user_scim_v2_Users__user_id__patch"];
         trace?: never;
@@ -1927,10 +1901,8 @@ export interface components {
         };
         /**
          * AccessSummary
-         * @description Everything one person has, and where it came from.
-         *
-         *     The access review view for a single person. Answers the three questions in
-         *     order: what can they do here, what apps can they get into, and why.
+         * @description Everything one person has, and where it came from: what they can do
+         *     here, what apps they can reach, and why.
          */
         AccessSummary: {
             /** Active */
@@ -2019,7 +1991,7 @@ export interface components {
             slug: string;
             /**
              * Via Group
-             * @description The group that gives them this access, or null if it was given to them directly. Answers 'why does this person have Salesforce?'
+             * @description The group that gives them this access, or null if given directly.
              */
             via_group?: string | null;
         };
@@ -2032,10 +2004,9 @@ export interface components {
          * ApplicationDetail
          * @description Everything on the app page, including its SAML settings.
          *
-         *     The SAML fields are what iam/routers/idp.py reads to answer a login, so they are
-         *     shown rather than hidden: a mistyped entity id is much easier to spot on a page
-         *     than by reading the database, and it is the difference between an application
-         *     working and every login for it being refused as an unknown issuer.
+         *     The SAML fields are shown, not hidden, because iam/routers/idp.py reads
+         *     them to answer logins, and a mistyped entity id is easier to spot here
+         *     than in the database.
          */
         ApplicationDetail: {
             /** Acs Url */
@@ -2067,7 +2038,7 @@ export interface components {
             protocol: components["schemas"]["AppProtocol"];
             /**
              * Signing Cert
-             * @description The SP's public certificate. Public by definition — it is published in SAML metadata — so this is not a secret being leaked.
+             * @description The SP's public certificate, from its SAML metadata. Not a secret.
              */
             signing_cert?: string | null;
             /** Slo Url */
@@ -2085,9 +2056,9 @@ export interface components {
          * ApplicationRegistration
          * @description Register an application, or update one that already exists.
          *
-         *     The metadata document carries the entity id, the addresses and the certificate,
-         *     so none of those are fields here. Letting somebody type them separately is how an
-         *     assertion ends up posted to an address the application never published — see
+         *     Entity id, addresses, and certificate come from the pasted metadata
+         *     document rather than being typed separately, since a typed address
+         *     could be wrong in a way that misdirects an assertion. See
          *     docs/adr/0006-paste-metadata-do-not-fetch-it.md.
          */
         ApplicationRegistration: {
@@ -2095,7 +2066,7 @@ export interface components {
             description?: string | null;
             /**
              * Enabled
-             * @description Turn an application off to stop issuing logins for it without losing its settings or who had access.
+             * @description Turn off to stop issuing logins without losing settings or access history.
              * @default true
              */
             enabled: boolean;
@@ -2111,7 +2082,7 @@ export interface components {
             name: string;
             /**
              * Slug
-             * @description Short name used in links, e.g. /idp/sso/expenses. Lowercase, digits and dashes, because it goes in a URL.
+             * @description Short name used in links, e.g. /idp/sso/expenses. Lowercase, digits, and dashes only.
              */
             slug: string;
         };
@@ -2252,12 +2223,12 @@ export interface components {
             groups: number;
             /**
              * Live Admins
-             * @description People who can currently grant anything. Counted from the grants rather than the cached role, and only counting active people — a deactivated admin cannot sign in, so they are no help. Zero means nobody can administer this deployment and the only way back is a shell.
+             * @description Active people who currently hold an admin grant. Zero means nobody can administer this deployment except via shell access.
              */
             live_admins: number;
             /**
              * Sso Applications
-             * @description How many of the apps use SAML login. Part of `applications`.
+             * @description How many applications use SAML login. A subset of `applications`.
              */
             sso_applications: number;
             /** Users */
@@ -2303,8 +2274,8 @@ export interface components {
          * EnterpriseUser
          * @description The bits an HRMS cares about, which the base User schema leaves out.
          *
-         *     Deliberately an extension rather than core: a provider has to name the URN to
-         *     send these, so receiving them is always something the other side chose.
+         *     An extension rather than core: a provider has to name the URN to send
+         *     these, so receiving them is always something the other side chose.
          */
         EnterpriseUser: {
             /** Department */
@@ -2356,10 +2327,6 @@ export interface components {
         /**
          * GrantSource
          * @description How somebody came to have an access grant.
-         *
-         *     The point of recording this is that "why does this person have admin" has an
-         *     answer other than shrugging. A grant with no provenance is indistinguishable
-         *     from one somebody added to the database by hand.
          * @enum {string}
          */
         GrantSource: "direct" | "rule" | "request" | "seed" | "migrated";
@@ -2387,7 +2354,7 @@ export interface components {
             member_count: number;
             /**
              * Members
-             * @description Only the first page of members. Use /api/groups/{id}/members to page through a big group.
+             * @description First page of members only. Use /api/groups/{id}/members to page through a big group.
              */
             members: components["schemas"]["UserRef"][];
             /** Name */
@@ -2443,7 +2410,7 @@ export interface components {
         IdentityProviderDetail: {
             /**
              * Certificate Fingerprint
-             * @description The first and last few characters of the signing certificate. Enough to see at a glance that the key has changed, which is otherwise a diff of two blocks of base64.
+             * @description First and last few characters of the signing certificate, enough to spot at a glance if the key changed.
              */
             certificate_fingerprint: string;
             /**
@@ -2469,7 +2436,7 @@ export interface components {
             name: string;
             /**
              * Signing Cert
-             * @description The certificate every login from this provider is checked against. This is the whole basis of trust for it.
+             * @description The certificate every login from this provider is checked against.
              */
             signing_cert: string;
             /** Slo Url */
@@ -2490,10 +2457,9 @@ export interface components {
          * IdentityProviderRegistration
          * @description Register a provider, or update one that already exists.
          *
-         *     The metadata document carries the entity id, the addresses and the
-         *     certificate, so none of those are fields here. Letting somebody type them
-         *     separately is how you end up trusting a key the provider never published.
-         *     See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         *     Entity id, addresses, and certificate come from the pasted metadata
+         *     document, not typed fields, so we never trust a key the provider didn't
+         *     actually publish. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
          */
         IdentityProviderRegistration: {
             /**
@@ -2514,12 +2480,12 @@ export interface components {
             name: string;
             /**
              * Slug
-             * @description Short name used in the login URL, e.g. /saml/login?idp=authentik. Lowercase, digits and dashes, because it goes in a query string.
+             * @description Short name used in the login URL, e.g. /saml/login?idp=authentik. Lowercase, digits, and dashes only.
              */
             slug: string;
             /**
              * Want Signed Assertions
-             * @description Insist the assertion itself is signed, not just the response wrapped around it. Only turn this off for a provider that genuinely cannot do it, because signing only the wrapper leaves the contents swappable.
+             * @description Require the assertion itself to be signed, not just the response wrapper. Turn off only if the provider can't sign it.
              * @default true
              */
             want_signed_assertions: boolean;
@@ -2531,7 +2497,7 @@ export interface components {
         IdentityProviderSummary: {
             /**
              * Certificate Fingerprint
-             * @description The first and last few characters of the signing certificate. Enough to see at a glance that the key has changed, which is otherwise a diff of two blocks of base64.
+             * @description First and last few characters of the signing certificate, enough to spot at a glance if the key changed.
              */
             certificate_fingerprint: string;
             /**
@@ -2571,10 +2537,8 @@ export interface components {
         };
         /**
          * IdentitySource
-         * @description Where a record came from.
-         *
-         *     Worth tracking, because you shouldn't hand-edit something SCIM created. The
-         *     next sync would just put it back.
+         * @description Where a record came from. Don't hand-edit something SCIM created;
+         *     the next sync will overwrite it.
          * @enum {string}
          */
         IdentitySource: "scim" | "jit" | "manual" | "seed";
@@ -2582,10 +2546,9 @@ export interface components {
          * LinkState
          * @description Where one person's downstream account has got to.
          *
-         *     The states a push can leave behind, and they are not the same as "did the last
-         *     request work". A link can be FAILED with an account that exists — created fine,
-         *     then an update broke — and telling that apart from FAILED with nothing out there
-         *     is the difference between retrying an update and creating a duplicate.
+         *     FAILED can mean the account exists (created fine, an update later
+         *     failed) or doesn't. Telling those apart is the difference between
+         *     retrying an update and creating a duplicate.
          * @enum {string}
          */
         LinkState: "pending" | "active" | "failed" | "deprovisioned" | "orphaned";
@@ -2760,8 +2723,8 @@ export interface components {
          * MemberRef
          * @description A pointer from one resource to another.
          *
-         *     ``$ref`` is a URL to the thing pointed at. Providers largely ignore it and
-         *     the spec asks for it, so it goes in.
+         *     `$ref` is a URL to the thing pointed at. Providers largely ignore it, but
+         *     the spec asks for it, so it's here.
          */
         MemberRef: {
             /** $Ref */
@@ -2793,7 +2756,7 @@ export interface components {
             resourceType: string;
             /**
              * Version
-             * @description An ETag. Providers use it for conditional updates; we send it so a client that cares can, and we do not require it back.
+             * @description An ETag. Providers use it for conditional updates; we send it so a client that cares can, but don't require it back.
              */
             version?: string | null;
         } & {
@@ -2873,9 +2836,9 @@ export interface components {
          * PatchOperation
          * @description One change inside a PATCH.
          *
-         *     ``value`` is deliberately untyped. It is a scalar for ``replace active``, an
-         *     object for ``replace`` on a complex attribute, and a list for ``add members``,
-         *     and pinning it to one of those breaks the other two.
+         *     `value` is untyped: it's a scalar for `replace active`, an object for
+         *     `replace` on a complex attribute, and a list for `add members` -
+         *     pinning it to one type breaks the other two.
          */
         PatchOperation: {
             /** Op */
@@ -2891,9 +2854,8 @@ export interface components {
          * PatchRequest
          * @description A set of changes to apply to one resource.
          *
-         *     This is how deprovisioning arrives. When somebody leaves, the provider does
-         *     not delete them — it sends ``replace active false``, and that one operation
-         *     is the most important thing this server handles.
+         *     This is how deprovisioning arrives: when somebody leaves, the provider
+         *     sends `replace active false` instead of deleting them.
          */
         PatchRequest: {
             /** Operations */
@@ -2907,13 +2869,11 @@ export interface components {
          * PlatformRole
          * @description What someone can do inside this console.
          *
-         *     Four broad roles. Which one someone has is decided by their role grants, not
-         *     by the column on the user — that column is a cached copy, rebuilt whenever a
-         *     grant changes. See iam/access/roles.py for why it works that way.
+         *     The role is decided by a user's role grants, not this column directly —
+         *     the column is a cached copy, rebuilt whenever a grant changes.
          *
-         *     EMPLOYEE is the odd one out: it isn't granted, it's what someone is when
-         *     nothing has been granted to them. So there is never a role grant saying
-         *     "employee", and asking for one is refused rather than quietly stored.
+         *     EMPLOYEE isn't a grantable role: it's what someone is when nothing has
+         *     been granted to them, so there's never a role grant recording it.
          * @enum {string}
          */
         PlatformRole: "admin" | "helpdesk" | "auditor" | "employee";
@@ -2998,9 +2958,9 @@ export interface components {
          * ProvisioningOverview
          * @description What provisioning has actually done to this directory.
          *
-         *     Counts rather than a list, because the answer people want from this screen is
-         *     "is the sync working and what does it own", not a directory listing they can
-         *     already get from the Users page.
+         *     Counts, not a list - the answer people want here is "is the sync working
+         *     and what does it own", not a directory listing they can get from the
+         *     Users page.
          */
         ProvisioningOverview: {
             /** Active Clients */
@@ -3014,7 +2974,7 @@ export interface components {
             last_sync_at?: string | null;
             /**
              * Users From Login
-             * @description People who arrived by logging in rather than being provisioned. A healthy sync makes this number small: it means SCIM had not heard of them yet when they first signed in.
+             * @description People who arrived by logging in rather than being provisioned. A healthy sync keeps this number small.
              */
             users_from_login: number;
             /**
@@ -3069,7 +3029,7 @@ export interface components {
             accounts_failed: number;
             /**
              * Accounts Orphaned
-             * @description People we tried to remove and could not. They still have access downstream, which is the number on this page that most needs acting on.
+             * @description People we tried to remove and couldn't — they still have access downstream. Usually the number on this page that most needs acting on.
              */
             accounts_orphaned: number;
             /**
@@ -3079,12 +3039,12 @@ export interface components {
             accounts_pending: number;
             /**
              * Accounts Waiting To Push
-             * @description People a sync would touch right now — changed since the last push, newly entitled, or no longer entitled and still switched on downstream. Nothing pushes on its own, so this is the difference between what we know and what the downstream has been told.
+             * @description People a sync would touch right now — changed since the last push, newly entitled, or no longer entitled but still active downstream. Nothing pushes on its own, so this is the gap between what we know and what the downstream has been told.
              */
             accounts_waiting_to_push: number;
             /**
              * Address Concession
-             * @description A rule from ADR 0007 that was relaxed to allow this address — a private address, or plain HTTP. Shown so it reads as a decision somebody made rather than something nobody noticed.
+             * @description A rule from ADR 0007 relaxed to allow this address — a private address, or plain HTTP. Shown so it's visible as a decision, not something missed.
              */
             address_concession: string | null;
             /**
@@ -3116,7 +3076,7 @@ export interface components {
             last_sync_at: string | null;
             /**
              * Last Sync Ok
-             * @description Null means never attempted. The useful question is the negative one: a target that last succeeded three weeks ago is one nobody is watching.
+             * @description Null means never attempted. A target that last succeeded three weeks ago is one nobody is watching.
              */
             last_sync_ok: boolean | null;
             /**
@@ -3165,9 +3125,7 @@ export interface components {
          * RequestState
          * @description Where an access request has got to.
          *
-         *     Every state after PENDING is final. A request is a record of somebody asking
-         *     and somebody answering, so reopening one would make "who approved this" have
-         *     more than one answer.
+         *     Every state after PENDING is final; requests aren't reopened.
          * @enum {string}
          */
         RequestState: "pending" | "approved" | "denied" | "withdrawn" | "cancelled";
@@ -3254,10 +3212,8 @@ export interface components {
          * RuleOperator
          * @description How an access rule compares an attribute.
          *
-         *     A short list on purpose. Every operator here is one somebody can read out loud
-         *     and predict the effect of — "department is Engineering". A general expression
-         *     language would be more powerful and much harder to review, and reviewing is
-         *     the point of writing access down.
+         *     Kept to a short, readable list (e.g. "department is Engineering")
+         *     rather than a general expression language, so rules stay reviewable.
          * @enum {string}
          */
         RuleOperator: "equals" | "not_equals" | "contains" | "starts_with" | "is_set" | "is_not_set";
@@ -3265,9 +3221,8 @@ export interface components {
          * RulePreview
          * @description Who a rule would affect, before anybody commits to it.
          *
-         *     The difference between writing a rule confidently and writing one and hoping.
-         *     A condition that reads correctly and matches four hundred people usually means
-         *     the value was mistyped, and this is where that gets noticed.
+         *     A condition that reads correctly but matches four hundred people
+         *     usually means the value was mistyped — this is where that gets noticed.
          */
         RulePreview: {
             /**
@@ -3321,8 +3276,8 @@ export interface components {
          * ScimClientIssued
          * @description A newly created client, with its token.
          *
-         *     The only response that ever carries a token. Store it now; there is no way to
-         *     read it again, because we kept only the hash.
+         *     The only response that ever carries a token. Store it now - there's no
+         *     way to read it again, since we kept only the hash.
          */
         ScimClientIssued: {
             /**
@@ -3341,7 +3296,7 @@ export interface components {
             id: string;
             /**
              * Last Used At
-             * @description When this token was last accepted. The useful question is the opposite one: a token nobody has used for months is one nobody would notice being stolen.
+             * @description When this token was last accepted. A token unused for months is one nobody would notice being stolen.
              */
             last_used_at: string | null;
             /** Name */
@@ -3357,7 +3312,7 @@ export interface components {
             token: string;
             /**
              * Usable
-             * @description Whether this token would be accepted right now — enabled and not revoked.
+             * @description Whether this token would be accepted right now - enabled and not revoked.
              */
             usable: boolean;
         };
@@ -3391,7 +3346,7 @@ export interface components {
             id: string;
             /**
              * Last Used At
-             * @description When this token was last accepted. The useful question is the opposite one: a token nobody has used for months is one nobody would notice being stolen.
+             * @description When this token was last accepted. A token unused for months is one nobody would notice being stolen.
              */
             last_used_at: string | null;
             /** Name */
@@ -3402,7 +3357,7 @@ export interface components {
             revoked_reason: string | null;
             /**
              * Usable
-             * @description Whether this token would be accepted right now — enabled and not revoked.
+             * @description Whether this token would be accepted right now - enabled and not revoked.
              */
             usable: boolean;
         };
@@ -3432,11 +3387,11 @@ export interface components {
          * ScimUser
          * @description A person, in SCIM's shape.
          *
-         *     ``extra="allow"`` is inherited on purpose. Providers send attributes we don't
-         *     model — ``locale``, ``timezone``, ``phoneNumbers``, whole extension URNs —
-         *     and the spec says to ignore what you don't understand rather than reject it.
-         *     Rejecting means a provider whose default profile includes one extra field
-         *     cannot create anybody here at all.
+         *     Inherits `extra="allow"` since providers send attributes we don't model
+         *     (`locale`, `timezone`, `phoneNumbers`, whole extension URNs), and the
+         *     spec says to ignore what you don't understand rather than reject it.
+         *     Rejecting would mean a provider whose default profile includes one
+         *     extra field can't create anybody here at all.
          */
         ScimUser: {
             /**
@@ -3452,7 +3407,7 @@ export interface components {
             externalId?: string | null;
             /**
              * Groups
-             * @description Read-only. Group membership is changed by PATCHing the group, not the person — see the note on ScimGroup.members.
+             * @description Read-only. Group membership is changed by PATCHing the group, not the person - see the note on ScimGroup.members.
              */
             groups?: components["schemas"]["MemberRef"][];
             /** Id */
@@ -3469,17 +3424,12 @@ export interface components {
         };
         /**
          * SignInOption
-         * @description One way to sign in, for the screen shown to somebody who is not signed in yet.
+         * @description One way to sign in, shown to someone not yet signed in.
          *
-         *     Deliberately thin. This is the only unauthenticated view of the provider table, so
-         *     it carries what a button needs and nothing else: a name to print and a URL to send
-         *     them to. No entity id, no certificate, no timestamps, no enabled flag — a disabled
-         *     provider simply is not in the list.
-         *
-         *     Publishing the names of the providers we accept is not a leak. Every login page on
-         *     the internet does it, and it has to: somebody who cannot see "Sign in with Okta"
-         *     cannot sign in with Okta. What would be a leak is the SSO URL, the entity id or the
-         *     certificate, and none of those are here.
+         *     Only carries a name and a URL — no entity id, certificate, timestamps,
+         *     or enabled flag (a disabled provider is just absent from the list).
+         *     Publishing provider names isn't a leak; every login page does it. The
+         *     SSO URL, entity id, and certificate would be, and aren't included.
          */
         SignInOption: {
             /** Login Url */
@@ -3493,9 +3443,8 @@ export interface components {
          * SignedInUser
          * @description Who the console is talking to, and what they can do.
          *
-         *     The permissions are sent as a list so the front end can hide buttons nobody
-         *     can use. It is only ever a nicety: every one of them is checked again on the
-         *     request, because a hidden button is not a permission check.
+         *     Permissions are a list so the front end can hide buttons the user can't
+         *     use. That's just UI convenience; every action is checked again server-side.
          */
         SignedInUser: {
             /** Display Name */
@@ -3512,7 +3461,7 @@ export interface components {
             user_name: string;
             /**
              * Via Saml Session
-             * @description True when this came from a real login. False means the development stand-in identified the request, which never happens in production.
+             * @description True for a real login. False means the dev stand-in identified the request (never true in production).
              */
             via_saml_session: boolean;
         };
@@ -3566,7 +3515,7 @@ export interface components {
             active: boolean;
             /**
              * Applications
-             * @description Everything they can actually get into: given to them directly plus anything that comes from a group they're in.
+             * @description Everything they can get into: direct grants plus anything from a group they're in.
              */
             applications: components["schemas"]["AppRef"][];
             /**
@@ -3652,11 +3601,11 @@ export interface components {
         };
         /**
          * UserUpdate
-         * @description The fields you're allowed to change. Leave a field out and it stays as is.
+         * @description The fields you're allowed to change. A field left out stays as is.
          *
-         *     A short list on purpose. Login name, email and external id belong to the
-         *     identity provider for anyone it created, so editing them here would just get
-         *     undone on the next sync.
+         *     Login name, email, and external id come from the identity provider for
+         *     SCIM-created users, so editing them here would just be undone by the
+         *     next sync.
          */
         UserUpdate: {
             /** Active */

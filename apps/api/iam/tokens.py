@@ -35,7 +35,7 @@ import secrets
 TOKEN_BYTES = 32
 """How much randomness goes into a token.
 
-256 bits. Guessing one is not a thing that happens, which is what lets us skip
+256 bits. Guessing one isn't feasible, which is what lets us skip
 rate-limiting the token check itself.
 """
 

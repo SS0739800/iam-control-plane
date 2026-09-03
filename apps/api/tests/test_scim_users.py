@@ -182,7 +182,7 @@ def test_asking_past_the_end_returns_nothing_rather_than_wrapping(
 def test_the_question_a_provider_asks_before_creating(
     db_client: TestClient, caller: ScimCaller
 ) -> None:
-    """"Do you already have this one?" - a single eq on userName."""
+    """ "Do you already have this one?" - a single eq on userName."""
     before = db_client.get(
         USERS, params={"filter": f'userName eq "{caller.user_name}"'}, headers=caller.headers
     )

@@ -2,17 +2,17 @@
 
 Two of these matter more than the rest.
 
-Production must refuse to start without a key. A quietly generated one is a key
-nobody wrote down, nobody backed up and nobody can rotate — and every login it
-signed stops verifying the next time the process restarts.
+Production must refuse to start without a key. A quietly generated one is
+a key nobody wrote down, nobody backed up, and nobody can rotate — and
+every login it signed stops verifying the next time the process restarts.
 
-A mismatched key and certificate must refuse too. That failure is otherwise
-invisible: the app starts, metadata publishes, assertions get signed, and every
-application rejects every login because the signature was made with a key the
-published certificate does not match.
+A mismatched key and certificate must refuse too. That failure is
+otherwise invisible: the app starts, metadata publishes, assertions get
+signed, and every application rejects every login because the signature
+doesn't match the published certificate.
 
-No database and no xmlsec, so these run anywhere. That is the reason key handling
-uses ``cryptography`` rather than living behind the xmlsec boundary.
+No database and no xmlsec, so these run anywhere — why key handling uses
+``cryptography`` rather than living behind the xmlsec boundary.
 """
 
 from __future__ import annotations

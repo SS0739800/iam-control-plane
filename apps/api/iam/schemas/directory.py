@@ -164,6 +164,5 @@ class ApplicationRegistration(BaseModel):
     )
     enabled: bool = Field(
         default=True,
-        description="Turn off to stop issuing logins without losing settings "
-        "or access history.",
+        description="Turn off to stop issuing logins without losing settings " "or access history.",
     )
