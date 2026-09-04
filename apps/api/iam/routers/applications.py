@@ -174,7 +174,7 @@ async def register_application(
 
     The document is pasted in, never fetched from a URL — same reasoning as
     registering an identity provider: our server can reach things the person
-    pasting cannot. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+    pasting cannot. See docs/adr/0006-paste-metadata.md.
 
     Registering the same slug again replaces the details, so a certificate or
     address change is just pasting the new metadata again.

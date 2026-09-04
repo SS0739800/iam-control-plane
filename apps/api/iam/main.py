@@ -158,7 +158,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     #
     # html=True is what makes deep links work: /users and /groups are React
     # routes with no file behind them, and without it they'd 404. See
-    # docs/adr/0008-one-server-serves-both-halves-in-production.md.
+    # docs/adr/0008-one-image-in-production.md.
     if resolved.static_dir:
         bundle = resolve_bundle(resolved.static_dir)
         app.mount("/", SinglePageApp(directory=bundle), name="frontend")

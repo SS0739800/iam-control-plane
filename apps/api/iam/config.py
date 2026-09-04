@@ -158,7 +158,7 @@ class Settings(BaseSettings):
     # Where the compiled SPA lives, for production where this process serves it
     # alongside the API. Unset means no mount, which is what local dev and tests
     # use — Caddy proxies the Vite dev server instead. See
-    # docs/adr/0008-one-server-serves-both-halves-in-production.md.
+    # docs/adr/0008-one-image-in-production.md.
     static_dir: str | None = None
 
     # ------------------------------------------------------- the background sweep

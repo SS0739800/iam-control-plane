@@ -385,7 +385,7 @@ export interface paths {
          *
          *     The document is pasted in, never fetched from a URL — same reasoning as
          *     registering an identity provider: our server can reach things the person
-         *     pasting cannot. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         *     pasting cannot. See docs/adr/0006-paste-metadata.md.
          *
          *     Registering the same slug again replaces the details, so a certificate or
          *     address change is just pasting the new metadata again.
@@ -2059,7 +2059,7 @@ export interface components {
          *     Entity id, addresses, and certificate come from the pasted metadata
          *     document rather than being typed separately, since a typed address
          *     could be wrong in a way that misdirects an assertion. See
-         *     docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         *     docs/adr/0006-paste-metadata.md.
          */
         ApplicationRegistration: {
             /** Description */
@@ -2459,7 +2459,7 @@ export interface components {
          *
          *     Entity id, addresses, and certificate come from the pasted metadata
          *     document, not typed fields, so we never trust a key the provider didn't
-         *     actually publish. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+         *     actually publish. See docs/adr/0006-paste-metadata.md.
          */
         IdentityProviderRegistration: {
             /**

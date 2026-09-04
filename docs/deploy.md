@@ -9,12 +9,12 @@ Three Fly apps and a Neon database.
 | `iam-authentik`| The identity provider, server and worker         | yes    |
 
 The console is one app serving both halves — see
-[ADR 0008](adr/0008-one-server-serves-both-halves-in-production.md). The HRMS is its
+[ADR 0008](adr/0008-one-image-in-production.md). The HRMS is its
 own app because it is meant to be a genuinely separate system. authentik is its own
 app because it is somebody else's software.
 
 The database is Neon — see [ADR 0009](adr/0009-neon-hosts-postgres.md), which
-amends [ADR 0002](adr/0002-supabase-is-postgres-only.md). Supabase's free tier
+amends [ADR 0002](adr/0002-postgres-only.md). Supabase's free tier
 cannot fit this project: it manages one database per project, allows two projects,
 and this needs two databases.
 
@@ -106,7 +106,7 @@ and a Neon project.
 
    Leave **Auth** alone too. Sessions here are server-side rows keyed to a HttpOnly
    cookie; this project *is* the identity system. See
-   [ADR 0002](adr/0002-supabase-is-postgres-only.md), which applies to Neon exactly
+   [ADR 0002](adr/0002-postgres-only.md), which applies to Neon exactly
    as it did to Supabase.
 
 ---
@@ -187,7 +187,7 @@ flyctl secrets set SAML_IDP_CERTIFICATE="-----BEGIN CERTIFICATE-----
 -----END CERTIFICATE-----" -a iam-console
 ```
 
-Production **will not start** without these. That is deliberate: outside production
+Production **will not start** without these. Outside production
 a throwaway pair is generated in memory, and a key that changes on every restart
 would silently invalidate every assertion we ever signed.
 
@@ -207,7 +207,7 @@ builder and the runtime stage, and that the frontend bundle arrived.
 
 ### Migrate
 
-The image does not migrate on boot, on purpose. Two machines starting at once would
+The image does not migrate on boot. Two machines starting at once would
 run Alembic twice, and a migration is not something to race.
 
 ```bash
@@ -273,9 +273,9 @@ In the console, **Provisioning out → Register a target**:
 
 `.internal` is Fly's private network — the request never leaves the organisation.
 That is a private address over plain HTTP, which
-[ADR 0007](adr/0007-outbound-requests-go-only-where-an-admin-configured.md) refuses
+[ADR 0007](adr/0007-outbound-allowlist.md) refuses
 in production unless `ALLOW_PRIVATE_PROVISIONING_TARGETS` is set. It is set in
-`fly.toml`, on purpose, and the target will record the concession so it reads as a
+`fly.toml`, and the target records the concession so it reads as a
 decision rather than an oversight.
 
 Then **Check it answers**, then **Sync now**. That first sync runs inside the
@@ -285,7 +285,7 @@ against a seeded directory of 1,200.
 After that it looks after itself. The `worker` process sweeps every enabled target
 every five minutes, so a leaver's account closes without anybody pressing anything.
 **Sync now** stays useful for impatience and for forcing a retry of links that have
-failed their attempt limit, which the sweep deliberately never does.
+failed their attempt limit, which the sweep never does on its own.
 
 ---
 
@@ -340,7 +340,7 @@ the same arrangement local uses — see `infra/db/init/01-create-databases.sh`.
 
 Once it is up, register it with the console the same way as locally — paste its
 metadata, never fetch it
-([ADR 0006](adr/0006-paste-metadata-do-not-fetch-it.md)):
+([ADR 0006](adr/0006-paste-metadata.md)):
 
 ```bash
 curl -sSL https://iam-authentik.fly.dev/application/saml/iam-console/metadata/ -o idp.xml
@@ -425,7 +425,7 @@ from timestamps.
 ## Afterwards
 
 **Nobody is an admin yet.** A person created by logging in starts as an employee with
-no console permissions — deliberately, so there is no path from "the provider let
+no console permissions, so there is no path from "the provider let
 them in" to "they can change things here". Which leaves a gap on day one: nobody
 exists who can grant anything, including the first admin.
 
@@ -455,7 +455,7 @@ role grants, and `iam/access/roles.py` is the only thing meant to write it — a
 UPDATE produces somebody the console calls an admin with no grant behind them, which
 is exactly what `find_drift` exists to report.
 
-**RLS stays off, deliberately.** Authorization lives in the application layer,
+**RLS stays off.** Authorization lives in the application layer,
 where the entitlement model is. On Neon nothing nags about this and there is no
 public REST surface over the tables to worry about — which is most of why ADR 0002's
 warnings are now moot rather than merely obeyed. Read ADR 0002 before changing it.
@@ -488,7 +488,7 @@ and cannot sleep: it has no HTTP surface to wake it.
 **Two things to understand rather than assume.**
 
 The threshold is a cliff. A month at $5.20 is charged $5.20, not $0.20. The gap
-between the estimate and the threshold is the whole safety margin, so set a spend
+between the estimate and the threshold is your safety margin, so set a spend
 limit on the organisation rather than trusting arithmetic — including this
 arithmetic.
 

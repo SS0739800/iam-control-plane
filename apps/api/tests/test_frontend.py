@@ -1,7 +1,7 @@
 """Serving the built frontend from the API process.
 
 In production one server answers for both halves — see
-docs/adr/0008-one-server-serves-both-halves-in-production.md. Two failure
+docs/adr/0008-one-image-in-production.md. Two failure
 modes here are easy to miss, and both look like a working API next to a
 broken website.
 

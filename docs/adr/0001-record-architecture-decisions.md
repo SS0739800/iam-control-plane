@@ -8,7 +8,7 @@
 This project makes a number of choices that look wrong without their reasoning
 attached — not using the auth system that ships with our own database, refusing
 to add a CORS layer, compiling a dependency from source when a wheel exists. Six
-weeks later those look like oversights, and the temptation is to "fix" them.
+weeks later those look like oversights, and somebody tries to "fix" them.
 
 There is also a second audience. This is a portfolio project, and an engineer
 reviewing it will read a short decision record before they read source. "Here is

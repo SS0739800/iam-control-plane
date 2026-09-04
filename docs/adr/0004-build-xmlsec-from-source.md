@@ -47,7 +47,7 @@ Supporting decisions:
 
 - First Docker build takes several minutes. Layer caching makes subsequent ones
   cheap, and CI caches to the GitHub Actions cache backend.
-- Local `.venv` on Windows deliberately lacks the SAML stack. Anything importing
+- The local `.venv` on Windows has no SAML stack. Anything importing
   `xmlsec` must be exercised in the container or in CI, not natively.
 - `libxmlsec1-dev` and the compiler live only in the builder stage; the runtime
   image gets the shared libraries only.

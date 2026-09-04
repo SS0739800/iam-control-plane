@@ -33,7 +33,7 @@ One hostname serves everything, with Caddy routing by path:
 /idp/*           → FastAPI      outbound SSO, we are the IdP
 ```
 
-Consequences of that choice, made explicit:
+What that choice buys:
 
 - The session cookie is first-party: `HttpOnly; Secure; SameSite=Lax`.
 - **No CORS middleware.** Not "permissive CORS" — none. A cross-origin request is
@@ -44,7 +44,7 @@ Consequences of that choice, made explicit:
   which means no environment-specific frontend build.
 - SAML request state (the `AuthnRequest` ID, for `InResponseTo` validation) is
   stored in Postgres keyed by `RelayState`, **not** in a cookie. This sidesteps
-  the `SameSite` problem entirely and gives replay protection for free.
+  the `SameSite` problem entirely and gives replay protection as a side effect.
 
 ## Consequences
 

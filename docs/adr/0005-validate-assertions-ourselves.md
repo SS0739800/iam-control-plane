@@ -61,8 +61,8 @@ inspector.
 - A login that fails against a new provider says which check failed, instead of
   "invalid assertion".
 - We own the correctness of eight comparisons. They're covered by tests that feed
-  in deliberately bad assertions, one broken thing at a time.
-- More code than one library call. That's the trade being made on purpose.
+  in bad assertions, one broken thing at a time.
+- More code than one library call. That's the trade.
 - The signature check is not ours and shouldn't become ours. If it ever looks
   tempting to replace, don't.
 - `xmlsec` won't install on Windows, so anything touching this runs in the

@@ -776,7 +776,7 @@
         "type": "object"
       },
       "ApplicationRegistration": {
-        "description": "Register an application, or update one that already exists.\n\nEntity id, addresses, and certificate come from the pasted metadata\ndocument rather than being typed separately, since a typed address\ncould be wrong in a way that misdirects an assertion. See\ndocs/adr/0006-paste-metadata-do-not-fetch-it.md.",
+        "description": "Register an application, or update one that already exists.\n\nEntity id, addresses, and certificate come from the pasted metadata\ndocument rather than being typed separately, since a typed address\ncould be wrong in a way that misdirects an assertion. See\ndocs/adr/0006-paste-metadata.md.",
         "properties": {
           "description": {
             "anyOf": [
@@ -1711,7 +1711,7 @@
         "type": "object"
       },
       "IdentityProviderRegistration": {
-        "description": "Register a provider, or update one that already exists.\n\nEntity id, addresses, and certificate come from the pasted metadata\ndocument, not typed fields, so we never trust a key the provider didn't\nactually publish. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.",
+        "description": "Register a provider, or update one that already exists.\n\nEntity id, addresses, and certificate come from the pasted metadata\ndocument, not typed fields, so we never trust a key the provider didn't\nactually publish. See docs/adr/0006-paste-metadata.md.",
         "properties": {
           "enabled": {
             "default": true,
@@ -4971,7 +4971,7 @@
         ]
       },
       "post": {
-        "description": "Read an application's metadata and store what it says.\n\nReuses ``apps:write`` rather than a permission of its own, since registering\nan application is just managing one.\n\nThe document is pasted in, never fetched from a URL \u2014 same reasoning as\nregistering an identity provider: our server can reach things the person\npasting cannot. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.\n\nRegistering the same slug again replaces the details, so a certificate or\naddress change is just pasting the new metadata again.\n\nRaises:\n    HTTPException: 400 if the metadata can't be read or is missing something.\n        409 if another slug has already claimed the same entity id.",
+        "description": "Read an application's metadata and store what it says.\n\nReuses ``apps:write`` rather than a permission of its own, since registering\nan application is just managing one.\n\nThe document is pasted in, never fetched from a URL \u2014 same reasoning as\nregistering an identity provider: our server can reach things the person\npasting cannot. See docs/adr/0006-paste-metadata.md.\n\nRegistering the same slug again replaces the details, so a certificate or\naddress change is just pasting the new metadata again.\n\nRaises:\n    HTTPException: 400 if the metadata can't be read or is missing something.\n        409 if another slug has already claimed the same entity id.",
         "operationId": "register_application_api_applications_post",
         "requestBody": {
           "content": {

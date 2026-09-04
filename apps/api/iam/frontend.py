@@ -1,7 +1,7 @@
 """Serving the built frontend from this process.
 
 In production one server answers for both halves — see
-docs/adr/0008-one-server-serves-both-halves-in-production.md.
+docs/adr/0008-one-image-in-production.md.
 
 Plain ``StaticFiles(html=True)`` isn't enough: it serves ``index.html`` for a
 directory request like ``/``, but a path with no file behind it (like the React
@@ -23,7 +23,7 @@ from starlette.types import Scope
 
 # Prefixes that belong to the API and must never be answered with the frontend.
 # Kept in step with the routers in iam/main.py by the tests in
-# tests/test_serving_the_frontend.py.
+# tests/test_frontend.py.
 API_PREFIXES = ("api/", "saml/", "scim/", "idp/")
 
 # Where the compiled assets live inside the bundle. A miss under here is a missing

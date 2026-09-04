@@ -25,7 +25,7 @@ admin API. In P7 it sits inside a hosting provider's network with a metadata
 service on a link-local address that hands out credentials to anything that asks.
 An administrator's browser can reach none of that. Their browser is on the
 outside; our server is on the inside. Handing the inside a URL from the outside
-is the whole vulnerability, and the privilege level of the person supplying it
+is the vulnerability, and the privilege level of the person supplying it
 does not change what the server can reach.
 
 The second is that "an administrator asked for it" and "an administrator was

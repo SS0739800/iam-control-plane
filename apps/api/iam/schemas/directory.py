@@ -146,7 +146,7 @@ class ApplicationRegistration(BaseModel):
     Entity id, addresses, and certificate come from the pasted metadata
     document rather than being typed separately, since a typed address
     could be wrong in a way that misdirects an assertion. See
-    docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+    docs/adr/0006-paste-metadata.md.
     """
 
     slug: str = Field(

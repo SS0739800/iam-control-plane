@@ -5,12 +5,12 @@
 
 ## Context
 
-[ADR 0006](0006-paste-metadata-do-not-fetch-it.md) says this system never fetches a
+[ADR 0006](0006-paste-metadata.md) says this system never fetches a
 URL somebody gives it. The reasoning was that our server sits inside the compose
 network next to Postgres, Redis and authentik, and in P7 inside a hosting provider's
 network with a metadata service on a link-local address that hands out credentials
 to anything that asks. An administrator's browser can reach none of that. Handing
-the inside a URL from the outside is the whole vulnerability, and the privilege of
+the inside a URL from the outside is the vulnerability, and the privilege of
 whoever supplied it does not change what the server can reach.
 
 P6 makes us a SCIM client. Provisioning accounts outward *is* our server making HTTP
@@ -27,7 +27,7 @@ provisioning that does not make one.
 
 **It is configured, not supplied.** A metadata URL would arrive in a request body
 and be fetched immediately, once, by whoever sent it. A provisioning target is a row
-somebody created deliberately, visible in the console, in the audit log, and
+somebody created on purpose, visible in the console, in the audit log, and
 reviewable long afterwards. The person who typed it and the person who triggers a
 push are usually not the same person, and the row is the evidence.
 
@@ -51,7 +51,7 @@ configurable and does not relax outside production.
 `http://hrms:8000` is the point of local development, and in production a
 provisioning target on a private address is much more likely to be a mistake or an
 attack than an intention. An operator who genuinely needs one sets
-`ALLOW_PRIVATE_PROVISIONING_TARGETS`, which is deliberately long to type and shows
+`ALLOW_PRIVATE_PROVISIONING_TARGETS`, which is long to type and shows
 up on the target's page.
 
 **HTTPS is required in production.** A bearer token that writes to somebody else's
@@ -60,10 +60,10 @@ where the network is a bridge inside one machine.
 
 **Redirects are not followed.** A target that answers 302 gets a failure, not a
 second request somewhere else. Following one would move the destination from the
-reviewed row to whatever the far end said, which is the whole problem coming back in
+reviewed row to whatever the far end said, which is the problem coming back in
 by another door.
 
-Checking at registration rather than per-push is a deliberate trade. It means a
+Checking at registration instead of per-push is a trade. It means a
 hostname that later resolves somewhere private is not caught, and the alternative —
 resolving before every request — is slower, still racy, and gives a false sense of
 having solved it. The row being reviewable is the real control.

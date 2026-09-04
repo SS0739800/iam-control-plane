@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-26
-- **Amends:** [ADR 0002](0002-supabase-is-postgres-only.md)
+- **Amends:** [ADR 0002](0002-postgres-only.md)
 
 ## Context
 
@@ -28,7 +28,7 @@ creates authentik's role and database next to ours, with the comment "We need tw
 databases on one server: ours and authentik's." Ordinary Postgres does this without
 comment. Supabase is what makes it awkward.
 
-ADR 0002 anticipated this exact move and left the door open on purpose: "The schema
+ADR 0002 anticipated this move and left the door open: "The schema
 stays portable Postgres — no Supabase-specific extensions — so the provider is
 replaceable," and "Migrating to RDS or Neon later is a connection-string change."
 That held. Nothing in the schema, the models, or the migrations needed touching.
@@ -83,7 +83,7 @@ SQLAlchemy passes query parameters through to the driver untranslated.
 
 Pasting the URL from the dashboard therefore raises `TypeError: connect() got an
 unexpected keyword argument 'sslmode'` on the first query. And because the readiness
-endpoint deliberately hides exception messages — they can contain the connection
+endpoint hides exception messages, since they can contain the connection
 string — production would report `{"detail": "TypeError"}` and nothing else.
 
 `iam/config.py` handles both, differently, because they are different problems:
@@ -97,7 +97,7 @@ string — production would report `{"detail": "TypeError"}` and nothing else.
   connecting. `ssl=require` still means the connection is encrypted.
 
 Anything else is left alone. Silently discarding query parameters we do not
-recognise would throw away somebody's deliberate intent without saying so.
+recognise would throw away what somebody actually asked for, without saying so.
 
 Fixing only `sslmode` would have moved the failure rather than removed it, which is
 what nearly happened: the first version of this handled `sslmode`, and

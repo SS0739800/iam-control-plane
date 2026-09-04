@@ -7,7 +7,7 @@ That's why it needs its own permission rather than borrowing apps:write, and
 why every change here is audited with the certificate fingerprint attached.
 
 The document is pasted in. We never fetch a metadata URL — see
-docs/adr/0006-paste-metadata-do-not-fetch-it.md before adding that
+docs/adr/0006-paste-metadata.md before adding that
 convenience back.
 """
 

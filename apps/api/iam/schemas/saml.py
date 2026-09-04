@@ -17,7 +17,7 @@ class IdentityProviderRegistration(BaseModel):
 
     Entity id, addresses, and certificate come from the pasted metadata
     document, not typed fields, so we never trust a key the provider didn't
-    actually publish. See docs/adr/0006-paste-metadata-do-not-fetch-it.md.
+    actually publish. See docs/adr/0006-paste-metadata.md.
     """
 
     slug: str = Field(
