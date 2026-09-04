@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { Empty, ErrorBox, Loading, Panel, Pill, Row, Stat, type Tone } from '../components/ui'
 import { fetchDashboard, fetchLiveness, fetchReadiness } from '../lib/api'
+import styles from './Dashboard.module.css'
 
 export default function Dashboard() {
   const counts = useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard })
@@ -21,14 +22,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       {counts.data && counts.data.live_admins === 0 ? (
-        <p className="rounded-sm border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">
+        <p className={styles.adminWarning}>
           <strong>Nobody can administer this deployment.</strong> There is no live
           admin grant, so no role can be granted from the console — including the one
           that would fix this. It needs{' '}
           <code>scripts.grant_first_admin</code> run against the database.
-          <span className="mt-1 block text-xs">
+          <span className={styles.adminWarningDetail}>
             This is reachable without anybody doing something careless: an identity
             provider deactivating the last admin over SCIM revokes their grant, and
             the guard that refuses it in the console cannot see a SCIM write.
@@ -42,7 +43,7 @@ export default function Dashboard() {
         ) : counts.isError ? (
           <ErrorBox error={counts.error} />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className={styles.statGrid}>
             <Stat
               label="Users"
               value={counts.data.users}
@@ -69,7 +70,7 @@ export default function Dashboard() {
         )}
       </Panel>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className={styles.healthGrid}>
         <Panel title="API">
           <dl>
             <Row label="Status">

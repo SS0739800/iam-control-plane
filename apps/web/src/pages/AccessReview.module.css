@@ -1,0 +1,94 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.intro {
+  padding-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.statGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .statGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.checkedNote {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.clean {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-ok-text);
+  background: var(--status-ok-bg);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.cleanHeadline {
+  font-weight: 500;
+}
+
+.findings {
+  display: flex;
+  flex-direction: column;
+}
+
+.finding {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3) 0;
+}
+.finding:last-child {
+  border-bottom: none;
+}
+
+.findingHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.subjectLink {
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+}
+.subjectLink:hover {
+  text-decoration: underline;
+}
+.subject {
+  font-weight: 500;
+}
+.since {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.concern {
+  font-size: var(--text-sm);
+}
+.action {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}

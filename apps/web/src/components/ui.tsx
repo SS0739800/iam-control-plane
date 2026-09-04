@@ -7,25 +7,19 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
+import { cx } from '../lib/cx'
+import styles from './ui.module.css'
+
 export type Tone = 'ok' | 'bad' | 'warn' | 'muted'
 
-const DOT: Record<Tone, string> = {
-  ok: 'bg-status-ok',
-  bad: 'bg-status-bad',
-  warn: 'bg-amber-500',
-  muted: 'bg-neutral-90',
-}
-
 export function Dot({ tone }: { tone: Tone }) {
-  return (
-    <span className={`inline-block size-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden="true" />
-  )
+  return <span className={styles.dot} data-tone={tone} aria-hidden="true" />
 }
 
 /** A small label with a coloured dot, for status columns. */
 export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm whitespace-nowrap">
+    <span className={styles.pill}>
       <Dot tone={tone} />
       {children}
     </span>
@@ -44,17 +38,14 @@ export function Panel({
 }) {
   const headingId = `panel-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
-    <section
-      aria-labelledby={headingId}
-      className="rounded-fluent border border-neutral-40 bg-white dark:border-neutral-160 dark:bg-neutral-190"
-    >
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-30 px-4 py-3 dark:border-neutral-160">
-        <h2 id={headingId} className="text-sm font-semibold">
+    <section aria-labelledby={headingId} className={styles.panel}>
+      <header className={styles.panelHeader}>
+        <h2 id={headingId} className={styles.panelHeading}>
           {title}
         </h2>
         {action}
       </header>
-      <div className="p-4">{children}</div>
+      <div className={styles.panelBody}>{children}</div>
     </section>
   )
 }
@@ -70,12 +61,12 @@ export function Stat({
   hint?: string
 }) {
   return (
-    <div className="rounded-fluent flex flex-col gap-1 border border-neutral-40 bg-white p-4 dark:border-neutral-160 dark:bg-neutral-190">
-      <span className="text-xs text-neutral-130 dark:text-neutral-60">{label}</span>
-      <span className="text-2xl font-semibold tabular-nums">
+    <div className={styles.stat}>
+      <span className={styles.statLabel}>{label}</span>
+      <span className={styles.statValue}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </span>
-      {hint ? <span className="text-xs text-neutral-130 dark:text-neutral-90">{hint}</span> : null}
+      {hint ? <span className={styles.statHint}>{hint}</span> : null}
     </div>
   )
 }
@@ -83,21 +74,19 @@ export function Stat({
 /** Label and value, side by side. Used on every detail page. */
 export function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-4 border-b border-neutral-30 py-2 last:border-0 dark:border-neutral-160">
-      <dt className="text-sm text-neutral-130 dark:text-neutral-60">{label}</dt>
-      <dd className="text-right text-sm">{children}</dd>
+    <div className={styles.row}>
+      <dt className={styles.rowLabel}>{label}</dt>
+      <dd className={styles.rowValue}>{children}</dd>
     </div>
   )
 }
 
 export function Mono({ children }: { children: ReactNode }) {
-  return <span className="font-mono text-sm break-all">{children}</span>
+  return <span className={styles.mono}>{children}</span>
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return (
-    <p className="py-6 text-center text-sm text-neutral-130 dark:text-neutral-90">{children}</p>
-  )
+  return <p className={styles.empty}>{children}</p>
 }
 
 export function Loading() {
@@ -107,28 +96,16 @@ export function Loading() {
 /** An error, shown as a Fluent-style MessageBar: a colored left edge, not a tinted box. */
 export function ErrorBox({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error)
-  return (
-    <p className="rounded-fluent border border-l-4 border-red-200 border-l-[var(--color-status-bad)] bg-red-50 p-3 text-sm text-neutral-160 dark:border-red-900 dark:bg-red-950/40 dark:text-neutral-20">
-      {message}
-    </p>
-  )
+  return <p className={styles.errorBox}>{message}</p>
 }
 
 /** Scrollable table wrapper. Wide tables scroll themselves, not the page. */
 export function TableWrap({ children }: { children: ReactNode }) {
-  return <div className="-mx-4 overflow-x-auto px-4">{children}</div>
+  return <div className={styles.tableWrap}>{children}</div>
 }
 
 export function Th({ children, right }: { children: ReactNode; right?: boolean }) {
-  return (
-    <th
-      className={`border-b border-neutral-40 pb-2 text-xs font-semibold whitespace-nowrap text-neutral-130 dark:border-neutral-160 dark:text-neutral-60 ${
-        right ? 'pl-4 text-right' : 'pr-4 text-left'
-      }`}
-    >
-      {children}
-    </th>
-  )
+  return <th className={cx(styles.th, right && styles.thRight)}>{children}</th>
 }
 
 export function Td({
@@ -143,12 +120,7 @@ export function Td({
   colSpan?: number
 }) {
   return (
-    <td
-      colSpan={colSpan}
-      className={`border-b border-neutral-30 py-2 align-top text-sm dark:border-neutral-160/70 ${
-        right ? 'pl-4 text-right tabular-nums' : 'pr-4'
-      }`}
-    >
+    <td colSpan={colSpan} className={cx(styles.td, right && styles.tdRight)}>
       {children}
     </td>
   )
@@ -156,11 +128,7 @@ export function Td({
 
 /** Row of actions above a list. Always label icons with text — no icon-only guessing. */
 export function CommandBar({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-neutral-30 pb-2 dark:border-neutral-160">
-      {children}
-    </div>
-  )
+  return <div className={styles.commandBar}>{children}</div>
 }
 
 /** One command. `primary` is the blue one — at most one per bar. */
@@ -182,11 +150,7 @@ export function Command({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={
-        primary
-          ? 'rounded-fluent bg-fluent-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-fluent-600 disabled:opacity-40'
-          : 'rounded-fluent px-3 py-1.5 text-sm text-neutral-160 hover:bg-neutral-20 disabled:opacity-40 dark:text-neutral-20 dark:hover:bg-neutral-160'
-      }
+      className={cx(styles.command, primary && styles.commandPrimary)}
     >
       {children}
     </button>
@@ -209,14 +173,14 @@ export function Pager({
   const to = Math.min(offset + limit, total)
 
   return (
-    <div className="flex items-center justify-between gap-4 pt-3 text-sm">
-      <span className="tabular-nums text-neutral-130 dark:text-neutral-60">
+    <div className={styles.pager}>
+      <span className={styles.pagerCount}>
         {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
       </span>
-      <span className="flex gap-2">
+      <span className={styles.pagerButtons}>
         <button
           type="button"
-          className="rounded-fluent border border-neutral-60 px-2 py-1 hover:bg-neutral-20 disabled:opacity-40 dark:border-neutral-130 dark:hover:bg-neutral-160"
+          className={styles.pagerButton}
           disabled={offset === 0}
           onClick={() => onChange(Math.max(0, offset - limit))}
         >
@@ -224,7 +188,7 @@ export function Pager({
         </button>
         <button
           type="button"
-          className="rounded-fluent border border-neutral-60 px-2 py-1 hover:bg-neutral-20 disabled:opacity-40 dark:border-neutral-130 dark:hover:bg-neutral-160"
+          className={styles.pagerButton}
           disabled={to >= total}
           onClick={() => onChange(offset + limit)}
         >
@@ -237,10 +201,7 @@ export function Pager({
 
 export function LinkCell({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link
-      to={to}
-      className="text-fluent-600 hover:underline dark:text-fluent-400"
-    >
+    <Link to={to} className={styles.link}>
       {children}
     </Link>
   )
@@ -249,17 +210,17 @@ export function LinkCell({ to, children }: { to: string; children: ReactNode }) 
 /** Breadcrumb trail across the top of a page. */
 export function Breadcrumbs({ trail }: { trail: { label: string; to?: string }[] }) {
   return (
-    <nav aria-label="Breadcrumb" className="text-sm text-neutral-130 dark:text-neutral-60">
-      <ol className="flex flex-wrap items-center gap-1">
+    <nav aria-label="Breadcrumb" className={styles.breadcrumbs}>
+      <ol className={styles.breadcrumbList}>
         {trail.map((step, index) => (
-          <li key={`${step.label}-${index}`} className="flex items-center gap-1">
+          <li key={`${step.label}-${index}`} className={styles.breadcrumbItem}>
             {index > 0 ? (
-              <span aria-hidden="true" className="text-neutral-90">
+              <span aria-hidden="true" className={styles.breadcrumbSeparator}>
                 ›
               </span>
             ) : null}
             {step.to ? (
-              <Link to={step.to} className="text-fluent-600 hover:underline dark:text-fluent-400">
+              <Link to={step.to} className={styles.link}>
                 {step.label}
               </Link>
             ) : (

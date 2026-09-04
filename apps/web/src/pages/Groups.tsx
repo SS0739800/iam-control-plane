@@ -17,6 +17,7 @@ import {
   Th,
 } from '../components/ui'
 import GroupMembers from '../components/GroupMembers'
+import styles from './Groups.module.css'
 import { fetchGroup, fetchGroups, fetchMe } from '../lib/api'
 
 const PAGE_SIZE = 25
@@ -44,7 +45,7 @@ export function GroupsPage() {
           }}
           placeholder="Search group name"
           aria-label="Search groups"
-          className="rounded-sm border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className={styles.search}
         />
       }
     >
@@ -62,7 +63,7 @@ export function GroupsPage() {
       ) : (
         <>
           <TableWrap>
-            <table className="w-full border-collapse">
+            <table className={styles.table}>
               <thead>
                 <tr>
                   <Th>Name</Th>
@@ -110,7 +111,7 @@ export function GroupDetailPage() {
   const data = group.data
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel title={data.name}>
         <dl>
           <Row label="Description">{data.description ?? '—'}</Row>
@@ -124,14 +125,11 @@ export function GroupDetailPage() {
         {data.applications.length === 0 ? (
           <Empty>This group does not grant any application access.</Empty>
         ) : (
-          <ul className="flex flex-col">
+          <ul className={styles.appList}>
             {data.applications.map((app) => (
-              <li
-                key={app.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-              >
+              <li key={app.id} className={styles.appRow}>
                 <LinkCell to={`/applications/${app.id}`}>{app.name}</LinkCell>
-                <span className="text-sm text-slate-500 dark:text-slate-400">
+                <span className={styles.appRole}>
                   {app.role ?? 'no role'}
                 </span>
               </li>

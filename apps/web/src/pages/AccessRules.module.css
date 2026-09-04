@@ -1,0 +1,155 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.intro {
+  padding-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Inputs, selects and textareas all share this. */
+.field {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.labelGrow {
+  flex: 1;
+}
+.labelText {
+  color: var(--text-secondary);
+}
+.conditionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+}
+/* A big blast radius should stop somebody skimming. */
+.previewLarge {
+  border-color: var(--status-warn-text);
+  background: var(--status-warn-bg);
+}
+.previewHeadline {
+  font-weight: 500;
+}
+.previewCount {
+  font-variant-numeric: tabular-nums;
+}
+.previewWarning {
+  color: var(--status-warn-text);
+}
+.previewSample {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.previewMore {
+  color: var(--text-muted);
+}
+
+.ruleName {
+  font-weight: 500;
+}
+.ruleDetail {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.memberCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.confirmText {
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.runResult {
+  display: block;
+  padding-top: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.affectedList {
+  display: flex;
+  flex-direction: column;
+}
+.affectedPerson {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+}
+.affectedPerson:last-child {
+  border-bottom: none;
+}
+.affectedMeta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}

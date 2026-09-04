@@ -1,0 +1,155 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.field {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.labelName {
+  flex: 1;
+}
+.labelPurpose {
+  flex: 2;
+}
+.labelText {
+  color: var(--text-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.formRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-self: stretch;
+}
+
+/* The token is shown once and never again, so it gets the loud treatment. */
+.issued {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent-subtle-bg);
+  padding: var(--space-4);
+}
+.issuedTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.issuedToken {
+  align-self: stretch;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: var(--space-3);
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+.issuedBody {
+  font-size: var(--text-sm);
+}
+.issuedNote {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.statGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .statGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1024px) {
+  .statGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.muted {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.clientName {
+  font-weight: 500;
+}
+.clientDetail {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.clientRevoked {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.confirmText {
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.divider {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.whenCell {
+  white-space: nowrap;
+}
+.detailCell {
+  color: var(--text-secondary);
+}
+
+.footnote {
+  padding-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}

@@ -18,7 +18,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { Button } from '../components/Button'
+import { cx } from '../lib/cx'
 import { Empty, ErrorBox, Loading, Panel, Pill, type Tone } from '../components/ui'
+import styles from './AccessRequests.module.css'
 import {
   type AccessRequest,
   type RequestState,
@@ -31,9 +34,6 @@ import {
   raiseAccessRequest,
   withdrawAccessRequest,
 } from '../lib/api'
-
-const FIELD =
-  'rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900'
 
 function when(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : '—'
@@ -79,30 +79,30 @@ function DecideForm({ request, onDone }: { request: AccessRequest; onDone: () =>
   const busy = approve.isPending || deny.isPending
 
   return (
-    <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">What you decided, and why</span>
+    <div className={styles.decideForm}>
+      <div className={styles.decideFields}>
+        <label className={cx(styles.label, styles.labelGrow)}>
+          <span className={styles.labelText}>What you decided, and why</span>
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="Agreed with their manager. Ends with the quarter."
-            className={FIELD}
+            className={styles.field}
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Until (optional)</span>
+        <label className={styles.label}>
+          <span className={styles.labelText}>Until (optional)</span>
           <input
             type="date"
             value={until}
             onChange={(event) => setUntil(event.target.value)}
-            className={FIELD}
+            className={styles.field}
           />
         </label>
       </div>
 
       {!until ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className={styles.hint}>
           No end date means this access is permanent. Most requests are for a piece of work
           that finishes.
         </p>
@@ -111,12 +111,12 @@ function DecideForm({ request, onDone }: { request: AccessRequest; onDone: () =>
       {approve.isError ? <ErrorBox error={approve.error} /> : null}
       {deny.isError ? <ErrorBox error={deny.error} /> : null}
 
-      <div className="flex gap-2">
+      <div className={styles.decideActions}>
         <button
           type="button"
           onClick={() => approve.mutate()}
           disabled={busy}
-          className="rounded-sm border border-emerald-600 px-3 py-1 text-sm text-emerald-700 disabled:opacity-50 dark:border-emerald-500 dark:text-emerald-400"
+          className={styles.approveButton}
         >
           {approve.isPending ? 'Approving…' : 'Approve'}
         </button>
@@ -124,7 +124,7 @@ function DecideForm({ request, onDone }: { request: AccessRequest; onDone: () =>
           type="button"
           onClick={() => deny.mutate()}
           disabled={busy}
-          className="rounded-sm border border-rose-400 px-3 py-1 text-sm text-rose-700 disabled:opacity-50 dark:border-rose-800 dark:text-rose-400"
+          className={styles.denyButton}
         >
           {deny.isPending ? 'Denying…' : 'Deny'}
         </button>
@@ -151,20 +151,18 @@ function RequestCard({
   })
 
   return (
-    <li className="flex flex-col gap-2 border-b border-slate-100 py-4 last:border-0 dark:border-slate-800/60">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">
+    <li className={styles.request}>
+      <div className={styles.requestHead}>
+        <span className={styles.requestWho}>
           {request.requester_label} → {request.group_label}
         </span>
         <Pill tone={stateTone(request.state)}>{request.state}</Pill>
       </div>
 
       {/* Full width, never truncated. It is the only thing an approver can weigh. */}
-      <p className="rounded-sm bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap dark:bg-slate-950">
-        {request.reason}
-      </p>
+      <p className={styles.reason}>{request.reason}</p>
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <p className={styles.meta}>
         Asked {when(request.created_at)} · {outcome(request)}
         {request.expires_at ? ` · access ends ${when(request.expires_at)}` : ''}
       </p>
@@ -173,27 +171,26 @@ function RequestCard({
           cancellation the note is the explanation, and printing it twice reads as
           though two separate things happened. */}
       {request.decision_note && request.state !== 'cancelled' ? (
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Decision note: {request.decision_note}
-        </p>
+        <p className={styles.decisionNote}>Decision note: {request.decision_note}</p>
       ) : null}
 
       {withdraw.isError ? <ErrorBox error={withdraw.error} /> : null}
 
       {request.state === 'pending' && mine ? (
-        <div className="flex flex-col gap-1">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+        <div className={styles.ownRequest}>
+          <p className={styles.hint}>
             This is your own request, so you can&apos;t decide it — somebody else has to look
             at it.
           </p>
-          <button
-            type="button"
-            onClick={() => withdraw.mutate()}
-            disabled={withdraw.isPending}
-            className="self-start rounded-sm border border-slate-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-slate-700"
-          >
-            {withdraw.isPending ? 'Withdrawing…' : 'Withdraw it'}
-          </button>
+          <span>
+            <Button
+              variant="secondary"
+              onClick={() => withdraw.mutate()}
+              disabled={withdraw.isPending}
+            >
+              {withdraw.isPending ? 'Withdrawing…' : 'Withdraw it'}
+            </Button>
+          </span>
         </div>
       ) : null}
 
@@ -224,18 +221,18 @@ function AskForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className={styles.askForm}
       onSubmit={(event) => {
         event.preventDefault()
         if (groupId && reason.trim()) ask.mutate()
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-500 dark:text-slate-400">What do you need?</span>
+      <label className={styles.label}>
+        <span className={styles.labelText}>What do you need?</span>
         <select
           value={groupId}
           onChange={(event) => setGroupId(event.target.value)}
-          className={FIELD}
+          className={styles.field}
           required
         >
           <option value="">choose a group…</option>
@@ -247,30 +244,32 @@ function AskForm({ onDone }: { onDone: () => void }) {
         </select>
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-500 dark:text-slate-400">Why do you need it?</span>
+      <label className={styles.label}>
+        <span className={styles.labelText}>Why do you need it?</span>
         <textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           rows={3}
           placeholder="Covering month-end close while Priya is away."
-          className={FIELD}
+          className={styles.field}
           required
         />
-        <span className="text-xs text-slate-500 dark:text-slate-400">
+        <span className={styles.hint}>
           Whoever decides this will read only what you write here.
         </span>
       </label>
 
       {ask.isError ? <ErrorBox error={ask.error} /> : null}
 
-      <button
-        type="submit"
-        disabled={ask.isPending || !groupId || !reason.trim()}
-        className="self-start rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
-      >
-        {ask.isPending ? 'Sending…' : 'Ask for access'}
-      </button>
+      <span>
+        <Button
+          type="submit"
+          variant="accent"
+          disabled={ask.isPending || !groupId || !reason.trim()}
+        >
+          {ask.isPending ? 'Sending…' : 'Ask for access'}
+        </Button>
+      </span>
     </form>
   )
 }
@@ -294,7 +293,7 @@ export default function AccessRequestsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       {canSeeQueue ? (
         <Panel title={`Waiting for a decision${queue.data ? ` (${queue.data.length})` : ''}`}>
           {queue.isError ? (
@@ -305,10 +304,10 @@ export default function AccessRequestsPage() {
             <Empty>Nothing waiting.</Empty>
           ) : (
             <>
-              <p className="pb-2 text-sm text-slate-600 dark:text-slate-300">
+              <p className={styles.queueNote}>
                 Oldest first, which is the order they should be worked in.
               </p>
-              <ul className="flex flex-col">
+              <ul className={styles.list}>
                 {queue.data.map((request) => (
                   <RequestCard
                     key={request.id}
@@ -336,7 +335,7 @@ export default function AccessRequestsPage() {
         ) : mine.data.length === 0 ? (
           <Empty>You haven&apos;t asked for anything.</Empty>
         ) : (
-          <ul className="flex flex-col">
+          <ul className={styles.list}>
             {mine.data.map((request) => (
               <RequestCard
                 key={request.id}

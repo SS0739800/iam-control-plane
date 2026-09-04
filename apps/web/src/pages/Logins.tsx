@@ -33,6 +33,7 @@ import {
   fetchLoginAttempt,
   fetchLoginAttempts,
 } from '../lib/api'
+import styles from './Logins.module.css'
 
 const PAGE_SIZE = 25
 
@@ -46,22 +47,22 @@ function outcomeTone(outcome: LoginAttempt['outcome']): Tone {
 function Checklist({ attempt }: { attempt: LoginAttempt }) {
   if (attempt.checks.length === 0) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
+      <p className={styles.muted}>
         No checks ran — the response could not be read at all, so there was nothing to check.
       </p>
     )
   }
 
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className={styles.checklist}>
       {attempt.checks.map((check) => (
-        <li key={check.name} className="flex items-start gap-2 text-sm">
-          <span className="mt-1.5">
+        <li key={check.name} className={styles.checkItem}>
+          <span className={styles.checkDot}>
             <Dot tone={check.passed ? 'ok' : 'bad'} />
           </span>
           <span>
-            <span className="font-mono text-xs">{check.name}</span>
-            <span className="text-slate-500 dark:text-slate-400"> — {check.detail}</span>
+            <span className={styles.checkName}>{check.name}</span>
+            <span className={styles.checkDetail}> — {check.detail}</span>
           </span>
         </li>
       ))}
@@ -82,7 +83,7 @@ function Assertion({ eventId }: { eventId: number }) {
   const xml = detail.data?.decoded_response
   if (!xml) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
+      <p className={styles.muted}>
         Nothing was kept. Only failed logins keep the document — one that passed every check has
         nothing to look at.
       </p>
@@ -90,16 +91,12 @@ function Assertion({ eventId }: { eventId: number }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={styles.assertionBody}>
       {detail.data?.response_truncated ? (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          Cut short. Only the first 32 KB was kept.
-        </p>
+        <p className={styles.truncatedNote}>Cut short. Only the first 32 KB was kept.</p>
       ) : null}
-      <pre className="max-h-96 overflow-auto rounded-sm bg-slate-100 p-3 font-mono text-[0.7rem] leading-relaxed whitespace-pre-wrap dark:bg-slate-950">
-        {xml}
-      </pre>
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <pre className={styles.assertionXml}>{xml}</pre>
+      <p className={styles.muted}>
         Shown exactly as it arrived, not reformatted. An inspector should show what was sent.
       </p>
     </div>
@@ -140,9 +137,9 @@ export default function LoginsPage() {
   const attempts = pages.flat()
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel title="What this shows">
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+        <p className={styles.intro}>
           Every sign-in attempt, with all ten checks it had to pass. This is a view over the audit
           log rather than a table of its own, so nothing here can be edited or deleted and the
           tamper check covers it.
@@ -152,27 +149,27 @@ export default function LoginsPage() {
       <Panel
         title="Sign-in attempts"
         action={
-          <span className="flex flex-wrap gap-2">
-            <label className="flex items-center gap-1.5 text-sm">
-              <span className="text-slate-500 dark:text-slate-400">Outcome</span>
+          <span className={styles.filters}>
+            <label className={styles.filterLabel}>
+              <span className={styles.filterLabelText}>Outcome</span>
               <select
                 value={outcome}
                 onChange={(event) =>
                   refilter(() => setOutcome(event.target.value as OutcomeFilter))
                 }
-                className="rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                className={styles.select}
               >
                 <option value="all">All</option>
                 <option value="failure">Refused</option>
                 <option value="success">Accepted</option>
               </select>
             </label>
-            <label className="flex items-center gap-1.5 text-sm">
-              <span className="text-slate-500 dark:text-slate-400">Provider</span>
+            <label className={styles.filterLabel}>
+              <span className={styles.filterLabelText}>Provider</span>
               <select
                 value={idp}
                 onChange={(event) => refilter(() => setIdp(event.target.value))}
-                className="rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                className={styles.select}
               >
                 <option value="all">All</option>
                 {(providers.data ?? []).map((provider) => (
@@ -196,7 +193,7 @@ export default function LoginsPage() {
         ) : (
           <>
             <TableWrap>
-              <table className="w-full border-collapse">
+              <table className={styles.table}>
                 <thead>
                   <tr>
                     <Th>When</Th>
@@ -211,7 +208,7 @@ export default function LoginsPage() {
                   {attempts.map((attempt) => (
                     <tr key={attempt.id}>
                       <Td>
-                        <span className="whitespace-nowrap">
+                        <span className={styles.whenCell}>
                           {new Date(attempt.occurred_at).toLocaleString()}
                         </span>
                       </Td>
@@ -226,7 +223,7 @@ export default function LoginsPage() {
                       </Td>
                       <Td>
                         {attempt.failed_checks.length === 0 ? (
-                          <span className="text-slate-400 dark:text-slate-500">—</span>
+                          <span className={styles.mutedCell}>—</span>
                         ) : (
                           <Mono>{attempt.failed_checks.join(', ')}</Mono>
                         )}
@@ -238,7 +235,7 @@ export default function LoginsPage() {
                             setExpanded(expanded === attempt.id ? null : attempt.id)
                           }
                           aria-expanded={expanded === attempt.id}
-                          className="font-mono text-xs text-brass-700 underline-offset-2 hover:underline dark:text-brass-400"
+                          className={styles.entryLink}
                         >
                           #{attempt.id}
                         </button>
@@ -253,21 +250,19 @@ export default function LoginsPage() {
               <ExpandedAttempt attempt={attempts.find((row) => row.id === expanded)!} />
             )}
 
-            <div className="flex items-center justify-between gap-4 pt-3 text-sm">
-              <span className="text-slate-500 tabular-nums dark:text-slate-400">
-                {attempts.length.toLocaleString()} loaded
-              </span>
+            <div className={styles.footer}>
+              <span className={styles.loadedCount}>{attempts.length.toLocaleString()} loaded</span>
               {page.data?.next_cursor ? (
                 <button
                   type="button"
                   onClick={() => setCursor(page.data.next_cursor ?? undefined)}
                   disabled={page.isFetching}
-                  className="rounded-sm border border-slate-300 px-2 py-1 disabled:opacity-40 dark:border-slate-700"
+                  className={styles.loadMore}
                 >
                   {page.isFetching ? 'Loading…' : 'Load more'}
                 </button>
               ) : (
-                <span className="text-slate-500 dark:text-slate-400">End of the list</span>
+                <span className={styles.endOfList}>End of the list</span>
               )}
             </div>
           </>
@@ -279,7 +274,7 @@ export default function LoginsPage() {
 
 function ExpandedAttempt({ attempt }: { attempt: LoginAttempt }) {
   return (
-    <div className="mt-4 flex flex-col gap-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+    <div className={styles.expanded}>
       <dl>
         <Row label="Audit entry">
           <Mono>#{attempt.id}</Mono>
@@ -298,17 +293,13 @@ function ExpandedAttempt({ attempt }: { attempt: LoginAttempt }) {
         ) : null}
       </dl>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="font-mono text-xs tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
-          Checks
-        </h3>
+      <section className={styles.expandedSection}>
+        <h3 className={styles.expandedHeading}>Checks</h3>
         <Checklist attempt={attempt} />
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h3 className="font-mono text-xs tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
-          What arrived
-        </h3>
+      <section className={styles.expandedSection}>
+        <h3 className={styles.expandedHeading}>What arrived</h3>
         <Assertion eventId={attempt.id} />
       </section>
     </div>

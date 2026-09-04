@@ -1,40 +1,25 @@
 /**
  * Who is in a group, and putting people in or taking them out.
  *
- * The group page listed members and offered no way to change them, which left the
- * scalable half of the entitlement model half-built: an application can be granted to
- * a group, but nobody could be put in the group. Access at scale runs through groups,
- * so the console could grant broadly and only revoke one person at a time.
- *
- * Provenance is the part worth understanding
- * ------------------------------------------
- *
- * `group_members.source` records *why* somebody is in a group — a rule worked it out,
- * a provider sent it, somebody asked for it, or a person decided. The rule engine
- * reconciles rather than adds, and it only ever removes memberships it created
- * itself. That is what lets a hand-added member survive the next rule run instead of
- * being tidied away by a system that never knew a human meant it.
- *
- * Adding somebody here records MANUAL, so the engine leaves them alone. Removing
- * somebody the rule put there works too, but the next run will put them back —
- * because the rule still says they belong, and the honest fix is to change the rule.
- * The panel says so rather than letting somebody fight a reconciler by hand.
+ * Adding somebody here is recorded as a person's decision, so the rules engine
+ * leaves them alone — it only ever removes memberships it created itself. You can
+ * remove somebody a rule put there, but the next run puts them back, since the rule
+ * still says they belong. The fix for that is to change the rule.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { Button } from './Button'
 import {
   type GroupDetail,
   addToGroup,
   fetchUsers,
   removeFromGroup,
 } from '../lib/api'
+import styles from './GroupMembers.module.css'
 import { Empty, ErrorBox, Panel, Pill } from './ui'
-
-const FIELD =
-  'rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900'
 
 function AddMember({ group }: { group: GroupDetail }) {
   const [query, setQuery] = useState('')
@@ -64,50 +49,46 @@ function AddMember({ group }: { group: GroupDetail }) {
   const candidates = (found.data?.items ?? []).filter((person) => !already.has(person.id))
 
   return (
-    <div className="flex flex-col gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-500 dark:text-slate-400">Add somebody</span>
+    <div className={styles.addMember}>
+      <label className={styles.label}>
+        <span className={styles.labelText}>Add somebody</span>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search by name or login"
-          className={FIELD}
+          className={styles.field}
         />
       </label>
 
       {query.trim().length >= 2 && found.data && candidates.length === 0 ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className={styles.hint}>
           Nobody matching who is not already in this group.
         </p>
       ) : null}
 
       {candidates.length > 0 ? (
-        <ul className="flex flex-col">
+        <ul className={styles.list}>
           {candidates.map((person) => (
-            <li
-              key={person.id}
-              className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-            >
+            <li key={person.id} className={styles.row}>
               <span>
                 {person.display_name}{' '}
-                <span className="text-xs text-slate-500 dark:text-slate-400">
+                <span className={styles.hint}>
                   {person.user_name}
                 </span>
               </span>
-              <button
-                type="button"
+              <Button
+                variant="accent"
                 onClick={() => add.mutate(person.id)}
                 disabled={add.isPending}
-                className="rounded-sm border border-brass-600 px-2 py-1 text-xs text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
               >
                 Add
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
       ) : null}
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <p className={styles.hint}>
         Somebody added here counts as put there by a person, so the rules engine will
         not remove them. Everything this group grants reaches them immediately.
       </p>
@@ -133,36 +114,23 @@ function RemoveButton({ group, userId, name }: { group: GroupDetail; userId: str
 
   if (!confirming) {
     return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="rounded-sm border border-rose-400 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:text-rose-400"
-      >
+      <Button variant="danger" onClick={() => setConfirming(true)}>
         Remove
-      </button>
+      </Button>
     )
   }
 
   return (
-    <span className="flex flex-wrap items-center justify-end gap-2">
-      <span className="text-xs text-rose-700 dark:text-rose-400">
+    <span className={styles.confirm}>
+      <span className={styles.confirmText}>
         Take {name} out of {group.name}? They lose whatever this group grants.
       </span>
-      <button
-        type="button"
-        onClick={() => remove.mutate()}
-        disabled={remove.isPending}
-        className="rounded-sm border border-rose-500 bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
-      >
+      <Button variant="danger-solid" onClick={() => remove.mutate()} disabled={remove.isPending}>
         {remove.isPending ? 'Removing…' : 'Yes, remove'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setConfirming(false)}
-        className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-      >
+      </Button>
+      <Button variant="secondary" onClick={() => setConfirming(false)}>
         Cancel
-      </button>
+      </Button>
       {remove.isError ? <ErrorBox error={remove.error} /> : null}
     </span>
   )
@@ -183,19 +151,13 @@ export default function GroupMembers({
         <Empty>No members.</Empty>
       ) : (
         <>
-          <ul className="flex flex-col">
+          <ul className={styles.list}>
             {group.members.map((member) => (
-              <li
-                key={member.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-              >
-                <Link
-                  to={`/users/${member.id}`}
-                  className="text-brass-700 underline-offset-2 hover:underline dark:text-brass-400"
-                >
+              <li key={member.id} className={styles.row}>
+                <Link to={`/users/${member.id}`} className={styles.memberLink}>
                   {member.display_name}
                 </Link>
-                <span className="flex items-center gap-3">
+                <span className={styles.memberActions}>
                   <Pill tone={member.active ? 'ok' : 'muted'}>
                     {member.active ? 'active' : 'deactivated'}
                   </Pill>
@@ -211,7 +173,7 @@ export default function GroupMembers({
             ))}
           </ul>
           {showingAll ? null : (
-            <p className="pt-3 text-sm text-slate-500 dark:text-slate-400">
+            <p className={styles.truncated}>
               Showing the first {group.members.length} of{' '}
               {group.member_count.toLocaleString()}.
             </p>

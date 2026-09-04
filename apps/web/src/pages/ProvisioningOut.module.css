@@ -1,0 +1,175 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.field {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.fieldMono {
+  font-family: ui-monospace, monospace;
+}
+.fieldMonoSmall {
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.labelOne {
+  flex: 1;
+}
+.labelTwo {
+  flex: 2;
+}
+.labelText {
+  color: var(--text-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.formRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-self: stretch;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.statGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .statGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1024px) {
+  .statGrid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.hintBlock {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.hintSpaced {
+  padding-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.muted {
+  color: var(--text-secondary);
+}
+.mutedText {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.body {
+  font-size: var(--text-sm);
+}
+.name {
+  font-weight: 500;
+}
+.whenCell {
+  white-space: nowrap;
+}
+.pushRight {
+  margin-left: auto;
+}
+
+.bad {
+  color: var(--status-bad-text);
+}
+.badBlock {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+.badText {
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+
+/* The three banner tones a target can be in. */
+.noticeWarn {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-warn-text);
+  background: var(--status-warn-bg);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.noticeBad {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-bad-border);
+  background: var(--status-bad-bg);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.noticeOk {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-ok-text);
+  background: var(--status-ok-bg);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.noticeNeutral {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
+}

@@ -1,0 +1,85 @@
+.field {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.labelText {
+  color: var(--text-secondary);
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.addMember {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) 0;
+}
+.row:last-child {
+  border-bottom: none;
+}
+
+.login {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.memberLink {
+  color: var(--accent);
+  text-decoration: none;
+}
+.memberLink:hover {
+  text-decoration: underline;
+}
+
+.memberActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.confirmText {
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+
+.truncated {
+  padding-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}

@@ -1,0 +1,113 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+  align-items: flex-start;
+}
+.formRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  align-self: stretch;
+}
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.labelGrow {
+  flex: 1;
+}
+.labelText {
+  color: var(--text-secondary);
+}
+.warning {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--status-warn-text);
+}
+
+.current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.currentRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.muted {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.confirmText {
+  font-size: var(--text-sm);
+  color: var(--status-bad-text);
+}
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.historyHeading {
+  padding-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.historyList {
+  display: flex;
+  flex-direction: column;
+}
+.historyItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) 0;
+}
+.historyItem:last-child {
+  border-bottom: none;
+}
+.historyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.historyHow {
+  font-size: var(--text-sm);
+}
+.historyMeta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}

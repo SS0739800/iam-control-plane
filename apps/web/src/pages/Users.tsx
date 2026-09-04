@@ -21,6 +21,7 @@ import {
 } from '../components/ui'
 import { fetchMe, fetchUser, fetchUsers } from '../lib/api'
 import LeaverPanel from '../components/LeaverPanel'
+import styles from './Users.module.css'
 import RoleGrantPanel from '../components/RoleGrantPanel'
 
 const PAGE_SIZE = 25
@@ -52,7 +53,7 @@ export function UsersPage() {
           }}
           placeholder="Search name or email"
           aria-label="Search users"
-          className="rounded-sm border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className={styles.search}
         />
       }
     >
@@ -65,7 +66,7 @@ export function UsersPage() {
       ) : (
         <>
           <TableWrap>
-            <table className="w-full border-collapse">
+            <table className={styles.table}>
               <thead>
                 <tr>
                   <Th>Name</Th>
@@ -126,7 +127,7 @@ export function UserDetailPage() {
   const statusTone: Tone = person.active ? 'ok' : 'muted'
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel title={person.display_name}>
         <dl>
           <Row label="Login">
@@ -163,14 +164,11 @@ export function UserDetailPage() {
         {person.groups.length === 0 ? (
           <Empty>Not in any groups.</Empty>
         ) : (
-          <ul className="flex flex-col">
+          <ul className={styles.groupList}>
             {person.groups.map((group) => (
-              <li
-                key={group.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
-              >
+              <li key={group.id} className={styles.groupRow}>
                 <LinkCell to={`/groups/${group.id}`}>{group.name}</LinkCell>
-                <span className="text-sm text-slate-500 dark:text-slate-400">
+                <span className={styles.groupSource}>
                   {group.hrms_role ? `HRMS role: ${group.hrms_role}` : ''}
                 </span>
               </li>
@@ -184,7 +182,7 @@ export function UserDetailPage() {
           <Empty>No application access.</Empty>
         ) : (
           <TableWrap>
-            <table className="w-full border-collapse">
+            <table className={styles.table}>
               <thead>
                 <tr>
                   <Th>Application</Th>
@@ -201,11 +199,11 @@ export function UserDetailPage() {
                     <Td>{app.role ?? '—'}</Td>
                     <Td>
                       {app.via_group ? (
-                        <span className="text-slate-600 dark:text-slate-300">
-                          via <strong className="font-medium">{app.via_group}</strong>
+                        <span className={styles.viaGroup}>
+                          via <strong className={styles.viaGroupName}>{app.via_group}</strong>
                         </span>
                       ) : (
-                        <span className="text-slate-500 dark:text-slate-400">given directly</span>
+                        <span className={styles.directGrant}>given directly</span>
                       )}
                     </Td>
                   </tr>

@@ -1,0 +1,146 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Inputs, selects and textareas all share this. */
+.field {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.labelGrow {
+  flex: 1;
+}
+.labelText {
+  color: var(--text-secondary);
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.queueNote {
+  padding-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.request {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) 0;
+}
+.request:last-child {
+  border-bottom: none;
+}
+
+.requestHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.requestWho {
+  font-weight: 500;
+}
+
+/* The reason an approver has to weigh — full width, never cut off. */
+.reason {
+  border-radius: var(--radius-sm);
+  background: var(--surface-secondary);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+}
+
+.meta {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.decisionNote {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.ownRequest {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.decideForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.decideFields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.decideActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Approve and deny sit side by side, so they share the button geometry and differ
+   only in colour. */
+.approveButton,
+.denyButton {
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  background: none;
+  padding: 6px var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.approveButton:disabled,
+.denyButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.approveButton {
+  border-color: var(--status-ok-text);
+  color: var(--status-ok-text);
+}
+.approveButton:hover:not(:disabled) {
+  background: var(--status-ok-bg);
+}
+.denyButton {
+  border-color: var(--status-bad-border);
+  color: var(--status-bad-text);
+}
+.denyButton:hover:not(:disabled) {
+  background: var(--status-bad-bg);
+}
+
+.askForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

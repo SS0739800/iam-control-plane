@@ -28,10 +28,10 @@ import {
   revokeAppAccessFromGroup,
   revokeAppAccessFromUser,
 } from '../lib/api'
+import { Button } from './Button'
+import { cx } from '../lib/cx'
+import styles from './ApplicationSamlPanels.module.css'
 import { Empty, ErrorBox, LinkCell, Mono, Panel, Pill, Row } from './ui'
-
-const FIELD =
-  'rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900'
 
 /** Whether this application is wired up enough for a login to be possible. */
 function readiness(app: ApplicationDetail): { ready: boolean; missing: string[] } {
@@ -54,36 +54,23 @@ function RemoveButton({
 
   if (!confirming) {
     return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="rounded-sm border border-rose-400 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:text-rose-400"
-      >
+      <Button variant="danger" onClick={() => setConfirming(true)}>
         Remove
-      </button>
+      </Button>
     )
   }
 
   return (
-    <span className="flex flex-wrap items-center justify-end gap-2">
-      <span className="text-xs text-rose-700 dark:text-rose-400">
+    <span className={styles.confirm}>
+      <span className={styles.confirmText}>
         Take away {label}&apos;s access?
       </span>
-      <button
-        type="button"
-        onClick={onConfirm}
-        disabled={pending}
-        className="rounded-sm border border-rose-500 bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
-      >
+      <Button variant="danger-solid" onClick={onConfirm} disabled={pending}>
         {pending ? 'Removing…' : 'Yes, remove it'}
-      </button>
-      <button
-        type="button"
-        onClick={() => setConfirming(false)}
-        className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-      >
+      </Button>
+      <Button variant="secondary" onClick={() => setConfirming(false)}>
         Cancel
-      </button>
+      </Button>
     </span>
   )
 }
@@ -122,22 +109,22 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
 
   return (
     <form
-      className="flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800"
+      className={styles.form}
       onSubmit={(event) => {
         event.preventDefault()
         if (subject) grant.mutate()
       }}
     >
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Give access to</span>
+      <div className={styles.formRow}>
+        <label className={styles.label}>
+          <span className={styles.labelText}>Give access to</span>
           <select
             value={kind}
             onChange={(event) => {
               setKind(event.target.value as 'group' | 'user')
               setSubject('')
             }}
-            className={FIELD}
+            className={styles.field}
           >
             <option value="group">a group</option>
             <option value="user">one person</option>
@@ -145,12 +132,12 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
         </label>
 
         {kind === 'group' ? (
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-slate-500 dark:text-slate-400">Which group</span>
+          <label className={cx(styles.label, styles.labelGrow)}>
+            <span className={styles.labelText}>Which group</span>
             <select
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
-              className={FIELD}
+              className={styles.field}
               required
             >
               <option value="">choose…</option>
@@ -162,8 +149,8 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
             </select>
           </label>
         ) : (
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-slate-500 dark:text-slate-400">Who</span>
+          <label className={cx(styles.label, styles.labelGrow)}>
+            <span className={styles.labelText}>Who</span>
             <input
               value={query}
               onChange={(event) => {
@@ -173,12 +160,12 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
                 setSubject('')
               }}
               placeholder="Search by name or login"
-              className={FIELD}
+              className={styles.field}
             />
             {query.trim().length >= 2 ? (
-              <span className="flex flex-col">
+              <span className={styles.picker}>
                 {(people.data?.items ?? []).length === 0 ? (
-                  <span className="py-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span className={styles.pickerEmpty}>
                     Nobody active matching that.
                   </span>
                 ) : (
@@ -190,14 +177,13 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
                         setSubject(person.id)
                         setQuery(`${person.display_name} (${person.user_name})`)
                       }}
-                      className={`px-1 py-1 text-left text-sm ${
-                        subject === person.id
-                          ? 'bg-brass-50 dark:bg-brass-950'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
+                      className={cx(
+                        styles.pickerOption,
+                        subject === person.id && styles.pickerOptionChosen,
+                      )}
                     >
                       {person.display_name}{' '}
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                      <span className={styles.hint}>
                         {person.user_name}
                       </span>
                     </button>
@@ -208,19 +194,19 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
           </label>
         )}
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Role in the app (optional)</span>
+        <label className={styles.label}>
+          <span className={styles.labelText}>Role in the app (optional)</span>
           <input
             value={role}
             onChange={(event) => setRole(event.target.value)}
             placeholder="Employee"
-            className={FIELD}
+            className={styles.field}
           />
         </label>
       </div>
 
       {kind === 'group' ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className={styles.hint}>
           A group reaches everybody in it now and everybody added to it later, including by an
           access rule. One person reaches one person.
         </p>
@@ -228,13 +214,9 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
 
       {grant.isError ? <ErrorBox error={grant.error} /> : null}
 
-      <button
-        type="submit"
-        disabled={grant.isPending || !subject}
-        className="self-start rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
-      >
+      <Button type="submit" variant="accent" disabled={grant.isPending || !subject}>
         {grant.isPending ? 'Granting…' : 'Give access'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -257,12 +239,12 @@ export function ApplicationSamlPanels({ app }: { app: ApplicationDetail }) {
     <>
       <Panel title="How this application is wired to us">
         {ready ? (
-          <p className="pb-3 text-sm text-slate-600 dark:text-slate-300">
+          <p className={styles.intro}>
             Read on every login. The entity ID is what an incoming request is matched against,
             and the login response URL is where a signed assertion is posted.
           </p>
         ) : (
-          <p className="pb-3 text-sm text-amber-700 dark:text-amber-400">
+          <p className={styles.warning}>
             Not wired up yet — no {missing.join(' and no ')}. Logins for this application are
             refused until its metadata is registered.
           </p>
@@ -287,14 +269,14 @@ export function ApplicationSamlPanels({ app }: { app: ApplicationDetail }) {
         </dl>
 
         {ready ? (
-          <div className="flex flex-col gap-2 pt-3">
+          <div className={styles.launch}>
             <a
               href={loginUrl}
-              className="self-start rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 dark:border-brass-400 dark:text-brass-400"
+              className={styles.launchLink}
             >
               Sign in to it
             </a>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className={styles.hint}>
               Issues a real signed assertion and posts it to the address above. For a seeded
               application that address does not resolve, so nothing receives it — the assertion
               still appears in the audit log and the sign-in inspector, which is the point.
@@ -355,16 +337,16 @@ export function ApplicationAccessPanels({
         {app.assigned_groups.length === 0 ? (
           <Empty>No groups grant access to this application.</Empty>
         ) : (
-          <ul className="flex flex-col">
+          <ul className={styles.picker}>
             {app.assigned_groups.map((group) => (
               <li
                 key={group.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
+                className={styles.row}
               >
                 <span>
                   <LinkCell to={`/groups/${group.id}`}>{group.name}</LinkCell>
                   {group.hrms_role ? (
-                    <span className="text-slate-500 dark:text-slate-400">
+                    <span className={styles.labelText}>
                       {' '}
                       · HRMS role {group.hrms_role}
                     </span>
@@ -388,15 +370,15 @@ export function ApplicationAccessPanels({
         {app.assigned_users.length === 0 ? (
           <Empty>Nobody has been given access directly.</Empty>
         ) : (
-          <ul className="flex flex-col">
+          <ul className={styles.picker}>
             {app.assigned_users.map((person) => (
               <li
                 key={person.id}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
+                className={styles.row}
               >
-                <span className="flex flex-wrap items-baseline gap-2">
+                <span className={styles.personRow}>
                   <LinkCell to={`/users/${person.id}`}>{person.display_name}</LinkCell>
-                  <span className="text-slate-500 dark:text-slate-400">{person.user_name}</span>
+                  <span className={styles.labelText}>{person.user_name}</span>
                   {!person.active ? <Pill tone="muted">deactivated</Pill> : null}
                 </span>
                 {canWrite ? (

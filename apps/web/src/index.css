@@ -1,63 +1,211 @@
-@import 'tailwindcss';
+/* Microsoft's actual Fluent values (Entra's design language), not approximations.
+   Raw colors first, then the semantic names components actually use. */
+:root {
+  color-scheme: light dark;
 
-/* Microsoft's actual Fluent values (Entra's design language), not approximations. */
-@theme {
-  /* Communication blue: primary actions, links, the selected nav item. */
-  --color-fluent-50: #eff6fc;
-  --color-fluent-100: #deecf9;
-  --color-fluent-200: #c7e0f4;
-  --color-fluent-400: #2b88d8;
-  --color-fluent-500: #0078d4;
-  --color-fluent-600: #106ebe;
-  --color-fluent-700: #005a9e;
-  --color-fluent-900: #004578;
+  /* Communication blue ramp. */
+  --fluent-50: #eff6fc;
+  --fluent-100: #deecf9;
+  --fluent-200: #c7e0f4;
+  --fluent-400: #2b88d8;
+  --fluent-500: #0078d4;
+  --fluent-600: #106ebe;
+  --fluent-700: #005a9e;
+  --fluent-900: #004578;
 
-  /* Fluent's neutral ramp — warmer and flatter than Tailwind's slate. */
-  --color-neutral-10: #faf9f8;
-  --color-neutral-20: #f3f2f1;
-  --color-neutral-30: #edebe9;
-  --color-neutral-40: #e1dfdd;
-  --color-neutral-60: #c8c6c4;
-  --color-neutral-90: #a19f9d;
-  --color-neutral-130: #605e5c;
-  --color-neutral-160: #323130;
-  --color-neutral-190: #201f1e;
+  /* Fluent's neutral ramp — warmer and flatter than a generic slate gray. */
+  --neutral-10: #faf9f8;
+  --neutral-20: #f3f2f1;
+  --neutral-30: #edebe9;
+  --neutral-40: #e1dfdd;
+  --neutral-60: #c8c6c4;
+  --neutral-90: #a19f9d;
+  --neutral-130: #605e5c;
+  --neutral-160: #323130;
+  --neutral-190: #201f1e;
 
-  /* Status colours, from Fluent's semantic set rather than invented. */
-  --color-status-ok: #107c10;
-  --color-status-warn: #797775;
-  --color-status-bad: #a4262c;
+  /* Status colors. Warnings use amber here, not Fluent's actual (gray) warn color. */
+  --red-fluent: #a4262c;
+  --red-fluent-tint: #fdf3f4;
+  --red-fluent-tint-dark: #3b1618;
+  --amber-50: #fffbeb;
+  --amber-400: #fbbf24;
+  --amber-700: #b45309;
+  --amber-950: #451a03;
+  --green-fluent: #107c10;
+  --green-fluent-tint: #dff6dd;
+
+  /* These are the names components actually use, not the raw colors above. */
+  --surface: #ffffff;
+  --surface-secondary: var(--neutral-10);
+  --surface-page: var(--neutral-20);
+  --border: var(--neutral-40);
+  --border-strong: var(--neutral-60);
+  --text-primary: var(--neutral-160);
+  --text-secondary: var(--neutral-130);
+  --text-muted: var(--neutral-90);
+  --text-on-accent: #ffffff;
+  --text-on-danger: #ffffff;
+
+  --accent: var(--fluent-600);
+  --accent-hover: var(--fluent-700);
+  --accent-solid: var(--fluent-500);
+  --accent-solid-hover: var(--fluent-600);
+  --accent-subtle-bg: var(--fluent-50);
+
+  --status-ok-text: var(--green-fluent);
+  --status-ok-bg: var(--green-fluent-tint);
+  --status-warn-text: var(--amber-700);
+  --status-warn-bg: var(--amber-50);
+  --status-bad-text: var(--red-fluent);
+  --status-bad-bg: var(--red-fluent-tint);
+  --status-bad-border: var(--red-fluent);
+  --status-muted-dot: var(--neutral-90);
+
+  /* Small radius, like Fluent — 2px reads as a portal, 8px reads as a consumer app. */
+  --radius-sm: 2px;
+  --focus-ring: var(--fluent-500);
 
   /* Segoe UI first, falling back to each platform's own UI font rather than a generic sans. */
   --font-sans:
     'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont,
     'Helvetica Neue', system-ui, sans-serif;
 
-  /* Small radius, like Fluent — 2px reads as a portal, 8px reads as a consumer app. */
-  --radius-fluent: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-2xl: 1.5rem;
 }
 
-@layer base {
+/* Entra itself has no dark mode, but we support prefers-color-scheme anyway,
+   using Fluent's own dark neutrals rather than inverting the light ones. */
+@media (prefers-color-scheme: dark) {
   :root {
-    color-scheme: light dark;
+    --surface: var(--neutral-190);
+    --surface-secondary: var(--neutral-190);
+    --surface-page: var(--neutral-190);
+    --border: var(--neutral-160);
+    --border-strong: var(--neutral-130);
+    --text-primary: var(--neutral-20);
+    --text-secondary: var(--neutral-60);
+    --text-muted: var(--neutral-90);
+
+    --accent: var(--fluent-400);
+    --accent-subtle-bg: var(--neutral-160);
+
+    --status-warn-text: var(--amber-400);
+    --status-warn-bg: var(--amber-950);
+    --status-bad-bg: var(--red-fluent-tint-dark);
+  }
+}
+
+/* Tailwind used to reset all of this for us. Written out here so pulling Tailwind
+   out doesn't bring back browser defaults — bulleted lists, big bold headings,
+   buttons in the wrong font, gaps between table cells.
+   It sits in @layer base so Tailwind's own utility classes still win while the
+   files that use them are waiting to be converted. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+    border: 0 solid;
+  }
+
+  /* index.html used to carry Tailwind's h-full on both of these. */
+  html,
+  body {
+    height: 100%;
   }
 
   body {
-    @apply bg-neutral-20 text-neutral-160 antialiased;
+    margin: 0;
+    background: var(--surface-page);
+    color: var(--text-primary);
     font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Entra itself has no dark mode, but we support prefers-color-scheme anyway,
-     using Fluent's own dark neutrals rather than inverting the light ones. */
-  @media (prefers-color-scheme: dark) {
-    body {
-      @apply bg-neutral-190 text-neutral-20;
-    }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  p,
+  figure,
+  blockquote,
+  pre,
+  dl,
+  dd {
+    margin: 0;
+  }
+
+  ul,
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    margin: 0;
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: none;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  table {
+    border-collapse: collapse;
+    border-color: inherit;
+    text-indent: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    display: block;
+    max-width: 100%;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 1em;
   }
 
   /* Solid outline instead of a soft glow, so keyboard focus is easy to spot. */
   :focus-visible {
-    outline: 2px solid var(--color-fluent-500);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
   }
 }

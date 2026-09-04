@@ -1,0 +1,50 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.search {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 4px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.groupList {
+  display: flex;
+  flex-direction: column;
+}
+.groupRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) 0;
+}
+.groupRow:last-child {
+  border-bottom: none;
+}
+.groupSource {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.viaGroup {
+  color: var(--text-secondary);
+}
+.viaGroupName {
+  font-weight: 500;
+}
+.directGrant {
+  color: var(--text-secondary);
+}

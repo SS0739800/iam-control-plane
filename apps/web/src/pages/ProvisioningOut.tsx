@@ -16,6 +16,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { Button } from '../components/Button'
+import { cx } from '../lib/cx'
+import styles from './ProvisioningOut.module.css'
 import {
   Empty,
   ErrorBox,
@@ -136,20 +139,20 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className={styles.form}
       onSubmit={(event) => {
         event.preventDefault()
         if (ready) register.mutate()
       }}
     >
-      <div className="flex flex-wrap gap-3">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Application</span>
+      <div className={styles.formRow}>
+        <label className={cx(styles.label, styles.labelOne)}>
+          <span className={styles.labelText}>Application</span>
           <select
             value={applicationId}
             onChange={(event) => setApplicationId(event.target.value)}
             required
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           >
             <option value="">Choose one…</option>
             {options.map((application) => (
@@ -159,47 +162,47 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
             ))}
           </select>
         </label>
-        <label className="flex flex-[2] flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Its SCIM root</span>
+        <label className={cx(styles.label, styles.labelTwo)}>
+          <span className={styles.labelText}>Its SCIM root</span>
           <input
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
             placeholder="http://hrms:8000/scim/v2"
             required
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           />
         </label>
       </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-500 dark:text-slate-400">The token it issued us</span>
+      <label className={styles.label}>
+        <span className={styles.labelText}>The token it issued us</span>
         <input
           value={token}
           onChange={(event) => setToken(event.target.value)}
           type="password"
           required
-          className="rounded-sm border border-slate-300 bg-white px-2 py-1 font-mono dark:border-slate-700 dark:bg-slate-900"
+          className={cx(styles.field, styles.fieldMono)}
         />
-        <span className="text-xs text-slate-500 dark:text-slate-400">
+        <span className={styles.hint}>
           Stored encrypted. No screen and no endpoint can read it back, so keep it wherever
           you keep the rest of your secrets — changing it means sending a new one.
         </span>
       </label>
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <p className={styles.hint}>
         Who gets pushed is whoever has access to the application, directly or through a
         group. There is no second list to keep in step.
       </p>
 
       {register.isError ? <ErrorBox error={register.error} /> : null}
 
-      <button
+      <Button
         type="submit"
+        variant="accent"
         disabled={register.isPending || !ready}
-        className="self-start rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
       >
         {register.isPending ? 'Registering…' : 'Register target'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -220,7 +223,7 @@ function RotateForm({ target, onDone }: { target: ProvisioningTarget; onDone: ()
 
   return (
     <form
-      className="flex flex-col items-end gap-1"
+      className={styles.confirm}
       onSubmit={(event) => {
         event.preventDefault()
         if (token) rotate.mutate()
@@ -232,23 +235,15 @@ function RotateForm({ target, onDone }: { target: ProvisioningTarget; onDone: ()
         type="password"
         placeholder="the new token"
         aria-label={`New token for ${target.application_name}`}
-        className="rounded-sm border border-slate-300 bg-white px-2 py-1 font-mono text-xs dark:border-slate-700 dark:bg-slate-900"
+        className={cx(styles.field, styles.fieldMonoSmall)}
       />
-      <span className="flex gap-2">
-        <button
-          type="submit"
-          disabled={rotate.isPending || !token}
-          className="rounded-sm border border-brass-600 px-2 py-1 text-xs text-brass-700 disabled:opacity-40 dark:border-brass-400 dark:text-brass-400"
-        >
+      <span className={styles.confirmActions}>
+        <Button type="submit" variant="accent" disabled={rotate.isPending || !token}>
           {rotate.isPending ? 'Saving…' : 'Save token'}
-        </button>
-        <button
-          type="button"
-          onClick={onDone}
-          className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-        >
+        </Button>
+        <Button variant="secondary" onClick={onDone}>
           Cancel
-        </button>
+        </Button>
       </span>
       {rotate.isError ? <ErrorBox error={rotate.error} /> : null}
     </form>
@@ -284,7 +279,7 @@ function Accounts({ target }: { target: ProvisioningTarget }) {
 
   return (
     <TableWrap>
-      <table className="w-full border-collapse">
+      <table className={styles.table}>
         <thead>
           <tr>
             <Th>Person</Th>
@@ -298,26 +293,26 @@ function Accounts({ target }: { target: ProvisioningTarget }) {
           {rows.slice(0, 100).map((link) => (
             <tr key={link.user_id}>
               <Td>
-                <span className="font-medium">{link.display_name}</span>
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                <span className={styles.name}>{link.display_name}</span>
+                <span className={styles.hintBlock}>
                   {link.user_name}
                 </span>
               </Td>
               <Td>
                 <Pill tone={linkTone(link.state)}>{link.state}</Pill>
                 {link.active ? null : (
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  <span className={styles.hintBlock}>
                     inactive with us
                   </span>
                 )}
               </Td>
               <Td>{link.remote_id ? <Mono>{link.remote_id}</Mono> : '—'}</Td>
               <Td>
-                <span className="whitespace-nowrap">{when(link.last_pushed_at)}</span>
+                <span className={styles.whenCell}>{when(link.last_pushed_at)}</span>
               </Td>
               <Td>
                 {link.last_error ? (
-                  <span className="text-xs text-rose-700 dark:text-rose-400">
+                  <span className={styles.badText}>
                     {link.last_error}
                     {link.attempts > 1 ? ` (${link.attempts} tries)` : ''}
                   </span>
@@ -330,7 +325,7 @@ function Accounts({ target }: { target: ProvisioningTarget }) {
         </tbody>
       </table>
       {rows.length > 100 ? (
-        <p className="pt-2 text-xs text-slate-500 dark:text-slate-400">
+        <p className={styles.hintSpaced}>
           Showing the first 100 of {rows.length}, worst first.
         </p>
       ) : null}
@@ -379,7 +374,7 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
       title={target.application_name}
       action={<Pill tone={health.tone}>{health.label}</Pill>}
     >
-      <div className="flex flex-col gap-4">
+      <div className={styles.section}>
         <dl>
           <Row label="Its SCIM root">
             <Mono>{target.base_url}</Mono>
@@ -387,19 +382,19 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
           <Row label="Last sync">
             {when(target.last_sync_at)}
             {target.last_sync_ok === false ? (
-              <span className="block text-xs text-rose-700 dark:text-rose-400">
+              <span className={styles.badBlock}>
                 {target.last_error ?? 'it did not say why'}
               </span>
             ) : null}
           </Row>
           {target.address_concession ? (
             <Row label="Allowed with a concession">
-              <span className="text-sm">{target.address_concession}</span>
+              <span className={styles.body}>{target.address_concession}</span>
             </Row>
           ) : null}
         </dl>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className={styles.statGrid}>
           <Stat label="Active" value={target.accounts_active} />
           <Stat
             label="Waiting"
@@ -416,7 +411,7 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
         </div>
 
         {target.accounts_waiting_to_push > 0 ? (
-          <p className="rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <p className={styles.noticeWarn}>
             {target.accounts_waiting_to_push}{' '}
             {target.accounts_waiting_to_push === 1 ? 'person has' : 'people have'} changes
             this system has not been told about — somebody newly entitled, somebody
@@ -426,7 +421,7 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
         ) : null}
 
         {target.accounts_orphaned > 0 ? (
-          <p className="rounded-sm border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">
+          <p className={styles.noticeBad}>
             {target.accounts_orphaned} {target.accounts_orphaned === 1 ? 'person' : 'people'} still
             {' '}
             {target.accounts_orphaned === 1 ? 'has' : 'have'} access there and we could not remove
@@ -436,27 +431,21 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
         ) : null}
 
         {lastRun ? (
-          <p className="rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+          <p className={styles.noticeNeutral}>
             {describeRun(lastRun)}
             {lastRun.stopped_early ? (
-              <span className="block text-rose-700 dark:text-rose-400">
+              <span className={styles.bad}>
                 Stopped early: {lastRun.stopped_early}
               </span>
             ) : null}
-            <span className="block text-xs text-slate-500 dark:text-slate-400">
+            <span className={styles.hintBlock}>
               Every audit entry from this run is tagged <Mono>{lastRun.correlation_id}</Mono>.
             </span>
           </p>
         ) : null}
 
         {probe.data ? (
-          <p
-            className={`rounded-sm border px-3 py-2 text-sm ${
-              probe.data.reachable
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'
-                : 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200'
-            }`}
-          >
+          <p className={probe.data.reachable ? styles.noticeOk : styles.noticeBad}>
             {probe.data.reachable ? 'It answers and takes our token.' : 'No good: '}
             {probe.data.detail}
           </p>
@@ -467,104 +456,62 @@ function TargetPanel({ target }: { target: ProvisioningTarget }) {
         {pause.isError ? <ErrorBox error={pause.error} /> : null}
         {remove.isError ? <ErrorBox error={remove.error} /> : null}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => probe.mutate()}
-            disabled={probe.isPending}
-            className="rounded-sm border border-slate-400 px-3 py-1 text-sm disabled:opacity-50 dark:border-slate-600"
-          >
+        <div className={styles.actions}>
+          <Button variant="secondary" onClick={() => probe.mutate()} disabled={probe.isPending}>
             {probe.isPending ? 'Checking…' : 'Check it answers'}
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => sync.mutate(false)}
-            disabled={sync.isPending || !target.enabled}
-            className="rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
-          >
+          <Button variant="accent" onClick={() => sync.mutate(false)} disabled={sync.isPending || !target.enabled}>
             {sync.isPending ? 'Syncing…' : 'Sync now'}
-          </button>
+          </Button>
 
           {target.accounts_failed > 0 ? (
-            <button
-              type="button"
-              onClick={() => sync.mutate(true)}
-              disabled={sync.isPending || !target.enabled}
-              className="rounded-sm border border-slate-400 px-3 py-1 text-sm disabled:opacity-50 dark:border-slate-600"
-              title="Also retry the ones that have failed too many times to be picked up on their own"
-            >
+            <Button variant="secondary" onClick={() => sync.mutate(true)} disabled={sync.isPending || !target.enabled} title="Also retry the ones that have failed too many times to be picked up on their own">
               Retry the given-up ones
-            </button>
+            </Button>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            className="rounded-sm border border-slate-300 px-3 py-1 text-sm dark:border-slate-700"
-          >
+          <Button variant="secondary" onClick={() => setOpen(!open)}>
             {open ? 'Hide accounts' : 'Show accounts'}
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => pause.mutate()}
-            disabled={pause.isPending}
-            className="rounded-sm border border-slate-300 px-3 py-1 text-sm disabled:opacity-50 dark:border-slate-700"
-          >
+          <Button variant="secondary" onClick={() => pause.mutate()} disabled={pause.isPending}>
             {target.enabled ? 'Pause pushing' : 'Resume pushing'}
-          </button>
+          </Button>
 
           {rotating ? null : (
-            <button
-              type="button"
-              onClick={() => setRotating(true)}
-              className="rounded-sm border border-slate-300 px-3 py-1 text-sm dark:border-slate-700"
-            >
+            <Button variant="secondary" onClick={() => setRotating(true)}>
               Replace token
-            </button>
+            </Button>
           )}
 
-          <span className="ml-auto">
+          <span className={styles.pushRight}>
             {confirmingDelete ? (
-              <span className="flex flex-col items-end gap-1">
-                <span className="text-xs text-rose-700 dark:text-rose-400">
+              <span className={styles.confirm}>
+                <span className={styles.badText}>
                   Stop provisioning this? Nobody loses their account at the other end — this
                   only makes us stop pushing, so anyone with access there keeps it until
                   somebody removes it by hand.
                 </span>
-                <span className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => remove.mutate()}
-                    disabled={remove.isPending}
-                    className="rounded-sm border border-rose-500 bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
-                  >
+                <span className={styles.confirmActions}>
+                  <Button variant="danger-solid" onClick={() => remove.mutate()} disabled={remove.isPending}>
                     {remove.isPending ? 'Removing…' : 'Yes, stop'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(false)}
-                    className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-                  >
+                  </Button>
+                  <Button variant="secondary" onClick={() => setConfirmingDelete(false)}>
                     Cancel
-                  </button>
+                  </Button>
                 </span>
               </span>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(true)}
-                className="rounded-sm border border-rose-400 px-3 py-1 text-sm text-rose-700 dark:border-rose-800 dark:text-rose-400"
-              >
+              <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
                 Stop provisioning
-              </button>
+              </Button>
             )}
           </span>
         </div>
 
         {sync.isPending ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className={styles.hint}>
             This runs while you wait — there is no background worker yet — so a first sync
             against a big directory takes a while. Leave the page open.
           </p>
@@ -588,23 +535,19 @@ export default function ProvisioningOutPage() {
   })
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel
         title="Where we push accounts"
         action={
           registering ? null : (
-            <button
-              type="button"
-              onClick={() => setRegistering(true)}
-              className="rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 dark:border-brass-400 dark:text-brass-400"
-            >
+            <Button variant="accent" onClick={() => setRegistering(true)}>
               Register a target
-            </button>
+            </Button>
           )
         }
       >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+        <div className={styles.section}>
+          <p className={styles.mutedText}>
             Granting somebody access to one of these applications gets them an account in the
             system behind it. Losing that access switches the account off rather than deleting
             it, because the system at the other end usually has reasons to keep the record.

@@ -17,6 +17,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { Button } from '../components/Button'
+import { cx } from '../lib/cx'
+import styles from './AccessRules.module.css'
 import {
   Empty,
   ErrorBox,
@@ -60,46 +63,39 @@ function takesValue(operator: RuleOperator): boolean {
   return OPERATORS.find((entry) => entry.value === operator)?.takesValue ?? true
 }
 
-const FIELD =
-  'rounded-sm border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900'
-
 function PreviewResult({ preview }: { preview: RulePreview }) {
   // The count first, and loud when it's big. Somebody skimming should be stopped
   // by the number, not by reading the sample list.
   const large = preview.would_be_added > 25
 
   return (
-    <div
-      className={`flex flex-col gap-2 rounded-sm border p-3 text-sm ${
-        large
-          ? 'border-amber-400 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'
-          : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950'
-      }`}
-    >
-      <p className="font-medium">
+    <div className={cx(styles.preview, large && styles.previewLarge)}>
+      <p className={styles.previewHeadline}>
         {preview.sentence} → {preview.group_name}
       </p>
       <p>
-        Matches <strong className="tabular-nums">{preview.matches.toLocaleString()}</strong>{' '}
+        Matches <strong className={styles.previewCount}>{preview.matches.toLocaleString()}</strong>{' '}
         {preview.matches === 1 ? 'person' : 'people'}. Would add{' '}
-        <strong className="tabular-nums">{preview.would_be_added.toLocaleString()}</strong>;{' '}
-        {preview.already_in_group.toLocaleString()} already in the group.
+        <strong className={styles.previewCount}>
+          {preview.would_be_added.toLocaleString()}
+        </strong>
+        ; {preview.already_in_group.toLocaleString()} already in the group.
       </p>
       {large ? (
-        <p className="text-amber-900 dark:text-amber-200">
+        <p className={styles.previewWarning}>
           That is a lot of people. Worth checking the value is spelled the way the HR system
           spells it before saving.
         </p>
       ) : null}
       {preview.sample.length > 0 ? (
-        <ul className="flex flex-col gap-0.5 text-xs text-slate-600 dark:text-slate-300">
+        <ul className={styles.previewSample}>
           {preview.sample.map((person) => (
             <li key={person.id}>
               {person.display_name} — <Mono>{person.department ?? 'no department'}</Mono>
             </li>
           ))}
           {preview.matches > preview.sample.length ? (
-            <li className="text-slate-500 dark:text-slate-400">
+            <li className={styles.previewMore}>
               …and {(preview.matches - preview.sample.length).toLocaleString()} more
             </li>
           ) : null}
@@ -156,15 +152,15 @@ function NewRuleForm() {
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className={styles.form}
       onSubmit={(event) => {
         event.preventDefault()
         if (preview.data) create.mutate()
         else if (ready) preview.mutate()
       }}
     >
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-slate-500 dark:text-slate-400">Name this rule</span>
+      <label className={styles.label}>
+        <span className={styles.labelText}>Name this rule</span>
         <input
           value={name}
           onChange={(event) => {
@@ -172,21 +168,21 @@ function NewRuleForm() {
             clearPreview()
           }}
           placeholder="Engineering staff get the Engineering group"
-          className={FIELD}
+          className={styles.field}
           required
         />
       </label>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">When</span>
+      <div className={styles.conditionRow}>
+        <label className={styles.label}>
+          <span className={styles.labelText}>When</span>
           <select
             value={attribute}
             onChange={(event) => {
               setAttribute(event.target.value)
               clearPreview()
             }}
-            className={FIELD}
+            className={styles.field}
           >
             {(attributes.data ?? []).map((entry) => (
               <option key={entry.name} value={entry.name}>
@@ -196,15 +192,15 @@ function NewRuleForm() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">&nbsp;</span>
+        <label className={styles.label}>
+          <span className={styles.labelText}>&nbsp;</span>
           <select
             value={operator}
             onChange={(event) => {
               setOperator(event.target.value as RuleOperator)
               clearPreview()
             }}
-            className={FIELD}
+            className={styles.field}
           >
             {OPERATORS.map((entry) => (
               <option key={entry.value} value={entry.value}>
@@ -215,8 +211,8 @@ function NewRuleForm() {
         </label>
 
         {takesValue(operator) ? (
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-slate-500 dark:text-slate-400">&nbsp;</span>
+          <label className={cx(styles.label, styles.labelGrow)}>
+            <span className={styles.labelText}>&nbsp;</span>
             <input
               value={value}
               onChange={(event) => {
@@ -224,21 +220,21 @@ function NewRuleForm() {
                 clearPreview()
               }}
               placeholder="Engineering"
-              className={FIELD}
+              className={styles.field}
               required
             />
           </label>
         ) : null}
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">put them in</span>
+        <label className={styles.label}>
+          <span className={styles.labelText}>put them in</span>
           <select
             value={groupId}
             onChange={(event) => {
               setGroupId(event.target.value)
               clearPreview()
             }}
-            className={FIELD}
+            className={styles.field}
             required
           >
             <option value="">choose a group…</option>
@@ -255,11 +251,11 @@ function NewRuleForm() {
       {create.isError ? <ErrorBox error={create.error} /> : null}
       {preview.data ? <PreviewResult preview={preview.data} /> : null}
 
-      <div className="flex items-center gap-2">
-        <button
+      <div className={styles.formActions}>
+        <Button
           type="submit"
+          variant="accent"
           disabled={!ready || preview.isPending || create.isPending}
-          className="rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
         >
           {preview.isPending
             ? 'Checking…'
@@ -268,19 +264,13 @@ function NewRuleForm() {
               : preview.data
                 ? 'Save this rule'
                 : 'See who this affects'}
-        </button>
+        </Button>
         {preview.data ? (
-          <button
-            type="button"
-            onClick={() => preview.reset()}
-            className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-          >
+          <Button variant="secondary" onClick={() => preview.reset()}>
             Change it
-          </button>
+          </Button>
         ) : (
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            A rule is checked before it can be saved.
-          </span>
+          <span className={styles.hint}>A rule is checked before it can be saved.</span>
         )}
       </div>
     </form>
@@ -335,12 +325,10 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
     <>
     <tr>
       <Td>
-        <span className="font-medium">{rule.name}</span>
-        <span className="block text-xs text-slate-500 dark:text-slate-400">{rule.sentence}</span>
+        <span className={styles.ruleName}>{rule.name}</span>
+        <span className={styles.ruleDetail}>{rule.sentence}</span>
         {rule.description ? (
-          <span className="block text-xs text-slate-500 dark:text-slate-400">
-            {rule.description}
-          </span>
+          <span className={styles.ruleDetail}>{rule.description}</span>
         ) : null}
       </Td>
       <Td>{rule.group_name}</Td>
@@ -348,44 +336,35 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
         <Pill tone={rule.enabled ? 'ok' : 'muted'}>{rule.enabled ? 'on' : 'off'}</Pill>
       </Td>
       <Td right>
-        <span className="tabular-nums">{rule.member_count.toLocaleString()}</span>
+        <span className={styles.memberCount}>{rule.member_count.toLocaleString()}</span>
       </Td>
       <Td right>
         {canWrite ? (
           confirming ? (
-            <span className="flex flex-col items-end gap-1">
-              <span className="text-xs text-rose-700 dark:text-rose-400">
+            <span className={styles.confirm}>
+              <span className={styles.confirmText}>
                 Delete this rule? Everyone it put in {rule.group_name} loses that membership.
               </span>
-              <span className="flex gap-2">
-                <button
-                  type="button"
+              <span className={styles.confirmActions}>
+                <Button
+                  variant="danger-solid"
                   onClick={() => remove.mutate()}
                   disabled={remove.isPending}
-                  className="rounded-sm border border-rose-500 bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
                 >
                   {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(false)}
-                  className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-                >
+                </Button>
+                <Button variant="secondary" onClick={() => setConfirming(false)}>
                   Cancel
-                </button>
+                </Button>
               </span>
             </span>
           ) : (
-            <span className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowing(!showing)}
-                className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-              >
+            <span className={styles.rowActions}>
+              <Button variant="secondary" onClick={() => setShowing(!showing)}>
                 {showing ? 'Hide who' : 'Who it catches'}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="accent"
                 onClick={() => run.mutate()}
                 disabled={run.isPending || !rule.enabled}
                 title={
@@ -393,30 +372,24 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
                     ? 'Apply this rule to everybody now'
                     : 'Turn the rule on before running it'
                 }
-                className="rounded-sm border border-brass-600 px-2 py-1 text-xs text-brass-700 disabled:opacity-40 dark:border-brass-400 dark:text-brass-400"
               >
                 {run.isPending ? 'Running…' : 'Run now'}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => toggle.mutate()}
                 disabled={toggle.isPending}
-                className="rounded-sm border border-slate-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-slate-700"
               >
                 {rule.enabled ? 'Turn off' : 'Turn on'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                className="rounded-sm border border-rose-400 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:text-rose-400"
-              >
+              </Button>
+              <Button variant="danger" onClick={() => setConfirming(true)}>
                 Delete
-              </button>
+              </Button>
             </span>
           )
         ) : null}
         {run.data ? (
-          <span className="block pt-1 text-xs text-slate-500 dark:text-slate-400">
+          <span className={styles.runResult}>
             {run.data.added} added, {run.data.removed} removed, {run.data.unchanged}{' '}
             already right
           </span>
@@ -440,14 +413,11 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
               {rule.group_name} stays there until it runs again.
             </Empty>
           ) : (
-            <ul className="flex flex-col">
+            <ul className={styles.affectedList}>
               {affected.data.map((person) => (
-                <li
-                  key={person.id}
-                  className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-1 last:border-0 dark:border-slate-800/60"
-                >
+                <li key={person.id} className={styles.affectedPerson}>
                   <LinkCell to={`/users/${person.id}`}>{person.display_name}</LinkCell>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className={styles.affectedMeta}>
                     {[person.department, person.job_title].filter(Boolean).join(' · ') || '—'}
                   </span>
                 </li>
@@ -467,9 +437,9 @@ export default function AccessRulesPage() {
   const canWrite = me.data?.permissions.includes('groups:write') ?? false
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel title="Access rules">
-        <p className="pb-4 text-sm text-slate-600 dark:text-slate-300">
+        <p className={styles.intro}>
           Rules put people in groups because of who they are. Somebody who joins Engineering
           lands in the Engineering group without anybody clicking anything, and somebody who
           transfers out stops being in it.
@@ -483,7 +453,7 @@ export default function AccessRulesPage() {
           <Empty>No rules yet. Everything is granted by hand.</Empty>
         ) : (
           <TableWrap>
-            <table className="w-full border-collapse">
+            <table className={styles.table}>
               <thead>
                 <tr>
                   <Th>Rule</Th>

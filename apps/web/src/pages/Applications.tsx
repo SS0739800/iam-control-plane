@@ -23,6 +23,7 @@ import {
   ApplicationSamlPanels,
 } from '../components/ApplicationSamlPanels'
 import { RegisterApplication } from '../components/RegisterApplication'
+import styles from './Applications.module.css'
 import { fetchApplication, fetchApplications, fetchMe } from '../lib/api'
 
 const PAGE_SIZE = 25
@@ -40,7 +41,7 @@ export function ApplicationsPage() {
   })
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel
         title="Applications"
         action={
@@ -53,7 +54,7 @@ export function ApplicationsPage() {
           }}
           placeholder="Search name"
           aria-label="Search applications"
-          className="rounded-sm border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+          className={styles.search}
         />
       }
     >
@@ -66,7 +67,7 @@ export function ApplicationsPage() {
       ) : (
         <>
           <TableWrap>
-            <table className="w-full border-collapse">
+            <table className={styles.table}>
               <thead>
                 <tr>
                   <Th>Name</Th>
@@ -124,7 +125,7 @@ export function ApplicationDetailPage() {
   const isSaml = data.protocol === 'saml2'
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel title={data.name}>
         <dl>
           <Row label="Description">{data.description ?? '—'}</Row>

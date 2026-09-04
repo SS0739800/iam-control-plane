@@ -25,6 +25,9 @@ import {
   grantRole,
   revokeRole,
 } from '../lib/api'
+import { Button } from './Button'
+import { cx } from '../lib/cx'
+import styles from './RoleGrantPanel.module.css'
 import { Empty, ErrorBox, Loading, Mono, Panel, Pill, type Tone } from './ui'
 
 /** Employee is missing on purpose: it is what somebody is with no grant. */
@@ -73,19 +76,19 @@ function GrantForm({ userId, onDone }: { userId: string; onDone: () => void }) {
 
   return (
     <form
-      className="flex flex-col gap-3 border-t border-slate-200 pt-4 dark:border-slate-800"
+      className={styles.form}
       onSubmit={(event) => {
         event.preventDefault()
         grant.mutate()
       }}
     >
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Role</span>
+      <div className={styles.formRow}>
+        <label className={styles.label}>
+          <span className={styles.labelText}>Role</span>
           <select
             value={role}
             onChange={(event) => setRole(event.target.value as PlatformRole)}
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           >
             {GRANTABLE.map((option) => (
               <option key={option} value={option}>
@@ -95,31 +98,31 @@ function GrantForm({ userId, onDone }: { userId: string; onDone: () => void }) {
           </select>
         </label>
 
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Why</span>
+        <label className={cx(styles.label, styles.labelGrow)}>
+          <span className={styles.labelText}>Why</span>
           <input
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Covering the migration weekend"
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">
+        <label className={styles.label}>
+          <span className={styles.labelText}>
             Until (optional)
           </span>
           <input
             type="date"
             value={expires}
             onChange={(event) => setExpires(event.target.value)}
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           />
         </label>
       </div>
 
       {role === 'admin' && !expires ? (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
+        <p className={styles.warning}>
           Admin with no end date. Standing access nobody revisits is how an
           unnoticed admin happens — consider a date.
         </p>
@@ -127,13 +130,9 @@ function GrantForm({ userId, onDone }: { userId: string; onDone: () => void }) {
 
       {grant.isError ? <ErrorBox error={grant.error} /> : null}
 
-      <button
-        type="submit"
-        disabled={grant.isPending}
-        className="self-start rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
-      >
+      <Button type="submit" variant="accent" disabled={grant.isPending}>
         {grant.isPending ? 'Granting…' : 'Grant role'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -160,15 +159,15 @@ function CurrentRole({
   const hasRole = summary.role !== "employee"
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className={styles.current}>
+      <div className={styles.currentRow}>
         <Pill
           tone={summary.role === 'admin' ? 'warn' : hasRole ? 'ok' : 'muted'}
         >
           {summary.role}
         </Pill>
         {hasRole ? (
-          <span className="text-sm text-slate-500 dark:text-slate-400">
+          <span className={styles.muted}>
             granted by {summary.role_granted_by ?? 'unknown'} on{' '}
             {when(summary.role_granted_at)}
             {summary.role_expires_at
@@ -176,7 +175,7 @@ function CurrentRole({
               : ""}
           </span>
         ) : (
-          <span className="text-sm text-slate-500 dark:text-slate-400">
+          <span className={styles.muted}>
             No role granted. Employees can sign in but cannot use this console.
           </span>
         )}
@@ -186,38 +185,29 @@ function CurrentRole({
 
       {hasRole && canWrite ? (
         confirming ? (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-rose-700 dark:text-rose-400">
+          <div className={styles.confirm}>
+            <p className={styles.confirmText}>
               Take {summary.display_name}&apos;s {summary.role} role away? They
               keep their account and can still sign in, but lose access to this
               console.
             </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
+            <div className={styles.confirmActions}>
+              <Button
+                variant="danger-solid"
                 onClick={() => revoke.mutate()}
                 disabled={revoke.isPending}
-                className="rounded-sm border border-rose-500 bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
               >
                 {revoke.isPending ? 'Revoking…' : 'Yes, revoke it'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-              >
+              </Button>
+              <Button variant="secondary" onClick={() => setConfirming(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="self-start rounded-sm border border-rose-400 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:text-rose-400"
-          >
+          <Button variant="danger" onClick={() => setConfirming(true)}>
             Revoke role
-          </button>
+          </Button>
         )
       ) : null}
     </div>
@@ -261,7 +251,7 @@ export default function RoleGrantPanel({
 
   return (
     <Panel title="Console role">
-      <div className="flex flex-col gap-4">
+      <div className={styles.body}>
         <CurrentRole
           summary={summary.data}
           canWrite={canWrite}
@@ -269,26 +259,26 @@ export default function RoleGrantPanel({
         />
 
         <div>
-          <p className="pb-2 text-xs tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
+          <p className={styles.historyHeading}>
             History
           </p>
           {history.length === 0 ? (
             <Empty>Never had a console role.</Empty>
           ) : (
-            <ul className="flex flex-col">
+            <ul className={styles.historyList}>
               {history.map((grant) => (
                 <li
                   key={grant.id}
-                  className="flex flex-col gap-1 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"
+                  className={styles.historyItem}
                 >
-                  <div className="flex flex-wrap items-baseline gap-2">
+                  <div className={styles.historyRow}>
                     <Pill tone={grantTone(grant)}>{grant.role}</Pill>
-                    <span className="text-sm">{endedHow(grant)}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <span className={styles.historyHow}>{endedHow(grant)}</span>
+                    <span className={styles.historyMeta}>
                       <Mono>{grant.source}</Mono>
                     </span>
                   </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className={styles.historyMeta}>
                     {when(grant.created_at)} · granted by{' '}
                     {grant.granted_by_label}
                     {grant.reason ? ` · ${grant.reason}` : ""}

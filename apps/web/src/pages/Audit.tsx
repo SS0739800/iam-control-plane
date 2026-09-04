@@ -12,6 +12,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { Button } from '../components/Button'
 import {
   Empty,
   ErrorBox,
@@ -25,6 +26,7 @@ import {
   type Tone,
 } from '../components/ui'
 import { type AuditEvent, fetchAuditEvents, verifyAuditChain } from '../lib/api'
+import styles from './Audit.module.css'
 
 const PAGE_SIZE = 50
 
@@ -56,28 +58,23 @@ export default function AuditPage() {
   const result = verify.data
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel
         title="Tamper check"
         action={
-          <button
-            type="button"
-            onClick={() => verify.mutate()}
-            disabled={verify.isPending}
-            className="rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
-          >
+          <Button variant="accent" onClick={() => verify.mutate()} disabled={verify.isPending}>
             {verify.isPending ? 'Checking…' : 'Run check'}
-          </button>
+          </Button>
         }
       >
         {verify.isError ? (
           <ErrorBox error={verify.error} />
         ) : result ? (
-          <div className="flex flex-col gap-2">
+          <div className={styles.tamperResult}>
             <Pill tone={result.valid ? 'ok' : 'bad'}>
               {result.valid ? 'Nothing has been altered' : 'Something has been altered'}
             </Pill>
-            <p className="text-sm text-slate-600 dark:text-slate-300">
+            <p className={styles.muted}>
               Checked {result.events_checked.toLocaleString()} entries.
               {result.broken_at_id === null || result.broken_at_id === undefined
                 ? ''
@@ -85,7 +82,7 @@ export default function AuditPage() {
             </p>
           </div>
         ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className={styles.muted}>
             Walks the whole log and confirms every entry still matches its fingerprint. Editing
             any past entry breaks the chain from that point on.
           </p>
@@ -102,7 +99,7 @@ export default function AuditPage() {
         ) : (
           <>
             <TableWrap>
-              <table className="w-full border-collapse">
+              <table className={styles.table}>
                 <thead>
                   <tr>
                     <Th>When</Th>
@@ -117,7 +114,7 @@ export default function AuditPage() {
                   {events.map((event) => (
                     <tr key={event.id}>
                       <Td>
-                        <span className="whitespace-nowrap">
+                        <span className={styles.whenCell}>
                           {new Date(event.occurred_at).toLocaleString()}
                         </span>
                       </Td>
@@ -134,23 +131,23 @@ export default function AuditPage() {
                           type="button"
                           onClick={() => setExpanded(expanded === event.id ? null : event.id)}
                           aria-expanded={expanded === event.id}
-                          className="font-mono text-xs text-brass-700 underline-offset-2 hover:underline dark:text-brass-400"
+                          className={styles.entryLink}
                         >
                           #{event.id}
                         </button>
                         {expanded === event.id ? (
-                          <dl className="mt-2 flex flex-col gap-1 text-left font-mono text-[0.7rem] break-all text-slate-500 dark:text-slate-400">
+                          <dl className={styles.entryDetail}>
                             <div>
-                              <dt className="inline">prev: </dt>
-                              <dd className="inline">{event.prev_hash}</dd>
+                              <dt>prev: </dt>
+                              <dd>{event.prev_hash}</dd>
                             </div>
                             <div>
-                              <dt className="inline">this: </dt>
-                              <dd className="inline">{event.hash}</dd>
+                              <dt>this: </dt>
+                              <dd>{event.hash}</dd>
                             </div>
                             <div>
-                              <dt className="inline">detail: </dt>
-                              <dd className="inline">{JSON.stringify(event.detail)}</dd>
+                              <dt>detail: </dt>
+                              <dd>{JSON.stringify(event.detail)}</dd>
                             </div>
                           </dl>
                         ) : null}
@@ -161,21 +158,18 @@ export default function AuditPage() {
               </table>
             </TableWrap>
 
-            <div className="flex items-center justify-between gap-4 pt-3 text-sm">
-              <span className="text-slate-500 tabular-nums dark:text-slate-400">
-                {events.length.toLocaleString()} loaded
-              </span>
+            <div className={styles.footer}>
+              <span className={styles.loadedCount}>{events.length.toLocaleString()} loaded</span>
               {page.data?.next_cursor ? (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={() => setCursor(page.data.next_cursor ?? undefined)}
                   disabled={page.isFetching}
-                  className="rounded-sm border border-slate-300 px-2 py-1 disabled:opacity-40 dark:border-slate-700"
                 >
                   {page.isFetching ? 'Loading…' : 'Load more'}
-                </button>
+                </Button>
               ) : (
-                <span className="text-slate-500 dark:text-slate-400">End of the log</span>
+                <span className={styles.endOfLog}>End of the log</span>
               )}
             </div>
           </>

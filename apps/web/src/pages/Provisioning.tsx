@@ -14,6 +14,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { Button } from '../components/Button'
+import { cx } from '../lib/cx'
+import styles from './Provisioning.module.css'
 import {
   Empty,
   ErrorBox,
@@ -55,25 +58,21 @@ function clientState(client: ScimClient): string {
 /** The token, shown once. */
 function IssuedToken({ issued, onDone }: { issued: ScimClientIssued; onDone: () => void }) {
   return (
-    <div className="flex flex-col gap-3 rounded-sm border border-brass-600 bg-brass-50 p-4 dark:border-brass-400 dark:bg-brass-950">
-      <p className="text-sm font-semibold">Token for {issued.name}</p>
-      <pre className="overflow-x-auto rounded-sm bg-white p-3 font-mono text-xs break-all dark:bg-slate-900">
+    <div className={styles.issued}>
+      <p className={styles.issuedTitle}>Token for {issued.name}</p>
+      <pre className={styles.issuedToken}>
         {issued.token}
       </pre>
-      <p className="text-sm">
+      <p className={styles.issuedBody}>
         Copy it now. Only its hash is stored, so this is the only time it can be shown — if it is
         lost, issue another and revoke this one.
       </p>
-      <p className="text-xs text-slate-600 dark:text-slate-400">
+      <p className={styles.issuedNote}>
         The provider wants it as <Mono>Authorization: Bearer &lt;token&gt;</Mono>.
       </p>
-      <button
-        type="button"
-        onClick={onDone}
-        className="self-start rounded-sm border border-slate-400 px-3 py-1 text-sm dark:border-slate-600"
-      >
+      <Button variant="secondary" onClick={onDone}>
         I have copied it
-      </button>
+      </Button>
     </div>
   )
 }
@@ -96,43 +95,39 @@ function IssueForm({ onIssued }: { onIssued: (issued: ScimClientIssued) => void 
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className={styles.form}
       onSubmit={(event) => {
         event.preventDefault()
         if (name.trim()) issue.mutate()
       }}
     >
-      <div className="flex flex-wrap gap-3">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">Name</span>
+      <div className={styles.formRow}>
+        <label className={cx(styles.label, styles.labelName)}>
+          <span className={styles.labelText}>Name</span>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="authentik (local)"
             required
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           />
         </label>
-        <label className="flex flex-[2] flex-col gap-1 text-sm">
-          <span className="text-slate-500 dark:text-slate-400">What it is for</span>
+        <label className={cx(styles.label, styles.labelPurpose)}>
+          <span className={styles.labelText}>What it is for</span>
           <input
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Pushes users and groups from authentik"
-            className="rounded-sm border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900"
+            className={styles.field}
           />
         </label>
       </div>
 
       {issue.isError ? <ErrorBox error={issue.error} /> : null}
 
-      <button
-        type="submit"
-        disabled={issue.isPending || !name.trim()}
-        className="self-start rounded-sm border border-brass-600 px-3 py-1 text-sm text-brass-700 disabled:opacity-50 dark:border-brass-400 dark:text-brass-400"
-      >
+      <Button type="submit" variant="accent" disabled={issue.isPending || !name.trim()}>
         {issue.isPending ? 'Issuing…' : 'Issue token'}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -165,15 +160,15 @@ export default function ProvisioningPage() {
   })
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={styles.page}>
       <Panel title="What the sync owns">
         {overview.isError ? (
           <ErrorBox error={overview.error} />
         ) : overview.isPending ? (
           <Loading />
         ) : (
-          <div className="flex flex-col gap-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={styles.section}>
+            <div className={styles.statGrid}>
               <Stat label="People from SCIM" value={overview.data.users_from_scim} />
               <Stat label="Groups from SCIM" value={overview.data.groups_from_scim} />
               <Stat
@@ -183,7 +178,7 @@ export default function ProvisioningPage() {
               />
               <Stat label="Active tokens" value={overview.data.active_clients} />
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <p className={styles.muted}>
               Last write from a provisioning system: {when(overview.data.last_sync_at)}
             </p>
           </div>
@@ -191,7 +186,7 @@ export default function ProvisioningPage() {
       </Panel>
 
       <Panel title="Provisioning tokens">
-        <div className="flex flex-col gap-4">
+        <div className={styles.section}>
           {issued ? <IssuedToken issued={issued} onDone={() => setIssued(null)} /> : null}
 
           {clients.isError ? (
@@ -202,7 +197,7 @@ export default function ProvisioningPage() {
             <Empty>No system can write to the directory yet.</Empty>
           ) : (
             <TableWrap>
-              <table className="w-full border-collapse">
+              <table className={styles.table}>
                 <thead>
                   <tr>
                     <Th>Name</Th>
@@ -216,14 +211,14 @@ export default function ProvisioningPage() {
                   {clients.data.map((client) => (
                     <tr key={client.id}>
                       <Td>
-                        <span className="font-medium">{client.name}</span>
+                        <span className={styles.clientName}>{client.name}</span>
                         {client.description ? (
-                          <span className="block text-xs text-slate-500 dark:text-slate-400">
+                          <span className={styles.clientDetail}>
                             {client.description}
                           </span>
                         ) : null}
                         {client.revoked_reason ? (
-                          <span className="block text-xs text-rose-700 dark:text-rose-400">
+                          <span className={styles.clientRevoked}>
                             {client.revoked_reason}
                           </span>
                         ) : null}
@@ -235,37 +230,28 @@ export default function ProvisioningPage() {
                       <Td>{when(client.created_at)}</Td>
                       <Td right>
                         {client.revoked_at ? null : confirming === client.id ? (
-                          <span className="flex flex-col items-end gap-1">
-                            <span className="text-xs text-rose-700 dark:text-rose-400">
+                          <span className={styles.confirm}>
+                            <span className={styles.confirmText}>
                               Revoke this? Anything using it stops syncing, and it cannot be
                               undone — you would have to issue a new token.
                             </span>
-                            <span className="flex gap-2">
-                              <button
-                                type="button"
+                            <span className={styles.confirmActions}>
+                              <Button
+                                variant="danger-solid"
                                 onClick={() => revoke.mutate(client)}
                                 disabled={revoke.isPending}
-                                className="rounded-sm border border-rose-500 bg-rose-600 px-2 py-1 text-xs text-white disabled:opacity-40"
                               >
                                 {revoke.isPending ? 'Revoking…' : 'Yes, revoke it'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirming(null)}
-                                className="rounded-sm border border-slate-300 px-2 py-1 text-xs dark:border-slate-700"
-                              >
+                              </Button>
+                              <Button variant="secondary" onClick={() => setConfirming(null)}>
                                 Cancel
-                              </button>
+                              </Button>
                             </span>
                           </span>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setConfirming(client.id)}
-                            className="rounded-sm border border-rose-400 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:text-rose-400"
-                          >
+                          <Button variant="danger" onClick={() => setConfirming(client.id)}>
                             Revoke
-                          </button>
+                          </Button>
                         )}
                       </Td>
                     </tr>
@@ -277,7 +263,7 @@ export default function ProvisioningPage() {
 
           {revoke.isError ? <ErrorBox error={revoke.error} /> : null}
 
-          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className={styles.divider}>
             <IssueForm onIssued={setIssued} />
           </div>
         </div>
@@ -292,7 +278,7 @@ export default function ProvisioningPage() {
           <Empty>Nothing has been provisioned yet.</Empty>
         ) : (
           <TableWrap>
-            <table className="w-full border-collapse">
+            <table className={styles.table}>
               <thead>
                 <tr>
                   <Th>When</Th>
@@ -306,7 +292,7 @@ export default function ProvisioningPage() {
                 {activity.data.map((entry) => (
                   <tr key={entry.id}>
                     <Td>
-                      <span className="whitespace-nowrap">{when(entry.occurred_at)}</span>
+                      <span className={styles.whenCell}>{when(entry.occurred_at)}</span>
                     </Td>
                     <Td>{entry.client ?? '—'}</Td>
                     <Td>
@@ -314,7 +300,7 @@ export default function ProvisioningPage() {
                     </Td>
                     <Td>{entry.target ?? '—'}</Td>
                     <Td>
-                      <span className="text-slate-500 dark:text-slate-400">
+                      <span className={styles.labelText}>
                         {entry.summary ?? '—'}
                       </span>
                     </Td>
@@ -338,7 +324,7 @@ export default function ProvisioningPage() {
             <Mono>Authorization: Bearer &lt;token&gt;</Mono>
           </Row>
         </dl>
-        <p className="pt-3 text-sm text-slate-500 dark:text-slate-400">
+        <p className={styles.footnote}>
           A provider running in the compose network has to use the second one. Its own{' '}
           <Mono>localhost</Mono> is itself, not this console.
         </p>
