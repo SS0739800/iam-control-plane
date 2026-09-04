@@ -5,50 +5,65 @@
  * its own regardless of what this file renders.
  */
 
-import { useState } from 'react'
+import { type ComponentType, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet } from 'react-router-dom'
 
 import styles from './App.module.css'
+import {
+  AppIcon,
+  AuditIcon,
+  DashboardIcon,
+  GroupIcon,
+  ProvisionInIcon,
+  ProvisionOutIcon,
+  RequestIcon,
+  ReviewIcon,
+  RuleIcon,
+  SignInIcon,
+  UserIcon,
+} from './components/icons'
 import { cx } from './lib/cx'
 import { fetchMe, fetchSignInOptions } from './lib/api'
 
+type NavItem = { to: string; label: string; end?: boolean; icon: ComponentType<{ className?: string }> }
+
 /** Left nav, grouped into sections instead of one flat list of 11 links. */
-const NAV: { heading: string; items: { to: string; label: string; end?: boolean }[] }[] = [
+const NAV: { heading: string; items: NavItem[] }[] = [
   {
     heading: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', end: true }],
+    items: [{ to: '/', label: 'Dashboard', end: true, icon: DashboardIcon }],
   },
   {
     heading: 'Directory',
     items: [
-      { to: '/users', label: 'Users' },
-      { to: '/groups', label: 'Groups' },
-      { to: '/applications', label: 'Applications' },
+      { to: '/users', label: 'Users', icon: UserIcon },
+      { to: '/groups', label: 'Groups', icon: GroupIcon },
+      { to: '/applications', label: 'Applications', icon: AppIcon },
     ],
   },
   {
     heading: 'Governance',
     items: [
-      { to: '/access-rules', label: 'Access rules' },
-      { to: '/access-requests', label: 'Requests' },
-      { to: '/access-review', label: 'Review' },
+      { to: '/access-rules', label: 'Access rules', icon: RuleIcon },
+      { to: '/access-requests', label: 'Requests', icon: RequestIcon },
+      { to: '/access-review', label: 'Review', icon: ReviewIcon },
     ],
   },
   {
     heading: 'Provisioning',
     // In and out are separate pages, not one page with a toggle.
     items: [
-      { to: '/provisioning', label: 'Provisioning in' },
-      { to: '/provisioning-out', label: 'Provisioning out' },
+      { to: '/provisioning', label: 'Provisioning in', icon: ProvisionInIcon },
+      { to: '/provisioning-out', label: 'Provisioning out', icon: ProvisionOutIcon },
     ],
   },
   {
     heading: 'Monitoring',
     items: [
-      { to: '/logins', label: 'Sign-ins' },
-      { to: '/audit', label: 'Audit log' },
+      { to: '/logins', label: 'Sign-ins', icon: SignInIcon },
+      { to: '/audit', label: 'Audit log', icon: AuditIcon },
     ],
   },
 ]
@@ -141,7 +156,8 @@ function SectionNav() {
                   )
                 }
               >
-                {item.label}
+                <item.icon className={styles.navIcon} />
+                <span>{item.label}</span>
               </NavLink>
             ))}
           </div>

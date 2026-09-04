@@ -26,6 +26,39 @@ export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
   )
 }
 
+/* Picked to stay readable with white text on top. */
+const AVATAR_COLORS = ['#0078d4', '#8764b8', '#038387', '#a4262c', '#498205', '#8e562e', '#005b70']
+
+/** Somebody's initials in a coloured disc. Same name always gets the same colour. */
+export function Avatar({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+
+  let hash = 0
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0
+  const background = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+
+  return (
+    <span className={styles.avatar} style={{ background }} aria-hidden="true">
+      {initials}
+    </span>
+  )
+}
+
+/** A name with its avatar, for the first column of a people table. */
+export function NameCell({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <span className={styles.nameCell}>
+      <Avatar name={name} />
+      {children}
+    </span>
+  )
+}
+
 /** Section wrapper with a heading, used for screen readers too. */
 export function Panel({
   title,

@@ -10,6 +10,7 @@ import {
   LinkCell,
   Loading,
   Mono,
+  NameCell,
   Pager,
   Panel,
   Pill,
@@ -19,8 +20,9 @@ import {
   Th,
   type Tone,
 } from '../components/ui'
-import { fetchMe, fetchUser, fetchUsers } from '../lib/api'
+import { type PlatformRole, fetchMe, fetchUser, fetchUsers } from '../lib/api'
 import LeaverPanel from '../components/LeaverPanel'
+import { CloseIcon, FilterIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import styles from './Users.module.css'
@@ -28,19 +30,38 @@ import RoleGrantPanel from '../components/RoleGrantPanel'
 
 const PAGE_SIZE = 25
 
+const ROLES: PlatformRole[] = ['employee', 'helpdesk', 'auditor', 'admin']
+
 export function UsersPage() {
   // Two pieces of state, not one: typing in the box shouldn't leave you on page 7
   // of results that no longer exist, so changing the search resets the offset.
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
+  // Both of these are real query parameters on /api/users, so a chip narrows the
+  // search in Postgres rather than hiding rows we already fetched.
+  const [active, setActive] = useState<boolean | undefined>(undefined)
+  const [role, setRole] = useState<PlatformRole | undefined>(undefined)
 
   const users = useQuery({
-    queryKey: ['users', search, offset],
-    queryFn: () => fetchUsers({ q: search || undefined, limit: PAGE_SIZE, offset }),
+    queryKey: ['users', search, offset, active, role],
+    queryFn: () =>
+      fetchUsers({
+        q: search || undefined,
+        active,
+        platform_role: role,
+        limit: PAGE_SIZE,
+        offset,
+      }),
     // Keeps the old rows on screen while the next page loads, so the table doesn't
     // collapse to "Loading…" on every keystroke.
     placeholderData: (previous) => previous,
   })
+
+  // Any change to what is being asked for starts again at the first page.
+  const refilter = (change: () => void) => {
+    setOffset(0)
+    change()
+  }
 
   return (
     <>
@@ -49,7 +70,7 @@ export function UsersPage() {
         description="Everybody in the directory, however they got here."
       />
       <Panel
-        title={users.data ? `${users.data.total.toLocaleString()} people` : 'People'}
+        title="All users"
         action={
           <input
             type="search"
@@ -64,6 +85,86 @@ export function UsersPage() {
           />
         }
       >
+        <div className={styles.toolbar}>
+          {active === undefined ? null : (
+            <span className={styles.chip}>
+              <span className={styles.chipLabel}>Status ==</span>
+              <select
+                aria-label="Filter by status"
+                value={active ? 'active' : 'deactivated'}
+                onChange={(event) => refilter(() => setActive(event.target.value === 'active'))}
+                className={styles.chipSelect}
+              >
+                <option value="active">active</option>
+                <option value="deactivated">deactivated</option>
+              </select>
+              <button
+                type="button"
+                aria-label="Remove status filter"
+                className={styles.chipRemove}
+                onClick={() => refilter(() => setActive(undefined))}
+              >
+                <CloseIcon />
+              </button>
+            </span>
+          )}
+
+          {role === undefined ? null : (
+            <span className={styles.chip}>
+              <span className={styles.chipLabel}>Role ==</span>
+              <select
+                aria-label="Filter by role"
+                value={role}
+                onChange={(event) =>
+                  refilter(() => setRole(event.target.value as PlatformRole))
+                }
+                className={styles.chipSelect}
+              >
+                {ROLES.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                aria-label="Remove role filter"
+                className={styles.chipRemove}
+                onClick={() => refilter(() => setRole(undefined))}
+              >
+                <CloseIcon />
+              </button>
+            </span>
+          )}
+
+          {active === undefined ? (
+            <button
+              type="button"
+              className={styles.addFilter}
+              onClick={() => refilter(() => setActive(true))}
+            >
+              <FilterIcon />
+              Status
+            </button>
+          ) : null}
+          {role === undefined ? (
+            <button
+              type="button"
+              className={styles.addFilter}
+              onClick={() => refilter(() => setRole('admin'))}
+            >
+              <FilterIcon />
+              Role
+            </button>
+          ) : null}
+        </div>
+
+        {users.data ? (
+          <p className={styles.resultCount}>
+            {users.data.total.toLocaleString()} {users.data.total === 1 ? 'user' : 'users'} found
+          </p>
+        ) : null}
+
         {users.isError ? (
           <ErrorBox error={users.error} />
         ) : users.isPending ? (
@@ -88,7 +189,9 @@ export function UsersPage() {
                   {users.data.items.map((user) => (
                     <tr key={user.id}>
                       <Td>
-                        <LinkCell to={`/users/${user.id}`}>{user.display_name}</LinkCell>
+                        <NameCell name={user.display_name}>
+                          <LinkCell to={`/users/${user.id}`}>{user.display_name}</LinkCell>
+                        </NameCell>
                       </Td>
                       <Td>
                         <Mono>{user.user_name}</Mono>

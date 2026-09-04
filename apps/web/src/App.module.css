@@ -126,6 +126,9 @@
 }
 
 .navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   border-radius: var(--radius-sm);
   padding: 6px var(--space-3);
   font-size: var(--text-sm);
@@ -136,11 +139,21 @@
   .navLink {
     border-radius: 0;
     border-left: 2px solid transparent;
+    padding-left: 10px;
   }
+}
+
+/* Muted next to the label, so the words stay the thing you read. */
+.navIcon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.navLinkActive .navIcon {
+  color: var(--accent);
 }
 @media (min-width: 640px) {
   .navLinkOpen {
-    display: block;
+    display: flex;
   }
   .navLinkClosed {
     display: none;

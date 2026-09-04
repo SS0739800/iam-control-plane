@@ -257,3 +257,27 @@
 .breadcrumbSeparator {
   color: var(--text-muted);
 }
+
+/* Initials in a coloured disc, standing in for the profile photos we don't have.
+   The colour comes from the name so somebody keeps the same one between pages. */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  user-select: none;
+}
+
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
