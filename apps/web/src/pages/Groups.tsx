@@ -18,6 +18,7 @@ import {
 } from '../components/ui'
 import GroupMembers from '../components/GroupMembers'
 import styles from './Groups.module.css'
+import { PageHeader } from '../components/PageHeader'
 import { fetchGroup, fetchGroups, fetchMe } from '../lib/api'
 
 const PAGE_SIZE = 25
@@ -33,8 +34,13 @@ export function GroupsPage() {
   })
 
   return (
-    <Panel
-      title="Groups"
+    <>
+      <PageHeader
+        title="Groups"
+        description="Groups carry access. Most arrive from the identity provider over SCIM."
+      />
+      <Panel
+      title={groups.data ? `${groups.data.total.toLocaleString()} groups` : 'Groups'}
       action={
         <input
           type="search"
@@ -94,7 +100,8 @@ export function GroupsPage() {
           />
         </>
       )}
-    </Panel>
+      </Panel>
+    </>
   )
 }
 
@@ -112,7 +119,13 @@ export function GroupDetailPage() {
 
   return (
     <div className={styles.page}>
-      <Panel title={data.name}>
+      <PageHeader
+        title={data.name}
+        description={data.description ?? undefined}
+        trail={[{ label: 'Groups', to: '/groups' }, { label: data.name }]}
+      />
+
+      <Panel title="Overview">
         <dl>
           <Row label="Description">{data.description ?? '—'}</Row>
           <Row label="HRMS role">{data.hrms_role ?? '—'}</Row>

@@ -34,6 +34,7 @@ import {
   fetchLoginAttempts,
 } from '../lib/api'
 import styles from './Logins.module.css'
+import { PageHeader } from '../components/PageHeader'
 
 const PAGE_SIZE = 25
 
@@ -138,6 +139,7 @@ export default function LoginsPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Sign-ins" description="Every sign-in attempt, and which check turned it away." />
       <Panel title="What this shows">
         <p className={styles.intro}>
           Every sign-in attempt, with all ten checks it had to pass. This is a view over the audit

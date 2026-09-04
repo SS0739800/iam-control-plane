@@ -20,6 +20,7 @@ import { useState } from 'react'
 import { Button } from '../components/Button'
 import { cx } from '../lib/cx'
 import styles from './AccessRules.module.css'
+import { PageHeader } from '../components/PageHeader'
 import {
   Empty,
   ErrorBox,
@@ -438,6 +439,7 @@ export default function AccessRulesPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Access rules" description="Put people in groups automatically, based on who they are." />
       <Panel title="Access rules">
         <p className={styles.intro}>
           Rules put people in groups because of who they are. Somebody who joins Engineering

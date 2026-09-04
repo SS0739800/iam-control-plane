@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Button } from '../components/Button'
 import { cx } from '../lib/cx'
 import styles from './Provisioning.module.css'
+import { PageHeader } from '../components/PageHeader'
 import {
   Empty,
   ErrorBox,
@@ -161,6 +162,7 @@ export default function ProvisioningPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Provisioning in" description="Who may write into this directory over SCIM." />
       <Panel title="What the sync owns">
         {overview.isError ? (
           <ErrorBox error={overview.error} />

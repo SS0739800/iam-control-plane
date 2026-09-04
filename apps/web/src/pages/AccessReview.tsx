@@ -19,6 +19,7 @@ import { ErrorBox, Loading, Panel, Pill, Stat, type Tone } from '../components/u
 import { type ReviewFinding, fetchAccessReview } from '../lib/api'
 import { Link } from 'react-router-dom'
 import styles from './AccessReview.module.css'
+import { PageHeader } from '../components/PageHeader'
 
 function severityTone(severity: string): Tone {
   if (severity === 'high') return 'bad'
@@ -58,6 +59,7 @@ export default function AccessReviewPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Access review" description="Access worth a second look, worst first." />
       <Panel title="Access review">
         <p className={styles.intro}>
           Not a list of who has what — that is the Users page. These are the things that

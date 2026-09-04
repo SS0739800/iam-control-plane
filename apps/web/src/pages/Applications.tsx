@@ -24,6 +24,7 @@ import {
 } from '../components/ApplicationSamlPanels'
 import { RegisterApplication } from '../components/RegisterApplication'
 import styles from './Applications.module.css'
+import { PageHeader } from '../components/PageHeader'
 import { fetchApplication, fetchApplications, fetchMe } from '../lib/api'
 
 const PAGE_SIZE = 25
@@ -42,8 +43,12 @@ export function ApplicationsPage() {
 
   return (
     <div className={styles.page}>
-      <Panel
+      <PageHeader
         title="Applications"
+        description="What people sign in to, and who is allowed to."
+      />
+      <Panel
+        title={apps.data ? `${apps.data.total.toLocaleString()} applications` : 'Applications'}
         action={
         <input
           type="search"
@@ -126,14 +131,19 @@ export function ApplicationDetailPage() {
 
   return (
     <div className={styles.page}>
-      <Panel title={data.name}>
+      <PageHeader
+        title={data.name}
+        description={data.description ?? undefined}
+        trail={[{ label: 'Applications', to: '/applications' }, { label: data.name }]}
+        actions={
+          <Pill tone={data.status === 'active' ? 'ok' : 'muted'}>{data.status}</Pill>
+        }
+      />
+
+      <Panel title="Overview">
         <dl>
-          <Row label="Description">{data.description ?? '—'}</Row>
           <Row label="Login method">
             <Mono>{data.protocol}</Mono>
-          </Row>
-          <Row label="Status">
-            <Pill tone={data.status === 'active' ? 'ok' : 'muted'}>{data.status}</Pill>
           </Row>
           <Row label="Short name">
             <Mono>{data.slug}</Mono>

@@ -27,6 +27,7 @@ import {
 } from '../components/ui'
 import { type AuditEvent, fetchAuditEvents, verifyAuditChain } from '../lib/api'
 import styles from './Audit.module.css'
+import { PageHeader } from '../components/PageHeader'
 
 const PAGE_SIZE = 50
 
@@ -59,6 +60,7 @@ export default function AuditPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Audit log" description="Every change the platform made, hash-chained so tampering shows." />
       <Panel
         title="Tamper check"
         action={

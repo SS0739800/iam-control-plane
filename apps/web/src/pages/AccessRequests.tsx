@@ -22,6 +22,7 @@ import { Button } from '../components/Button'
 import { cx } from '../lib/cx'
 import { Empty, ErrorBox, Loading, Panel, Pill, type Tone } from '../components/ui'
 import styles from './AccessRequests.module.css'
+import { PageHeader } from '../components/PageHeader'
 import {
   type AccessRequest,
   type RequestState,
@@ -294,6 +295,7 @@ export default function AccessRequestsPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Access requests" description="Ask for access, and decide what other people have asked for." />
       {canSeeQueue ? (
         <Panel title={`Waiting for a decision${queue.data ? ` (${queue.data.length})` : ''}`}>
           {queue.isError ? (

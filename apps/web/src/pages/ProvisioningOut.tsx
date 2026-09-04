@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { Button } from '../components/Button'
 import { cx } from '../lib/cx'
 import styles from './ProvisioningOut.module.css'
+import { PageHeader } from '../components/PageHeader'
 import {
   Empty,
   ErrorBox,
@@ -536,6 +537,7 @@ export default function ProvisioningOutPage() {
 
   return (
     <div className={styles.page}>
+      <PageHeader title="Provisioning out" description="Systems we push accounts into, and whether they are in step." />
       <Panel
         title="Where we push accounts"
         action={
