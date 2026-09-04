@@ -31,6 +31,27 @@ and SCIM behaviour differ enough to need its own work.
 authentik isn't deployed, so multi-provider federation is only proven locally.
 [The deploy runbook](docs/deploy.md#what-is-not-done) lists the other gaps.
 
+It was built in phases, each one a working slice rather than a layer:
+
+| Phase | Scope                                           | State                  |
+| ----- | ----------------------------------------------- | ---------------------- |
+| P0    | Foundation: compose, CI, health probes          | done                   |
+| P1    | Core domain + admin console, hash-chained audit | done                   |
+| P2    | SAML SP, inbound SSO                            | done                   |
+| P3    | SCIM 2.0 server, inbound provisioning           | done                   |
+| P4    | Lifecycle + entitlements *(MVP line)*           | done                   |
+| P5    | SAML IdP, outbound SSO                          | done                   |
+| P6    | SCIM client, outbound provisioning              | done                   |
+| P7    | Production deploy                               | done                   |
+| P8    | Entra ID integration                            | Okta done, Entra to go |
+
+P8 turned up something worth recording: Okta briefly deactivated the only admin,
+which revoked their role grant and locked the console until a script could be run
+over SSH. The last-admin guard can't catch that — it refuses the change through
+`PATCH /api/users/{id}`, and this arrived over SCIM. Arguably correct, since the
+provider is the directory of record, but it means a single-admin deployment is one
+provider hiccup away from needing a shell.
+
 ## Quickstart
 
 You need Docker Desktop with the WSL 2 backend. The SAML stack compiles xmlsec
