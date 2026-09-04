@@ -440,35 +440,37 @@ apps/
       logging_setup.py  structured JSON logging
       main.py           application factory
       models/           SQLAlchemy declarative models
-      routers/          HTTP surfaces: /api/* plus the browser-facing /saml/*
-      saml/             the SAML machinery, see below
+      routers/          HTTP surfaces; /api/* plus the browser-facing /saml/*
+      saml/             the SAML machinery — see the note below
       security/         permissions, and working out who's calling
     alembic/            migrations
-    scripts/            seed data, schema export, first-admin bootstrap,
-                        end-to-end login and provisioning checks
+    scripts/            seed data, schema export, the first-admin bootstrap,
+                        the end-to-end login and provisioning checks
     tests/
       fixtures/         a real authentik assertion and the cert that signed it
-    Dockerfile          two-stage, builds xmlsec from source
+    requirements*.txt
+    Dockerfile          two-stage; builds xmlsec from source
   web/                  Vite + React 19 + TypeScript SPA
     src/
       lib/api.ts        typed client, generated from openapi.json
-  hrms/                 the downstream we provision into, shares no code
+  hrms/                 the downstream we provision into — shares no code with
+                        the platform, on purpose
 docs/adr/               architecture decision records
-docs/deploy.md          production runbook
-Dockerfile              production console: API + built frontend, one image
+docs/deploy.md          the production runbook
+Dockerfile              the production console: API + built frontend, one image
 fly.toml                the console app
 infra/db/init/          first-boot Postgres bootstrap
-infra/authentik/        the SAML application, as a blueprint
+infra/authentik/        the SAML application, declared as a blueprint
 Caddyfile               single-origin route table
 docker-compose.yml
 ```
 
-Inside `iam/saml/`:
+Inside `iam/saml/`, one file is different from the others:
 
 ```
 sp.py            our side: who we are, and the request that starts a login
 reader.py        reads the XML and verifies the signature   <- needs xmlsec
-checks.py        the ten rules a login has to pass once it's read
+checks.py        the ten rules a login has to pass once it's been read
 metadata.py      reads a provider's metadata, to register them
 provisioning.py  turning a passed login into a person
 sessions.py      keeping them signed in afterwards
