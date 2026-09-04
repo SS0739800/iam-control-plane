@@ -76,6 +76,12 @@ Then open http://localhost:8080.
 
 ## Signing in for real
 
+To connect your own tenant — authentik, Okta or Entra ID — see
+[docs/identity-providers.md](docs/identity-providers.md). It has the URLs, the
+attributes we read, the SCIM settings and what the failed checks mean. The rest of
+this section is the quickest local path, using the authentik that ships with the
+compose file.
+
 authentik sits behind a compose profile so a plain `up` stays quick:
 
 ```bash

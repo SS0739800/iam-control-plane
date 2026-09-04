@@ -359,7 +359,8 @@ the single most common deploy failure, and it surfaces as a refused assertion wi
 A hosted tenant alongside authentik, which is what proves multi-provider federation
 rather than one-provider federation. Nothing to run.
 
-Whichever you use, the two values it needs from us:
+Step-by-step for Okta and Entra ID, including SCIM and the attribute mapping, is
+in [identity-providers.md](identity-providers.md). The two values it needs from us:
 
 | What              | Value                                       |
 | ----------------- | ------------------------------------------- |
