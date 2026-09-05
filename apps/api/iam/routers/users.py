@@ -27,6 +27,17 @@ router = APIRouter(prefix="/users", tags=["users"])
 # would get silently overwritten on the next sync.
 IDP_OWNED_FIELDS = frozenset({"department", "job_title"})
 
+# What the list can be sorted by. An allowlist, not a column name off the query
+# string, so sorting can never reach a column we did not mean to expose.
+SORTABLE_USER_FIELDS = {
+    "display_name": User.display_name,
+    "user_name": User.user_name,
+    "department": User.department,
+    "platform_role": User.platform_role,
+    "active": User.active,
+    "created_at": User.created_at,
+}
+
 
 def _client_context(request: Request) -> tuple[str | None, str | None]:
     """Where the request came from, for the audit entry."""
@@ -105,6 +116,10 @@ async def list_users(
     active: Annotated[bool | None, Query()] = None,
     department: Annotated[str | None, Query()] = None,
     platform_role: Annotated[PlatformRole | None, Query()] = None,
+    sort: Annotated[
+        str, Query(description=f"One of: {', '.join(sorted(SORTABLE_USER_FIELDS))}")
+    ] = "display_name",
+    order: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 25,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[UserSummary]:
@@ -115,6 +130,14 @@ async def list_users(
     to anyone who can load one page.
     """
     limit = clamp_limit(limit)
+
+    column = SORTABLE_USER_FIELDS.get(sort)
+    if column is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Cannot sort by {sort!r}. Try one of: {', '.join(sorted(SORTABLE_USER_FIELDS))}.",
+        )
+
     filters = []
 
     if q:
@@ -139,7 +162,7 @@ async def list_users(
         await session.scalars(
             select(User)
             .where(*filters)
-            .order_by(User.display_name, User.id)
+            .order_by(column.desc() if order == "desc" else column.asc(), User.id)
             .limit(limit)
             .offset(offset)
         )

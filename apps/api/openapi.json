@@ -6629,6 +6629,29 @@
             }
           },
           {
+            "description": "One of: active, created_at, department, display_name, platform_role, user_name",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "display_name",
+              "description": "One of: active, created_at, department, display_name, platform_role, user_name",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "pattern": "^(asc|desc)$",
+              "title": "Order",
+              "type": "string"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,

@@ -5179,6 +5179,9 @@ export interface operations {
                 active?: boolean | null;
                 department?: string | null;
                 platform_role?: components["schemas"]["PlatformRole"] | null;
+                /** @description One of: active, created_at, department, display_name, platform_role, user_name */
+                sort?: string;
+                order?: string;
                 limit?: number;
                 offset?: number;
             };
