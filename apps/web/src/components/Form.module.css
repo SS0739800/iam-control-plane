@@ -1,0 +1,88 @@
+/* Sections group related fields, so a long form reads as a few short ones. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sectionTitle {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.sectionDescription {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+/* Fields sit side by side and wrap, rather than each one owning a whole row. */
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  align-self: stretch;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.grow {
+  flex: 1;
+}
+.growTwice {
+  flex: 2;
+}
+.fullWidth {
+  align-self: stretch;
+}
+
+.label {
+  color: var(--text-secondary);
+}
+.required {
+  color: var(--status-bad-text);
+}
+
+.control {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 5px var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+.control:disabled {
+  opacity: 0.5;
+}
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+}
+
+.description {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.error {
+  font-size: var(--text-xs);
+  color: var(--status-bad-text);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}

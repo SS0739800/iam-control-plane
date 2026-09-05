@@ -26,6 +26,16 @@ export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
   )
 }
 
+/** A status word on a tinted ground, for table cells and detail headers. */
+export function StatusBadge({ tone, children }: { tone: Tone; children: ReactNode }) {
+  return (
+    <span className={styles.badge} data-tone={tone}>
+      <Dot tone={tone} />
+      {children}
+    </span>
+  )
+}
+
 /* Picked to stay readable with white text on top. */
 const AVATAR_COLORS = ['#0078d4', '#8764b8', '#038387', '#a4262c', '#498205', '#8e562e', '#005b70']
 
@@ -63,22 +73,29 @@ export function NameCell({ name, children }: { name: string; children: ReactNode
 export function Panel({
   title,
   action,
+  flush,
   children,
 }: {
   title: string
   action?: ReactNode
+  /**
+   * Drop the box and sit straight on the page. For sections already inside
+   * something with a border of its own, like a tab, where a second box around
+   * them is just another line to look at.
+   */
+  flush?: boolean
   children: ReactNode
 }) {
   const headingId = `panel-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
   return (
-    <section aria-labelledby={headingId} className={styles.panel}>
-      <header className={styles.panelHeader}>
+    <section aria-labelledby={headingId} className={cx(styles.panel, flush && styles.panelFlush)}>
+      <header className={cx(styles.panelHeader, flush && styles.panelHeaderFlush)}>
         <h2 id={headingId} className={styles.panelHeading}>
           {title}
         </h2>
         {action}
       </header>
-      <div className={styles.panelBody}>{children}</div>
+      <div className={cx(styles.panelBody, flush && styles.panelBodyFlush)}>{children}</div>
     </section>
   )
 }
@@ -137,8 +154,21 @@ export function TableWrap({ children }: { children: ReactNode }) {
   return <div className={styles.tableWrap}>{children}</div>
 }
 
-export function Th({ children, right }: { children: ReactNode; right?: boolean }) {
-  return <th className={cx(styles.th, right && styles.thRight)}>{children}</th>
+export function Th({
+  children,
+  right,
+  ariaSort,
+}: {
+  children: ReactNode
+  right?: boolean
+  /** Set on sortable columns so screen readers announce the current sort. */
+  ariaSort?: 'ascending' | 'descending' | 'none'
+}) {
+  return (
+    <th aria-sort={ariaSort} className={cx(styles.th, right && styles.thRight)}>
+      {children}
+    </th>
+  )
 }
 
 export function Td({

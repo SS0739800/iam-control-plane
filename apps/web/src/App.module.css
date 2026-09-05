@@ -5,10 +5,10 @@
 .topBar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-4);
   background: var(--neutral-160);
-  padding: var(--space-2) var(--space-4);
+  padding: 0 var(--space-4);
+  height: 48px;
   color: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
@@ -17,8 +17,42 @@
   }
 }
 .topBarTitle {
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: 600;
+  color: #ffffff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Search sits in the middle of the bar, capped so it doesn't stretch across a
+   wide screen. Submitting lands on the user list with the term already applied. */
+.topSearch {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.topSearchInput {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 5px var(--space-3);
+  font-size: var(--text-sm);
+  color: #ffffff;
+}
+.topSearchInput::placeholder {
+  color: var(--neutral-90);
+}
+.topSearchInput:focus {
+  background: #ffffff;
+  color: var(--neutral-190);
+}
+@media (max-width: 720px) {
+  .topSearch {
+    display: none;
+  }
 }
 
 .whoAmI {
@@ -87,7 +121,7 @@
 @media (min-width: 640px) {
   .nav {
     display: block;
-    width: 224px;
+    width: var(--sidebar-width);
     flex-shrink: 0;
     overflow: visible;
     border-right: 1px solid var(--border);

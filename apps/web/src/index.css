@@ -71,15 +71,25 @@
     'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont,
     'Helvetica Neue', system-ui, sans-serif;
 
+  /* 4px steps. Anything not on this scale is a mistake, not a decision. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-2xl: 1.5rem;
+  --space-8: 32px;
+
+  /* Page title down to table metadata. Nothing bigger than 24px anywhere. */
+  --text-xs: 0.75rem; /* 12px, metadata */
+  --text-dense: 0.8125rem; /* 13px, table content */
+  --text-sm: 0.875rem; /* 14px, body — the default */
+  --text-lg: 1rem; /* 16px, section title */
+  --text-xl: 1.125rem; /* 18px, large section title */
+  --text-2xl: 1.5rem; /* 24px, page title */
+
+  --sidebar-width: 248px;
+  --shadow-overlay: 0 2px 8px rgba(0, 0, 0, 0.13);
 }
 
 /* Entra itself has no dark mode, but we support prefers-color-scheme anyway,

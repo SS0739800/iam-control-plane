@@ -8,7 +8,7 @@
 import { type ComponentType, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import styles from './App.module.css'
 import {
@@ -167,6 +167,36 @@ function SectionNav() {
   )
 }
 
+/**
+ * Search from the top bar. There's no endpoint that searches everything, so this
+ * searches people — the list somebody is nearly always after — and hands off to
+ * the users page with the term already in the URL.
+ */
+function GlobalSearch() {
+  const [term, setTerm] = useState('')
+  const navigate = useNavigate()
+
+  return (
+    <form
+      role="search"
+      className={styles.topSearch}
+      onSubmit={(event) => {
+        event.preventDefault()
+        navigate(term.trim() ? `/users?q=${encodeURIComponent(term.trim())}` : '/users')
+      }}
+    >
+      <input
+        type="search"
+        value={term}
+        onChange={(event) => setTerm(event.target.value)}
+        placeholder="Search people"
+        aria-label="Search people"
+        className={styles.topSearchInput}
+      />
+    </form>
+  )
+}
+
 /** Who's signed in, shown in the top bar. */
 function WhoAmI() {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
@@ -231,7 +261,10 @@ export default function App() {
   return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
-        <span className={styles.topBarTitle}>IAM Control Plane</span>
+        <Link to="/" className={styles.topBarTitle}>
+          IAM Control Plane
+        </Link>
+        <GlobalSearch />
         <WhoAmI />
       </header>
 

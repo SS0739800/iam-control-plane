@@ -49,6 +49,28 @@
   padding: var(--space-4);
 }
 
+/* Inside a tab the box is already drawn, so the section only needs its heading. */
+.panelFlush {
+  border: 0;
+  background: none;
+}
+.panelHeaderFlush {
+  border-bottom: 0;
+  padding: var(--space-5) 0 var(--space-2);
+}
+.panelFlush:first-child .panelHeaderFlush {
+  padding-top: var(--space-4);
+}
+.panelBodyFlush {
+  padding: 0;
+}
+
+/* A property list stops before the page does. Dragging a short value out to a
+   1400px screen edge just makes it harder to pair with its label. */
+.panelBody > dl {
+  max-width: 760px;
+}
+
 .stat {
   display: flex;
   flex-direction: column;
@@ -72,14 +94,21 @@
   color: var(--text-secondary);
 }
 
+/* Label and value in two columns. On a wide page a value pushed to the far
+   right ends up an inch of empty space away from the label it belongs to. */
 .row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
   gap: var(--space-4);
+  grid-template-columns: 1fr;
   border-bottom: 1px solid var(--border);
   padding: var(--space-2) 0;
+}
+@media (min-width: 640px) {
+  .row {
+    align-items: baseline;
+    grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+    gap: var(--space-3);
+  }
 }
 .row:last-child {
   border-bottom: none;
@@ -91,8 +120,8 @@
 }
 .rowValue {
   margin: 0;
-  text-align: right;
   font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 
 .mono {
@@ -280,4 +309,34 @@
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+}
+
+/* A status word on a tinted ground. Keeps the dot as well as the colour, so it
+   still reads without seeing the difference between green and red. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  padding: 1px var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.badge[data-tone='ok'] {
+  background: var(--status-ok-bg);
+  color: var(--status-ok-text);
+}
+.badge[data-tone='bad'] {
+  background: var(--status-bad-bg);
+  color: var(--status-bad-text);
+}
+.badge[data-tone='warn'] {
+  background: var(--status-warn-bg);
+  color: var(--status-warn-text);
+}
+.badge[data-tone='muted'] {
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
 }
