@@ -74,13 +74,17 @@ Then open http://localhost:8080.
 | http://localhost:8090            | The HRMS we provision into            |
 | http://localhost:9000            | authentik (needs `--profile idp`)     |
 
+Two guides worth knowing about before you go further:
+
+- **[Connecting an identity provider](docs/identity-providers.md)** — pointing this
+  at your own authentik, Okta or Entra ID tenant: the URLs and certificates each one
+  needs, the attributes we read, SCIM setup, and what each failed check means.
+- **[Deploying](docs/deploy.md)** — the production runbook.
+
 ## Signing in for real
 
-To connect your own tenant — authentik, Okta or Entra ID — see
-[docs/identity-providers.md](docs/identity-providers.md). It has the URLs, the
-attributes we read, the SCIM settings and what the failed checks mean. The rest of
-this section is the quickest local path, using the authentik that ships with the
-compose file.
+The quickest path, using the authentik that ships with the compose file. For your
+own tenant, see [the provider guide](docs/identity-providers.md) instead.
 
 authentik sits behind a compose profile so a plain `up` stays quick:
 
@@ -462,6 +466,7 @@ apps/
   hrms/                 the downstream we provision into — shares no code with
                         the platform, on purpose
 docs/adr/               architecture decision records
+docs/identity-providers.md  wiring up authentik, Okta or Entra ID
 docs/deploy.md          the production runbook
 Dockerfile              the production console: API + built frontend, one image
 fly.toml                the console app
