@@ -15,7 +15,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 
-import { ErrorBox, Loading, Panel, Pill, Stat, type Tone } from '../components/ui'
+import { ErrorBox, Loading, Stat, StatusBadge, type Tone } from '../components/ui'
 import { type ReviewFinding, fetchAccessReview } from '../lib/api'
 import { Link } from 'react-router-dom'
 import styles from './AccessReview.module.css'
@@ -35,7 +35,7 @@ function FindingRow({ finding }: { finding: ReviewFinding }) {
   return (
     <li className={styles.finding}>
       <div className={styles.findingHead}>
-        <Pill tone={severityTone(finding.severity)}>{finding.severity}</Pill>
+        <StatusBadge tone={severityTone(finding.severity)}>{finding.severity}</StatusBadge>
         {finding.subject_user_id ? (
           <Link to={`/users/${finding.subject_user_id}`} className={styles.subjectLink}>
             {finding.subject}
@@ -59,43 +59,40 @@ export default function AccessReviewPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="Access review" description="Access worth a second look, worst first." />
-      <Panel title="Access review">
-        <p className={styles.intro}>
-          Not a list of who has what — that is the Users page. These are the things that
-          warrant a question, worst first, each with something you can do about it.
-        </p>
-
-        {review.isError ? (
-          <ErrorBox error={review.error} />
-        ) : review.isPending ? (
-          <Loading />
-        ) : (
-          <div className={styles.summary}>
-            <div className={styles.statGrid}>
-              <Stat
-                label="Needs attention now"
-                value={review.data.counts.high ?? 0}
-                hint="Somebody has access they should not"
-              />
-              <Stat
-                label="Cannot be justified"
-                value={review.data.counts.medium ?? 0}
-                hint="Probably fine, nobody can prove it"
-              />
-              <Stat label="Worth tidying" value={review.data.counts.low ?? 0} />
-            </div>
-            <p className={styles.checkedNote}>
-              Checked {new Date(review.data.checked_at).toLocaleString()}. Run fresh every time
-              this page loads — a cached review is one that reports a problem somebody fixed
-              last week.
-            </p>
+      <PageHeader
+        title="Access review"
+        description="Access worth a second look, worst first."
+      />
+      {review.isError ? (
+        <ErrorBox error={review.error} />
+      ) : review.isPending ? (
+        <Loading />
+      ) : (
+        <div className={styles.summary}>
+          <div className={styles.statGrid}>
+            <Stat
+              label="Needs attention now"
+              value={review.data.counts.high ?? 0}
+              hint="Somebody has access they should not"
+            />
+            <Stat
+              label="Cannot be justified"
+              value={review.data.counts.medium ?? 0}
+              hint="Probably fine, nobody can prove it"
+            />
+            <Stat label="Worth tidying" value={review.data.counts.low ?? 0} />
           </div>
-        )}
-      </Panel>
+          <p className={styles.checkedNote}>
+            Checked {new Date(review.data.checked_at).toLocaleString()}. Run fresh every time
+            this page loads — a cached review is one that reports a problem somebody fixed last
+            week.
+          </p>
+        </div>
+      )}
 
       {review.data ? (
-        <Panel title={`Findings (${review.data.findings.length})`}>
+        <>
+          <h2 className={styles.sectionHeading}>Findings ({review.data.findings.length})</h2>
           {review.data.clean ? (
             <div className={styles.clean}>
               <p className={styles.cleanHeadline}>Nothing to look at.</p>
@@ -108,11 +105,14 @@ export default function AccessReviewPage() {
           ) : (
             <ul className={styles.findings}>
               {review.data.findings.map((finding, index) => (
-                <FindingRow key={`${finding.kind}-${finding.subject}-${index}`} finding={finding} />
+                <FindingRow
+                  key={`${finding.kind}-${finding.subject}-${index}`}
+                  finding={finding}
+                />
               ))}
             </ul>
           )}
-        </Panel>
+        </>
       ) : null}
     </div>
   )

@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 import {
   Empty,
@@ -15,6 +15,7 @@ import {
   Panel,
   Pill,
   Row,
+  StatusBadge,
   TableWrap,
   Td,
   Th,
@@ -22,7 +23,10 @@ import {
 } from '../components/ui'
 import { type PlatformRole, fetchMe, fetchUser, fetchUsers } from '../lib/api'
 import LeaverPanel from '../components/LeaverPanel'
-import { CloseIcon, FilterIcon } from '../components/icons'
+import { DataTable, type Sort, ToolbarButton } from '../components/DataTable'
+import { AddFilter, FilterChip } from '../components/FilterChip'
+import { RefreshIcon } from '../components/icons'
+import { Button } from '../components/Button'
 import { PageHeader } from '../components/PageHeader'
 import { Tabs } from '../components/Tabs'
 import styles from './Users.module.css'
@@ -33,22 +37,37 @@ const PAGE_SIZE = 25
 const ROLES: PlatformRole[] = ['employee', 'helpdesk', 'auditor', 'admin']
 
 export function UsersPage() {
-  // Two pieces of state, not one: typing in the box shouldn't leave you on page 7
-  // of results that no longer exist, so changing the search resets the offset.
-  const [search, setSearch] = useState('')
+  // The search lives in the URL, so a filtered list can be linked to and the
+  // search box in the top bar can land somebody straight on their results.
+  const [params, setParams] = useSearchParams()
+  const search = params.get('q') ?? ''
+  const setSearch = (value: string) => {
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        if (value) next.set('q', value)
+        else next.delete('q')
+        return next
+      },
+      { replace: true },
+    )
+  }
   const [offset, setOffset] = useState(0)
   // Both of these are real query parameters on /api/users, so a chip narrows the
   // search in Postgres rather than hiding rows we already fetched.
   const [active, setActive] = useState<boolean | undefined>(undefined)
   const [role, setRole] = useState<PlatformRole | undefined>(undefined)
+  const [sort, setSort] = useState<Sort>({ key: 'display_name', order: 'asc' })
 
   const users = useQuery({
-    queryKey: ['users', search, offset, active, role],
+    queryKey: ['users', search, offset, active, role, sort],
     queryFn: () =>
       fetchUsers({
         q: search || undefined,
         active,
         platform_role: role,
+        sort: sort.key,
+        order: sort.order,
         limit: PAGE_SIZE,
         offset,
       }),
@@ -69,155 +88,150 @@ export function UsersPage() {
         title="Users"
         description="Everybody in the directory, however they got here."
       />
-      <Panel
-        title="All users"
-        action={
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value)
-              setOffset(0)
-            }}
-            placeholder="Search name or email"
-            aria-label="Search users"
-            className={styles.search}
-          />
+      <DataTable
+        status={users.isError ? 'error' : users.isPending ? 'pending' : 'success'}
+        error={users.error}
+        onRetry={() => void users.refetch()}
+        actions={
+          <ToolbarButton
+            icon={<RefreshIcon />}
+            onClick={() => void users.refetch()}
+            disabled={users.isFetching}
+          >
+            {users.isFetching ? 'Refreshing…' : 'Refresh'}
+          </ToolbarButton>
         }
-      >
-        <div className={styles.toolbar}>
-          {active === undefined ? null : (
-            <span className={styles.chip}>
-              <span className={styles.chipLabel}>Status ==</span>
-              <select
-                aria-label="Filter by status"
-                value={active ? 'active' : 'deactivated'}
-                onChange={(event) => refilter(() => setActive(event.target.value === 'active'))}
-                className={styles.chipSelect}
-              >
-                <option value="active">active</option>
-                <option value="deactivated">deactivated</option>
-              </select>
-              <button
-                type="button"
-                aria-label="Remove status filter"
-                className={styles.chipRemove}
-                onClick={() => refilter(() => setActive(undefined))}
-              >
-                <CloseIcon />
-              </button>
-            </span>
-          )}
-
-          {role === undefined ? null : (
-            <span className={styles.chip}>
-              <span className={styles.chipLabel}>Role ==</span>
-              <select
-                aria-label="Filter by role"
-                value={role}
-                onChange={(event) =>
-                  refilter(() => setRole(event.target.value as PlatformRole))
-                }
-                className={styles.chipSelect}
-              >
-                {ROLES.map((entry) => (
-                  <option key={entry} value={entry}>
-                    {entry}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                aria-label="Remove role filter"
-                className={styles.chipRemove}
-                onClick={() => refilter(() => setRole(undefined))}
-              >
-                <CloseIcon />
-              </button>
-            </span>
-          )}
-
-          {active === undefined ? (
-            <button
-              type="button"
-              className={styles.addFilter}
-              onClick={() => refilter(() => setActive(true))}
-            >
-              <FilterIcon />
-              Status
-            </button>
-          ) : null}
-          {role === undefined ? (
-            <button
-              type="button"
-              className={styles.addFilter}
-              onClick={() => refilter(() => setRole('admin'))}
-            >
-              <FilterIcon />
-              Role
-            </button>
-          ) : null}
-        </div>
-
-        {users.data ? (
-          <p className={styles.resultCount}>
-            {users.data.total.toLocaleString()} {users.data.total === 1 ? 'user' : 'users'} found
-          </p>
-        ) : null}
-
-        {users.isError ? (
-          <ErrorBox error={users.error} />
-        ) : users.isPending ? (
-          <Loading />
-        ) : users.data.items.length === 0 ? (
-          <Empty>No users match that search.</Empty>
-        ) : (
+        rows={users.data?.items ?? []}
+        rowKey={(user) => user.id}
+        sort={{
+          value: sort,
+          onChange: (next) => {
+            setSort(next)
+            setOffset(0)
+          },
+        }}
+        search={{
+          value: search,
+          onChange: (value) => {
+            setSearch(value)
+            setOffset(0)
+          },
+          label: 'Search users',
+          placeholder: 'Search name or email',
+        }}
+        filters={
           <>
-            <TableWrap>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <Th>Name</Th>
-                    <Th>Login</Th>
-                    <Th>Department</Th>
-                    <Th>Role</Th>
-                    <Th>Source</Th>
-                    <Th>Status</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.data.items.map((user) => (
-                    <tr key={user.id}>
-                      <Td>
-                        <NameCell name={user.display_name}>
-                          <LinkCell to={`/users/${user.id}`}>{user.display_name}</LinkCell>
-                        </NameCell>
-                      </Td>
-                      <Td>
-                        <Mono>{user.user_name}</Mono>
-                      </Td>
-                      <Td>{user.department ?? '—'}</Td>
-                      <Td>{user.platform_role}</Td>
-                      <Td>{user.source}</Td>
-                      <Td>
-                        <Pill tone={user.active ? 'ok' : 'muted'}>
-                          {user.active ? 'active' : 'deactivated'}
-                        </Pill>
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </TableWrap>
+            {active === undefined ? null : (
+              <FilterChip
+                label="Status"
+                value={active ? 'active' : 'deactivated'}
+                options={[
+                  ['active', 'active'],
+                  ['deactivated', 'deactivated'],
+                ]}
+                onChange={(value) => refilter(() => setActive(value === 'active'))}
+                onRemove={() => refilter(() => setActive(undefined))}
+              />
+            )}
+            {role === undefined ? null : (
+              <FilterChip
+                label="Role"
+                value={role}
+                options={ROLES.map((entry) => [entry, entry])}
+                onChange={(value) => refilter(() => setRole(value as PlatformRole))}
+                onRemove={() => refilter(() => setRole(undefined))}
+              />
+            )}
+            {active === undefined ? (
+              <AddFilter label="Status" onClick={() => refilter(() => setActive(true))} />
+            ) : null}
+            {role === undefined ? (
+              <AddFilter label="Role" onClick={() => refilter(() => setRole('admin'))} />
+            ) : null}
+          </>
+        }
+        count={
+          users.data
+            ? `${users.data.total.toLocaleString()} ${users.data.total === 1 ? 'user' : 'users'} found`
+            : null
+        }
+        empty={{
+          title:
+            search || active !== undefined || role !== undefined
+              ? 'No users match these filters'
+              : 'No users yet',
+          body:
+            search || active !== undefined || role !== undefined
+              ? 'Try a different search, or clear the filters to see everyone.'
+              : 'People arrive from an identity provider, or the first time somebody signs in.',
+          actions:
+            search || active !== undefined || role !== undefined ? (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  refilter(() => {
+                    setSearch('')
+                    setActive(undefined)
+                    setRole(undefined)
+                  })
+                }
+              >
+                Clear filters
+              </Button>
+            ) : null,
+        }}
+        columns={[
+          {
+            key: 'name',
+            sortKey: 'display_name',
+            header: 'Name',
+            cell: (user) => (
+              <NameCell name={user.display_name}>
+                <LinkCell to={`/users/${user.id}`}>{user.display_name}</LinkCell>
+              </NameCell>
+            ),
+          },
+          {
+            key: 'login',
+            sortKey: 'user_name',
+            header: 'Login',
+            cell: (user) => <Mono>{user.user_name}</Mono>,
+          },
+          {
+            key: 'department',
+            sortKey: 'department',
+            header: 'Department',
+            cell: (user) => user.department ?? '—',
+          },
+          {
+            key: 'role',
+            sortKey: 'platform_role',
+            header: 'Role',
+            cell: (user) => user.platform_role,
+          },
+          { key: 'source', header: 'Source', cell: (user) => user.source },
+          {
+            key: 'status',
+            sortKey: 'active',
+            header: 'Status',
+            cell: (user) => (
+              <StatusBadge tone={user.active ? 'ok' : 'muted'}>
+                {user.active ? 'active' : 'deactivated'}
+              </StatusBadge>
+            ),
+          },
+        ]}
+        footer={
+          users.data ? (
             <Pager
               total={users.data.total}
               limit={users.data.limit}
               offset={users.data.offset}
               onChange={setOffset}
             />
-          </>
-        )}
-      </Panel>
+          ) : null
+        }
+      />
     </>
   )
 }
@@ -255,7 +269,7 @@ export function UserDetailPage() {
             id: 'overview',
             label: 'Overview',
             content: (
-              <Panel title="Profile">
+              <Panel flush title="Profile">
                 <dl>
                   <Row label="Login">
                     <Mono>{person.user_name}</Mono>
@@ -288,7 +302,7 @@ export function UserDetailPage() {
             label: `Access (${person.groups.length + person.applications.length})`,
             content: (
               <div className={styles.page}>
-                <Panel title={`Groups (${person.groups.length})`}>
+                <Panel flush title={`Groups (${person.groups.length})`}>
                   {person.groups.length === 0 ? (
                     <Empty>Not in any groups.</Empty>
                   ) : (
@@ -305,7 +319,7 @@ export function UserDetailPage() {
                   )}
                 </Panel>
 
-                <Panel title={`Access (${person.applications.length})`}>
+                <Panel flush title={`Access (${person.applications.length})`}>
                   {person.applications.length === 0 ? (
                     <Empty>No application access.</Empty>
                   ) : (

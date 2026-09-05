@@ -15,7 +15,7 @@ import { useState } from 'react'
 
 import { type ApplicationDetail, registerApplication } from '../lib/api'
 import { Button } from './Button'
-import { cx } from '../lib/cx'
+import { Field, FieldRow, Form, FormActions, controlClass } from './Form'
 import styles from './RegisterApplication.module.css'
 import { ErrorBox, Mono, Panel } from './ui'
 
@@ -54,16 +54,14 @@ export function RegisterApplication() {
         </div>
       ) : null}
 
-      <form
-        className={styles.form}
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (slug && name && metadata.trim()) register.mutate()
-        }}
-      >
-        <div className={styles.formRow}>
-          <label className={styles.label}>
-            <span className={styles.labelText}>Short name</span>
+      <Form onSubmit={() => { if (slug && name && metadata.trim()) register.mutate() }}>
+        <FieldRow>
+          <Field
+            label="Short name"
+            required
+            grow={1}
+            description="Used in the sign-in link, so lowercase and dashes only."
+          >
             <input
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
@@ -71,52 +69,48 @@ export function RegisterApplication() {
               pattern="[a-z0-9][a-z0-9-]*"
               title="lowercase letters, digits and dashes"
               required
-              className={styles.field}
+              className={controlClass()}
             />
-            <span className={styles.hint}>
-              Used in the sign-in link, so lowercase and dashes only.
-            </span>
-          </label>
-          <label className={cx(styles.label, styles.labelGrow)}>
-            <span className={styles.labelText}>Name</span>
+          </Field>
+          <Field label="Name" required grow={2}>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Expenses"
               required
-              className={styles.field}
+              className={controlClass()}
             />
-          </label>
-        </div>
+          </Field>
+        </FieldRow>
 
-        <label className={styles.label}>
-          <span className={styles.labelText}>
-            Its SAML metadata, pasted in whole
-          </span>
+        <Field
+          label="Its SAML metadata, pasted in whole"
+          required
+          description="The entity ID, the login response URL and the certificate are read from this
+            rather than typed. Get the document yourself — we never fetch a URL you give us."
+        >
           <textarea
             value={metadata}
             onChange={(event) => setMetadata(event.target.value)}
             rows={6}
             placeholder="<md:EntityDescriptor …>"
             required
-            className={cx(styles.field, styles.metadataField)}
+            className={controlClass(true)}
           />
-          <span className={styles.hint}>
-            The entity ID, the login response URL and the certificate are read from this rather
-            than typed. Get the document yourself — we never fetch a URL you give us.
-          </span>
-        </label>
+        </Field>
 
         {register.isError ? <ErrorBox error={register.error} /> : null}
 
-        <Button
-          type="submit"
-          variant="accent"
-          disabled={register.isPending || !slug || !name || !metadata.trim()}
-        >
-          {register.isPending ? 'Reading it…' : 'Register'}
-        </Button>
-      </form>
+        <FormActions>
+          <Button
+            type="submit"
+            variant="accent"
+            disabled={register.isPending || !slug || !name || !metadata.trim()}
+          >
+            {register.isPending ? 'Reading it…' : 'Register'}
+          </Button>
+        </FormActions>
+      </Form>
 
       <p className={styles.footnote}>
         Setting up the other side? The document to give the application is at{' '}

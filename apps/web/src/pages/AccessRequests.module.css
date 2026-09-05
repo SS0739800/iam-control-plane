@@ -4,29 +4,6 @@
   gap: var(--space-6);
 }
 
-/* Inputs, selects and textareas all share this. */
-.field {
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  padding: 4px var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-}
-
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--text-sm);
-}
-.labelGrow {
-  flex: 1;
-}
-.labelText {
-  color: var(--text-secondary);
-}
-
 .hint {
   font-size: var(--text-xs);
   color: var(--text-secondary);
@@ -97,12 +74,6 @@
   border-top: 1px solid var(--border);
   padding-top: var(--space-3);
 }
-.decideFields {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
 .decideActions {
   display: flex;
   gap: var(--space-2);
@@ -137,10 +108,4 @@
 }
 .denyButton:hover:not(:disabled) {
   background: var(--status-bad-bg);
-}
-
-.askForm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }

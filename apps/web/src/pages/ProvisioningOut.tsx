@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { Button } from '../components/Button'
-import { cx } from '../lib/cx'
+import { Field, controlClass } from '../components/Form'
 import styles from './ProvisioningOut.module.css'
 import { PageHeader } from '../components/PageHeader'
 import {
@@ -147,13 +147,12 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
       }}
     >
       <div className={styles.formRow}>
-        <label className={cx(styles.label, styles.labelOne)}>
-          <span className={styles.labelText}>Application</span>
+        <Field label={<>Application</>} grow={1}>
           <select
             value={applicationId}
             onChange={(event) => setApplicationId(event.target.value)}
             required
-            className={styles.field}
+            className={controlClass()}
           >
             <option value="">Choose one…</option>
             {options.map((application) => (
@@ -162,33 +161,31 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
               </option>
             ))}
           </select>
-        </label>
-        <label className={cx(styles.label, styles.labelTwo)}>
-          <span className={styles.labelText}>Its SCIM root</span>
+        </Field>
+        <Field label={<>Its SCIM root</>} grow={2}>
           <input
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
             placeholder="http://hrms:8000/scim/v2"
             required
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
+        </Field>
       </div>
 
-      <label className={styles.label}>
-        <span className={styles.labelText}>The token it issued us</span>
+      <Field label={<>The token it issued us</>}>
         <input
           value={token}
           onChange={(event) => setToken(event.target.value)}
           type="password"
           required
-          className={cx(styles.field, styles.fieldMono)}
+          className={controlClass(true)}
         />
         <span className={styles.hint}>
           Stored encrypted. No screen and no endpoint can read it back, so keep it wherever
           you keep the rest of your secrets — changing it means sending a new one.
         </span>
-      </label>
+      </Field>
 
       <p className={styles.hint}>
         Who gets pushed is whoever has access to the application, directly or through a
@@ -236,7 +233,7 @@ function RotateForm({ target, onDone }: { target: ProvisioningTarget; onDone: ()
         type="password"
         placeholder="the new token"
         aria-label={`New token for ${target.application_name}`}
-        className={cx(styles.field, styles.fieldMonoSmall)}
+        className={controlClass(true)}
       />
       <span className={styles.confirmActions}>
         <Button type="submit" variant="accent" disabled={rotate.isPending || !token}>

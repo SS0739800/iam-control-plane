@@ -1,22 +1,3 @@
-.field {
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  padding: 4px var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-}
-
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--text-sm);
-}
-.labelText {
-  color: var(--text-secondary);
-}
-
 .hint {
   font-size: var(--text-xs);
   color: var(--text-secondary);

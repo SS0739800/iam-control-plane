@@ -5,24 +5,24 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import {
-  Empty,
   ErrorBox,
   LinkCell,
   Loading,
   Mono,
   Pager,
   Panel,
-  Pill,
+  StatusBadge,
   Row,
-  TableWrap,
-  Td,
-  Th,
 } from '../components/ui'
 import {
   ApplicationAccessPanels,
   ApplicationSamlPanels,
 } from '../components/ApplicationSamlPanels'
 import { RegisterApplication } from '../components/RegisterApplication'
+import { Button } from '../components/Button'
+import { DataTable, ToolbarButton } from '../components/DataTable'
+import { RefreshIcon } from '../components/icons'
+import { Tabs } from '../components/Tabs'
 import styles from './Applications.module.css'
 import { PageHeader } from '../components/PageHeader'
 import { fetchApplication, fetchApplications, fetchMe } from '../lib/api'
@@ -47,69 +47,87 @@ export function ApplicationsPage() {
         title="Applications"
         description="What people sign in to, and who is allowed to."
       />
-      <Panel
-        title={apps.data ? `${apps.data.total.toLocaleString()} applications` : 'Applications'}
-        action={
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value)
-            setOffset(0)
+      <DataTable
+          status={apps.isError ? 'error' : apps.isPending ? 'pending' : 'success'}
+          error={apps.error}
+          onRetry={() => void apps.refetch()}
+          rows={apps.data?.items ?? []}
+          rowKey={(app) => app.id}
+          actions={
+            <ToolbarButton
+              icon={<RefreshIcon />}
+              onClick={() => void apps.refetch()}
+              disabled={apps.isFetching}
+            >
+              {apps.isFetching ? 'Refreshing…' : 'Refresh'}
+            </ToolbarButton>
+          }
+          search={{
+            value: search,
+            onChange: (value) => {
+              setSearch(value)
+              setOffset(0)
+            },
+            label: 'Search applications',
+            placeholder: 'Search name',
           }}
-          placeholder="Search name"
-          aria-label="Search applications"
-          className={styles.search}
+          count={
+            apps.data
+              ? `${apps.data.total.toLocaleString()} ${apps.data.total === 1 ? 'application' : 'applications'} found`
+              : null
+          }
+          empty={{
+            title: search ? 'No applications match that search' : 'No applications yet',
+            body: search
+              ? 'Try a different search term.'
+              : 'Register one below to give people access to it.',
+            actions: search ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSearch('')
+                  setOffset(0)
+                }}
+              >
+                Clear search
+              </Button>
+            ) : null,
+          }}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              cell: (app) => <LinkCell to={`/applications/${app.id}`}>{app.name}</LinkCell>,
+            },
+            { key: 'protocol', header: 'Login method', cell: (app) => <Mono>{app.protocol}</Mono> },
+            { key: 'description', header: 'Description', cell: (app) => app.description ?? '—' },
+            {
+              key: 'status',
+              header: 'Status',
+              cell: (app) => (
+                <StatusBadge tone={app.status === 'active' ? 'ok' : 'muted'}>
+                  {app.status}
+                </StatusBadge>
+              ),
+            },
+            {
+              key: 'assignments',
+              header: 'Assignments',
+              numeric: true,
+              cell: (app) => app.assignment_count.toLocaleString(),
+            },
+          ]}
+          footer={
+            apps.data ? (
+              <Pager
+                total={apps.data.total}
+                limit={apps.data.limit}
+                offset={apps.data.offset}
+                onChange={setOffset}
+              />
+            ) : null
+          }
         />
-      }
-    >
-      {apps.isError ? (
-        <ErrorBox error={apps.error} />
-      ) : apps.isPending ? (
-        <Loading />
-      ) : apps.data.items.length === 0 ? (
-        <Empty>No applications match that search.</Empty>
-      ) : (
-        <>
-          <TableWrap>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <Th>Name</Th>
-                  <Th>Login method</Th>
-                  <Th>Description</Th>
-                  <Th>Status</Th>
-                  <Th right>Assignments</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {apps.data.items.map((app) => (
-                  <tr key={app.id}>
-                    <Td>
-                      <LinkCell to={`/applications/${app.id}`}>{app.name}</LinkCell>
-                    </Td>
-                    <Td>
-                      <Mono>{app.protocol}</Mono>
-                    </Td>
-                    <Td>{app.description ?? '—'}</Td>
-                    <Td>
-                      <Pill tone={app.status === 'active' ? 'ok' : 'muted'}>{app.status}</Pill>
-                    </Td>
-                    <Td right>{app.assignment_count.toLocaleString()}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableWrap>
-          <Pager
-            total={apps.data.total}
-            limit={apps.data.limit}
-            offset={apps.data.offset}
-            onChange={setOffset}
-          />
-        </>
-      )}
-      </Panel>
 
       {canWrite ? <RegisterApplication /> : null}
     </div>
@@ -136,27 +154,49 @@ export function ApplicationDetailPage() {
         description={data.description ?? undefined}
         trail={[{ label: 'Applications', to: '/applications' }, { label: data.name }]}
         actions={
-          <Pill tone={data.status === 'active' ? 'ok' : 'muted'}>{data.status}</Pill>
+          <StatusBadge tone={data.status === 'active' ? 'ok' : 'muted'}>
+            {data.status}
+          </StatusBadge>
         }
       />
 
-      <Panel title="Overview">
-        <dl>
-          <Row label="Login method">
-            <Mono>{data.protocol}</Mono>
-          </Row>
-          <Row label="Short name">
-            <Mono>{data.slug}</Mono>
-          </Row>
-        </dl>
-      </Panel>
-
-      {/* Access first, and for every application. It is the question somebody opens
-          this page to answer, and it is not a SAML concept — which is exactly the
-          mistake that left the HRMS with no way to grant anybody access. */}
-      <ApplicationAccessPanels app={data} canWrite={canWrite} />
-
-      {isSaml ? <ApplicationSamlPanels app={data} /> : null}
+      <Tabs
+        tabs={[
+          {
+            id: 'overview',
+            label: 'Overview',
+            content: (
+              <Panel flush title="Properties">
+                <dl>
+                  <Row label="Login method">
+                    <Mono>{data.protocol}</Mono>
+                  </Row>
+                  <Row label="Short name">
+                    <Mono>{data.slug}</Mono>
+                  </Row>
+                </dl>
+              </Panel>
+            ),
+          },
+          {
+            /* Access is the question somebody opens this page to answer, and it
+               isn't a SAML concept — which is what left the HRMS with no way to
+               grant anybody access. */
+            id: 'access',
+            label: 'Access',
+            content: <ApplicationAccessPanels app={data} canWrite={canWrite} />,
+          },
+          ...(isSaml
+            ? [
+                {
+                  id: 'saml',
+                  label: 'SAML',
+                  content: <ApplicationSamlPanels app={data} />,
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   )
 }

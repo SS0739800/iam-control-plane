@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Button } from './Button'
+import { Field, controlClass } from './Form'
 import {
   type GroupDetail,
   addToGroup,
@@ -50,15 +51,14 @@ function AddMember({ group }: { group: GroupDetail }) {
 
   return (
     <div className={styles.addMember}>
-      <label className={styles.label}>
-        <span className={styles.labelText}>Add somebody</span>
+      <Field label="Add somebody">
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search by name or login"
-          className={styles.field}
+          className={controlClass()}
         />
-      </label>
+      </Field>
 
       {query.trim().length >= 2 && found.data && candidates.length === 0 ? (
         <p className={styles.hint}>
@@ -146,7 +146,7 @@ export default function GroupMembers({
   const showingAll = group.members.length >= group.member_count
 
   return (
-    <Panel title={`Members (${group.member_count.toLocaleString()})`}>
+    <Panel flush title={`Members (${group.member_count.toLocaleString()})`}>
       {group.members.length === 0 ? (
         <Empty>No members.</Empty>
       ) : (

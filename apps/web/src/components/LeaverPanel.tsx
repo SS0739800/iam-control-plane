@@ -51,7 +51,7 @@ export default function LeaverPanel({
   const managedByProvider = person.source === 'scim'
 
   return (
-    <Panel title={person.active ? 'When they leave' : 'They have left'}>
+    <Panel flush title={person.active ? 'When they leave' : 'They have left'}>
       <div className={styles.body}>
         {person.active ? (
           <>

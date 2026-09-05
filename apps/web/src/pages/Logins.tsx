@@ -13,18 +13,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { Button } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import {
   Dot,
-  Empty,
   ErrorBox,
   Loading,
   Mono,
   Panel,
-  Pill,
+  StatusBadge,
   Row,
-  TableWrap,
-  Td,
-  Th,
   type Tone,
 } from '../components/ui'
 import {
@@ -148,128 +146,131 @@ export default function LoginsPage() {
         </p>
       </Panel>
 
-      <Panel
-        title="Sign-in attempts"
-        action={
-          <span className={styles.filters}>
-            <label className={styles.filterLabel}>
-              <span className={styles.filterLabelText}>Outcome</span>
-              <select
-                value={outcome}
-                onChange={(event) =>
-                  refilter(() => setOutcome(event.target.value as OutcomeFilter))
-                }
-                className={styles.select}
-              >
-                <option value="all">All</option>
-                <option value="failure">Refused</option>
-                <option value="success">Accepted</option>
-              </select>
-            </label>
-            <label className={styles.filterLabel}>
-              <span className={styles.filterLabelText}>Provider</span>
-              <select
-                value={idp}
-                onChange={(event) => refilter(() => setIdp(event.target.value))}
-                className={styles.select}
-              >
-                <option value="all">All</option>
-                {(providers.data ?? []).map((provider) => (
-                  <option key={provider.slug} value={provider.slug}>
-                    {provider.slug}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </span>
-        }
-      >
-        {page.isError ? (
-          <ErrorBox error={page.error} />
-        ) : attempts.length === 0 && page.isPending ? (
-          <Loading />
-        ) : attempts.length === 0 ? (
-          <Empty>
-            No sign-in attempts yet. Start one at <Mono>/saml/login?idp=authentik</Mono>.
-          </Empty>
-        ) : (
-          <>
-            <TableWrap>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <Th>When</Th>
-                    <Th>Who</Th>
-                    <Th>Provider</Th>
-                    <Th>Result</Th>
-                    <Th>Failed</Th>
-                    <Th right>Entry</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attempts.map((attempt) => (
-                    <tr key={attempt.id}>
-                      <Td>
-                        <span className={styles.whenCell}>
-                          {new Date(attempt.occurred_at).toLocaleString()}
-                        </span>
-                      </Td>
-                      <Td>{attempt.who}</Td>
-                      <Td>
-                        <Mono>{attempt.idp ?? '—'}</Mono>
-                      </Td>
-                      <Td>
-                        <Pill tone={outcomeTone(attempt.outcome)}>
-                          {attempt.outcome === 'success' ? 'accepted' : 'refused'}
-                        </Pill>
-                      </Td>
-                      <Td>
-                        {attempt.failed_checks.length === 0 ? (
-                          <span className={styles.mutedCell}>—</span>
-                        ) : (
-                          <Mono>{attempt.failed_checks.join(', ')}</Mono>
-                        )}
-                      </Td>
-                      <Td right>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpanded(expanded === attempt.id ? null : attempt.id)
-                          }
-                          aria-expanded={expanded === attempt.id}
-                          className={styles.entryLink}
-                        >
-                          #{attempt.id}
-                        </button>
-                      </Td>
-                    </tr>
+      <DataTable
+          status={
+            page.isError
+              ? 'error'
+              : attempts.length === 0 && page.isPending
+                ? 'pending'
+                : 'success'
+          }
+          error={page.error}
+          onRetry={() => void page.refetch()}
+          rows={attempts}
+          rowKey={(attempt) => String(attempt.id)}
+          filters={
+            <>
+              <label className={styles.filterLabel}>
+                <span className={styles.filterLabelText}>Outcome</span>
+                <select
+                  value={outcome}
+                  onChange={(event) =>
+                    refilter(() => setOutcome(event.target.value as OutcomeFilter))
+                  }
+                  className={styles.select}
+                >
+                  <option value="all">All</option>
+                  <option value="failure">Refused</option>
+                  <option value="success">Accepted</option>
+                </select>
+              </label>
+              <label className={styles.filterLabel}>
+                <span className={styles.filterLabelText}>Provider</span>
+                <select
+                  value={idp}
+                  onChange={(event) => refilter(() => setIdp(event.target.value))}
+                  className={styles.select}
+                >
+                  <option value="all">All</option>
+                  {(providers.data ?? []).map((provider) => (
+                    <option key={provider.slug} value={provider.slug}>
+                      {provider.slug}
+                    </option>
                   ))}
-                </tbody>
-              </table>
-            </TableWrap>
-
-            {expanded === null ? null : (
-              <ExpandedAttempt attempt={attempts.find((row) => row.id === expanded)!} />
-            )}
-
+                </select>
+              </label>
+            </>
+          }
+          empty={{
+            title: 'No sign-in attempts yet',
+            body: (
+              <>
+                Start one at <Mono>/saml/login?idp=authentik</Mono>.
+              </>
+            ),
+          }}
+          columns={[
+            {
+              key: 'when',
+              header: 'When',
+              cell: (attempt) => (
+                <span className={styles.whenCell}>
+                  {new Date(attempt.occurred_at).toLocaleString()}
+                </span>
+              ),
+            },
+            { key: 'who', header: 'Who', cell: (attempt) => attempt.who },
+            {
+              key: 'provider',
+              header: 'Provider',
+              cell: (attempt) => <Mono>{attempt.idp ?? '—'}</Mono>,
+            },
+            {
+              key: 'result',
+              header: 'Result',
+              cell: (attempt) => (
+                <StatusBadge tone={outcomeTone(attempt.outcome)}>
+                  {attempt.outcome === 'success' ? 'accepted' : 'refused'}
+                </StatusBadge>
+              ),
+            },
+            {
+              key: 'failed',
+              header: 'Failed',
+              cell: (attempt) =>
+                attempt.failed_checks.length === 0 ? (
+                  <span className={styles.mutedCell}>—</span>
+                ) : (
+                  <Mono>{attempt.failed_checks.join(', ')}</Mono>
+                ),
+            },
+            {
+              key: 'entry',
+              header: 'Entry',
+              numeric: true,
+              cell: (attempt) => (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(expanded === attempt.id ? null : attempt.id)}
+                  aria-expanded={expanded === attempt.id}
+                  className={styles.entryLink}
+                >
+                  #{attempt.id}
+                </button>
+              ),
+            },
+          ]}
+          expanded={{
+            isOpen: (attempt) => expanded === attempt.id,
+            render: (attempt) => <ExpandedAttempt attempt={attempt} />,
+          }}
+          footer={
             <div className={styles.footer}>
               <span className={styles.loadedCount}>{attempts.length.toLocaleString()} loaded</span>
               {page.data?.next_cursor ? (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={() => setCursor(page.data.next_cursor ?? undefined)}
                   disabled={page.isFetching}
-                  className={styles.loadMore}
                 >
                   {page.isFetching ? 'Loading…' : 'Load more'}
-                </button>
+                </Button>
               ) : (
                 <span className={styles.endOfList}>End of the list</span>
               )}
             </div>
-          </>
-        )}
-      </Panel>
+          }
+        />
     </div>
   )
 }

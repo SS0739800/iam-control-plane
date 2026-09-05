@@ -29,6 +29,7 @@ import {
   revokeAppAccessFromUser,
 } from '../lib/api'
 import { Button } from './Button'
+import { Field, controlClass } from './Form'
 import { cx } from '../lib/cx'
 import styles from './ApplicationSamlPanels.module.css'
 import { Empty, ErrorBox, LinkCell, Mono, Panel, Pill, Row } from './ui'
@@ -116,28 +117,26 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
       }}
     >
       <div className={styles.formRow}>
-        <label className={styles.label}>
-          <span className={styles.labelText}>Give access to</span>
+        <Field label={<>Give access to</>}>
           <select
             value={kind}
             onChange={(event) => {
               setKind(event.target.value as 'group' | 'user')
               setSubject('')
             }}
-            className={styles.field}
+            className={controlClass()}
           >
             <option value="group">a group</option>
             <option value="user">one person</option>
           </select>
-        </label>
+        </Field>
 
         {kind === 'group' ? (
-          <label className={cx(styles.label, styles.labelGrow)}>
-            <span className={styles.labelText}>Which group</span>
+          <Field label={<>Which group</>} grow={1}>
             <select
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
-              className={styles.field}
+              className={controlClass()}
               required
             >
               <option value="">choose…</option>
@@ -147,10 +146,9 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
                 </option>
               ))}
             </select>
-          </label>
+          </Field>
         ) : (
-          <label className={cx(styles.label, styles.labelGrow)}>
-            <span className={styles.labelText}>Who</span>
+          <Field label={<>Who</>} grow={1}>
             <input
               value={query}
               onChange={(event) => {
@@ -160,7 +158,7 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
                 setSubject('')
               }}
               placeholder="Search by name or login"
-              className={styles.field}
+              className={controlClass()}
             />
             {query.trim().length >= 2 ? (
               <span className={styles.picker}>
@@ -191,18 +189,17 @@ function GrantForm({ appId, onDone }: { appId: string; onDone: () => void }) {
                 )}
               </span>
             ) : null}
-          </label>
+          </Field>
         )}
 
-        <label className={styles.label}>
-          <span className={styles.labelText}>Role in the app (optional)</span>
+        <Field label={<>Role in the app (optional)</>}>
           <input
             value={role}
             onChange={(event) => setRole(event.target.value)}
             placeholder="Employee"
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
+        </Field>
       </div>
 
       {kind === 'group' ? (
@@ -237,7 +234,7 @@ export function ApplicationSamlPanels({ app }: { app: ApplicationDetail }) {
 
   return (
     <>
-      <Panel title="How this application is wired to us">
+      <Panel flush title="How this application is wired to us">
         {ready ? (
           <p className={styles.intro}>
             Read on every login. The entity ID is what an incoming request is matched against,
@@ -333,7 +330,7 @@ export function ApplicationAccessPanels({
 
   return (
     <>
-      <Panel title={`Access via groups (${app.assigned_groups.length})`}>
+      <Panel flush title={`Access via groups (${app.assigned_groups.length})`}>
         {app.assigned_groups.length === 0 ? (
           <Empty>No groups grant access to this application.</Empty>
         ) : (
@@ -366,7 +363,7 @@ export function ApplicationAccessPanels({
         {removeGroup.isError ? <ErrorBox error={removeGroup.error} /> : null}
       </Panel>
 
-      <Panel title={`Access given directly (${app.assigned_users.length})`}>
+      <Panel flush title={`Access given directly (${app.assigned_users.length})`}>
         {app.assigned_users.length === 0 ? (
           <Empty>Nobody has been given access directly.</Empty>
         ) : (

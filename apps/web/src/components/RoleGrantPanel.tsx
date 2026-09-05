@@ -26,7 +26,7 @@ import {
   revokeRole,
 } from '../lib/api'
 import { Button } from './Button'
-import { cx } from '../lib/cx'
+import { Field, FieldRow, Form, FormActions, controlClass } from './Form'
 import styles from './RoleGrantPanel.module.css'
 import { Empty, ErrorBox, Loading, Mono, Panel, Pill, type Tone } from './ui'
 
@@ -75,20 +75,13 @@ function GrantForm({ userId, onDone }: { userId: string; onDone: () => void }) {
   })
 
   return (
-    <form
-      className={styles.form}
-      onSubmit={(event) => {
-        event.preventDefault()
-        grant.mutate()
-      }}
-    >
-      <div className={styles.formRow}>
-        <label className={styles.label}>
-          <span className={styles.labelText}>Role</span>
+    <Form onSubmit={() => grant.mutate()}>
+      <FieldRow>
+        <Field label="Role">
           <select
             value={role}
             onChange={(event) => setRole(event.target.value as PlatformRole)}
-            className={styles.field}
+            className={controlClass()}
           >
             {GRANTABLE.map((option) => (
               <option key={option} value={option}>
@@ -96,30 +89,26 @@ function GrantForm({ userId, onDone }: { userId: string; onDone: () => void }) {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
-        <label className={cx(styles.label, styles.labelGrow)}>
-          <span className={styles.labelText}>Why</span>
+        <Field label="Why" grow={1}>
           <input
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Covering the migration weekend"
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
+        </Field>
 
-        <label className={styles.label}>
-          <span className={styles.labelText}>
-            Until (optional)
-          </span>
+        <Field label="Until (optional)">
           <input
             type="date"
             value={expires}
             onChange={(event) => setExpires(event.target.value)}
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
-      </div>
+        </Field>
+      </FieldRow>
 
       {role === 'admin' && !expires ? (
         <p className={styles.warning}>
@@ -130,10 +119,12 @@ function GrantForm({ userId, onDone }: { userId: string; onDone: () => void }) {
 
       {grant.isError ? <ErrorBox error={grant.error} /> : null}
 
-      <Button type="submit" variant="accent" disabled={grant.isPending}>
-        {grant.isPending ? 'Granting…' : 'Grant role'}
-      </Button>
-    </form>
+      <FormActions>
+        <Button type="submit" variant="accent" disabled={grant.isPending}>
+          {grant.isPending ? 'Granting…' : 'Grant role'}
+        </Button>
+      </FormActions>
+    </Form>
   )
 }
 
@@ -236,13 +227,13 @@ export default function RoleGrantPanel({
 
   if (summary.isPending)
     return (
-      <Panel title="Console role">
+      <Panel flush title="Console role">
         <Loading />
       </Panel>
     )
   if (summary.isError)
     return (
-      <Panel title="Console role">
+      <Panel flush title="Console role">
         <ErrorBox error={summary.error} />
       </Panel>
     )
@@ -250,7 +241,7 @@ export default function RoleGrantPanel({
   const history = summary.data.grant_history ?? []
 
   return (
-    <Panel title="Console role">
+    <Panel flush title="Console role">
       <div className={styles.body}>
         <CurrentRole
           summary={summary.data}

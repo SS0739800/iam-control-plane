@@ -15,32 +15,10 @@
   border-collapse: collapse;
 }
 
-/* Inputs, selects and textareas all share this. */
-.field {
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  padding: 4px var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-}
-
 .form {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--text-sm);
-}
-.labelGrow {
-  flex: 1;
-}
-.labelText {
-  color: var(--text-secondary);
 }
 .conditionRow {
   display: flex;

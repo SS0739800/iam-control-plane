@@ -173,6 +173,9 @@ export interface UserListParams {
   active?: boolean
   department?: string
   platform_role?: PlatformRole
+  /** One of the columns the API allows sorting by. */
+  sort?: string
+  order?: 'asc' | 'desc'
   limit?: number
   offset?: number
 }

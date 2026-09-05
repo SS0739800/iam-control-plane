@@ -13,16 +13,13 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { Button } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import {
-  Empty,
   ErrorBox,
-  Loading,
   Mono,
   Panel,
   Pill,
-  TableWrap,
-  Td,
-  Th,
+  StatusBadge,
   type Tone,
 } from '../components/ui'
 import { type AuditEvent, fetchAuditEvents, verifyAuditChain } from '../lib/api'
@@ -91,75 +88,74 @@ export default function AuditPage() {
         )}
       </Panel>
 
-      <Panel title="Activity">
-        {page.isError ? (
-          <ErrorBox error={page.error} />
-        ) : events.length === 0 && page.isPending ? (
-          <Loading />
-        ) : events.length === 0 ? (
-          <Empty>Nothing logged yet.</Empty>
-        ) : (
-          <>
-            <TableWrap>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <Th>When</Th>
-                    <Th>Who</Th>
-                    <Th>What</Th>
-                    <Th>Target</Th>
-                    <Th>Result</Th>
-                    <Th right>Entry</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.map((event) => (
-                    <tr key={event.id}>
-                      <Td>
-                        <span className={styles.whenCell}>
-                          {new Date(event.occurred_at).toLocaleString()}
-                        </span>
-                      </Td>
-                      <Td>{event.actor_label}</Td>
-                      <Td>
-                        <Mono>{event.action}</Mono>
-                      </Td>
-                      <Td>{event.target_label ?? '—'}</Td>
-                      <Td>
-                        <Pill tone={outcomeTone(event.outcome)}>{event.outcome}</Pill>
-                      </Td>
-                      <Td right>
-                        <button
-                          type="button"
-                          onClick={() => setExpanded(expanded === event.id ? null : event.id)}
-                          aria-expanded={expanded === event.id}
-                          className={styles.entryLink}
-                        >
-                          #{event.id}
-                        </button>
-                        {expanded === event.id ? (
-                          <dl className={styles.entryDetail}>
-                            <div>
-                              <dt>prev: </dt>
-                              <dd>{event.prev_hash}</dd>
-                            </div>
-                            <div>
-                              <dt>this: </dt>
-                              <dd>{event.hash}</dd>
-                            </div>
-                            <div>
-                              <dt>detail: </dt>
-                              <dd>{JSON.stringify(event.detail)}</dd>
-                            </div>
-                          </dl>
-                        ) : null}
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </TableWrap>
-
+      <DataTable
+          status={
+            page.isError ? 'error' : events.length === 0 && page.isPending ? 'pending' : 'success'
+          }
+          error={page.error}
+          onRetry={() => void page.refetch()}
+          rows={events}
+          rowKey={(event) => String(event.id)}
+          empty={{
+            title: 'Nothing logged yet',
+            body: 'Every change the platform makes is recorded here as it happens.',
+          }}
+          columns={[
+            {
+              key: 'when',
+              header: 'When',
+              cell: (event) => (
+                <span className={styles.whenCell}>
+                  {new Date(event.occurred_at).toLocaleString()}
+                </span>
+              ),
+            },
+            { key: 'who', header: 'Who', cell: (event) => event.actor_label },
+            { key: 'what', header: 'What', cell: (event) => <Mono>{event.action}</Mono> },
+            { key: 'target', header: 'Target', cell: (event) => event.target_label ?? '—' },
+            {
+              key: 'result',
+              header: 'Result',
+              cell: (event) => (
+                <StatusBadge tone={outcomeTone(event.outcome)}>{event.outcome}</StatusBadge>
+              ),
+            },
+            {
+              key: 'entry',
+              header: 'Entry',
+              numeric: true,
+              cell: (event) => (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(expanded === event.id ? null : event.id)}
+                  aria-expanded={expanded === event.id}
+                  className={styles.entryLink}
+                >
+                  #{event.id}
+                </button>
+              ),
+            },
+          ]}
+          expanded={{
+            isOpen: (event) => expanded === event.id,
+            render: (event) => (
+              <dl className={styles.entryDetail}>
+                <div>
+                  <dt>prev: </dt>
+                  <dd>{event.prev_hash}</dd>
+                </div>
+                <div>
+                  <dt>this: </dt>
+                  <dd>{event.hash}</dd>
+                </div>
+                <div>
+                  <dt>detail: </dt>
+                  <dd>{JSON.stringify(event.detail)}</dd>
+                </div>
+              </dl>
+            ),
+          }}
+          footer={
             <div className={styles.footer}>
               <span className={styles.loadedCount}>{events.length.toLocaleString()} loaded</span>
               {page.data?.next_cursor ? (
@@ -174,9 +170,8 @@ export default function AuditPage() {
                 <span className={styles.endOfLog}>End of the log</span>
               )}
             </div>
-          </>
-        )}
-      </Panel>
+          }
+        />
     </div>
   )
 }

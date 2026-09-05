@@ -19,7 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { Button } from '../components/Button'
-import { cx } from '../lib/cx'
+import { Field, FieldRow, Form, FormActions, controlClass } from '../components/Form'
 import { Empty, ErrorBox, Loading, Panel, Pill, type Tone } from '../components/ui'
 import styles from './AccessRequests.module.css'
 import { PageHeader } from '../components/PageHeader'
@@ -81,26 +81,24 @@ function DecideForm({ request, onDone }: { request: AccessRequest; onDone: () =>
 
   return (
     <div className={styles.decideForm}>
-      <div className={styles.decideFields}>
-        <label className={cx(styles.label, styles.labelGrow)}>
-          <span className={styles.labelText}>What you decided, and why</span>
+      <FieldRow>
+        <Field label="What you decided, and why" grow={1}>
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="Agreed with their manager. Ends with the quarter."
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
-        <label className={styles.label}>
-          <span className={styles.labelText}>Until (optional)</span>
+        </Field>
+        <Field label="Until (optional)">
           <input
             type="date"
             value={until}
             onChange={(event) => setUntil(event.target.value)}
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
-      </div>
+        </Field>
+      </FieldRow>
 
       {!until ? (
         <p className={styles.hint}>
@@ -221,19 +219,12 @@ function AskForm({ onDone }: { onDone: () => void }) {
   })
 
   return (
-    <form
-      className={styles.askForm}
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (groupId && reason.trim()) ask.mutate()
-      }}
-    >
-      <label className={styles.label}>
-        <span className={styles.labelText}>What do you need?</span>
+    <Form onSubmit={() => { if (groupId && reason.trim()) ask.mutate() }}>
+      <Field label="What do you need?" required>
         <select
           value={groupId}
           onChange={(event) => setGroupId(event.target.value)}
-          className={styles.field}
+          className={controlClass()}
           required
         >
           <option value="">choose a group…</option>
@@ -243,35 +234,31 @@ function AskForm({ onDone }: { onDone: () => void }) {
             </option>
           ))}
         </select>
-      </label>
+      </Field>
 
-      <label className={styles.label}>
-        <span className={styles.labelText}>Why do you need it?</span>
+      <Field
+        label="Why do you need it?"
+        required
+        description="Whoever decides this will read only what you write here."
+      >
         <textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           rows={3}
           placeholder="Covering month-end close while Priya is away."
-          className={styles.field}
+          className={controlClass()}
           required
         />
-        <span className={styles.hint}>
-          Whoever decides this will read only what you write here.
-        </span>
-      </label>
+      </Field>
 
       {ask.isError ? <ErrorBox error={ask.error} /> : null}
 
-      <span>
-        <Button
-          type="submit"
-          variant="accent"
-          disabled={ask.isPending || !groupId || !reason.trim()}
-        >
+      <FormActions>
+        <Button type="submit" variant="accent" disabled={ask.isPending || !groupId || !reason.trim()}>
           {ask.isPending ? 'Sending…' : 'Ask for access'}
         </Button>
-      </span>
-    </form>
+      </FormActions>
+    </Form>
   )
 }
 

@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { Button } from '../components/Button'
+import { Field, controlClass } from '../components/Form'
 import { cx } from '../lib/cx'
 import styles from './AccessRules.module.css'
 import { PageHeader } from '../components/PageHeader'
@@ -75,7 +76,8 @@ function PreviewResult({ preview }: { preview: RulePreview }) {
         {preview.sentence} → {preview.group_name}
       </p>
       <p>
-        Matches <strong className={styles.previewCount}>{preview.matches.toLocaleString()}</strong>{' '}
+        Matches{' '}
+        <strong className={styles.previewCount}>{preview.matches.toLocaleString()}</strong>{' '}
         {preview.matches === 1 ? 'person' : 'people'}. Would add{' '}
         <strong className={styles.previewCount}>
           {preview.would_be_added.toLocaleString()}
@@ -160,8 +162,7 @@ function NewRuleForm() {
         else if (ready) preview.mutate()
       }}
     >
-      <label className={styles.label}>
-        <span className={styles.labelText}>Name this rule</span>
+      <Field label={<>Name this rule</>}>
         <input
           value={name}
           onChange={(event) => {
@@ -169,21 +170,20 @@ function NewRuleForm() {
             clearPreview()
           }}
           placeholder="Engineering staff get the Engineering group"
-          className={styles.field}
+          className={controlClass()}
           required
         />
-      </label>
+      </Field>
 
       <div className={styles.conditionRow}>
-        <label className={styles.label}>
-          <span className={styles.labelText}>When</span>
+        <Field label={<>When</>}>
           <select
             value={attribute}
             onChange={(event) => {
               setAttribute(event.target.value)
               clearPreview()
             }}
-            className={styles.field}
+            className={controlClass()}
           >
             {(attributes.data ?? []).map((entry) => (
               <option key={entry.name} value={entry.name}>
@@ -191,17 +191,16 @@ function NewRuleForm() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
-        <label className={styles.label}>
-          <span className={styles.labelText}>&nbsp;</span>
+        <Field label={<>&nbsp;</>}>
           <select
             value={operator}
             onChange={(event) => {
               setOperator(event.target.value as RuleOperator)
               clearPreview()
             }}
-            className={styles.field}
+            className={controlClass()}
           >
             {OPERATORS.map((entry) => (
               <option key={entry.value} value={entry.value}>
@@ -209,11 +208,10 @@ function NewRuleForm() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
         {takesValue(operator) ? (
-          <label className={cx(styles.label, styles.labelGrow)}>
-            <span className={styles.labelText}>&nbsp;</span>
+          <Field label={<>&nbsp;</>} grow={1}>
             <input
               value={value}
               onChange={(event) => {
@@ -221,21 +219,20 @@ function NewRuleForm() {
                 clearPreview()
               }}
               placeholder="Engineering"
-              className={styles.field}
+              className={controlClass()}
               required
             />
-          </label>
+          </Field>
         ) : null}
 
-        <label className={styles.label}>
-          <span className={styles.labelText}>put them in</span>
+        <Field label={<>put them in</>}>
           <select
             value={groupId}
             onChange={(event) => {
               setGroupId(event.target.value)
               clearPreview()
             }}
-            className={styles.field}
+            className={controlClass()}
             required
           >
             <option value="">choose a group…</option>
@@ -245,7 +242,7 @@ function NewRuleForm() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
       </div>
 
       {preview.isError ? <ErrorBox error={preview.error} /> : null}
@@ -324,110 +321,110 @@ function RuleRow({ rule, canWrite }: { rule: AccessRule; canWrite: boolean }) {
 
   return (
     <>
-    <tr>
-      <Td>
-        <span className={styles.ruleName}>{rule.name}</span>
-        <span className={styles.ruleDetail}>{rule.sentence}</span>
-        {rule.description ? (
-          <span className={styles.ruleDetail}>{rule.description}</span>
-        ) : null}
-      </Td>
-      <Td>{rule.group_name}</Td>
-      <Td>
-        <Pill tone={rule.enabled ? 'ok' : 'muted'}>{rule.enabled ? 'on' : 'off'}</Pill>
-      </Td>
-      <Td right>
-        <span className={styles.memberCount}>{rule.member_count.toLocaleString()}</span>
-      </Td>
-      <Td right>
-        {canWrite ? (
-          confirming ? (
-            <span className={styles.confirm}>
-              <span className={styles.confirmText}>
-                Delete this rule? Everyone it put in {rule.group_name} loses that membership.
-              </span>
-              <span className={styles.confirmActions}>
-                <Button
-                  variant="danger-solid"
-                  onClick={() => remove.mutate()}
-                  disabled={remove.isPending}
-                >
-                  {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
-                </Button>
-                <Button variant="secondary" onClick={() => setConfirming(false)}>
-                  Cancel
-                </Button>
-              </span>
-            </span>
-          ) : (
-            <span className={styles.rowActions}>
-              <Button variant="secondary" onClick={() => setShowing(!showing)}>
-                {showing ? 'Hide who' : 'Who it catches'}
-              </Button>
-              <Button
-                variant="accent"
-                onClick={() => run.mutate()}
-                disabled={run.isPending || !rule.enabled}
-                title={
-                  rule.enabled
-                    ? 'Apply this rule to everybody now'
-                    : 'Turn the rule on before running it'
-                }
-              >
-                {run.isPending ? 'Running…' : 'Run now'}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => toggle.mutate()}
-                disabled={toggle.isPending}
-              >
-                {rule.enabled ? 'Turn off' : 'Turn on'}
-              </Button>
-              <Button variant="danger" onClick={() => setConfirming(true)}>
-                Delete
-              </Button>
-            </span>
-          )
-        ) : null}
-        {run.data ? (
-          <span className={styles.runResult}>
-            {run.data.added} added, {run.data.removed} removed, {run.data.unchanged}{' '}
-            already right
-          </span>
-        ) : null}
-        {toggle.isError ? <ErrorBox error={toggle.error} /> : null}
-        {remove.isError ? <ErrorBox error={remove.error} /> : null}
-        {run.isError ? <ErrorBox error={run.error} /> : null}
-      </Td>
-    </tr>
-
-    {showing ? (
       <tr>
-        <Td colSpan={5}>
-          {affected.isPending ? (
-            <Loading />
-          ) : affected.isError ? (
-            <ErrorBox error={affected.error} />
-          ) : affected.data.length === 0 ? (
-            <Empty>
-              This rule matches nobody at the moment. Anybody it put in{' '}
-              {rule.group_name} stays there until it runs again.
-            </Empty>
-          ) : (
-            <ul className={styles.affectedList}>
-              {affected.data.map((person) => (
-                <li key={person.id} className={styles.affectedPerson}>
-                  <LinkCell to={`/users/${person.id}`}>{person.display_name}</LinkCell>
-                  <span className={styles.affectedMeta}>
-                    {[person.department, person.job_title].filter(Boolean).join(' · ') || '—'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Td>
+          <span className={styles.ruleName}>{rule.name}</span>
+          <span className={styles.ruleDetail}>{rule.sentence}</span>
+          {rule.description ? (
+            <span className={styles.ruleDetail}>{rule.description}</span>
+          ) : null}
+        </Td>
+        <Td>{rule.group_name}</Td>
+        <Td>
+          <Pill tone={rule.enabled ? 'ok' : 'muted'}>{rule.enabled ? 'on' : 'off'}</Pill>
+        </Td>
+        <Td right>
+          <span className={styles.memberCount}>{rule.member_count.toLocaleString()}</span>
+        </Td>
+        <Td right>
+          {canWrite ? (
+            confirming ? (
+              <span className={styles.confirm}>
+                <span className={styles.confirmText}>
+                  Delete this rule? Everyone it put in {rule.group_name} loses that membership.
+                </span>
+                <span className={styles.confirmActions}>
+                  <Button
+                    variant="danger-solid"
+                    onClick={() => remove.mutate()}
+                    disabled={remove.isPending}
+                  >
+                    {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
+                  </Button>
+                  <Button variant="secondary" onClick={() => setConfirming(false)}>
+                    Cancel
+                  </Button>
+                </span>
+              </span>
+            ) : (
+              <span className={styles.rowActions}>
+                <Button variant="secondary" onClick={() => setShowing(!showing)}>
+                  {showing ? 'Hide who' : 'Who it catches'}
+                </Button>
+                <Button
+                  variant="accent"
+                  onClick={() => run.mutate()}
+                  disabled={run.isPending || !rule.enabled}
+                  title={
+                    rule.enabled
+                      ? 'Apply this rule to everybody now'
+                      : 'Turn the rule on before running it'
+                  }
+                >
+                  {run.isPending ? 'Running…' : 'Run now'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => toggle.mutate()}
+                  disabled={toggle.isPending}
+                >
+                  {rule.enabled ? 'Turn off' : 'Turn on'}
+                </Button>
+                <Button variant="danger" onClick={() => setConfirming(true)}>
+                  Delete
+                </Button>
+              </span>
+            )
+          ) : null}
+          {run.data ? (
+            <span className={styles.runResult}>
+              {run.data.added} added, {run.data.removed} removed, {run.data.unchanged} already
+              right
+            </span>
+          ) : null}
+          {toggle.isError ? <ErrorBox error={toggle.error} /> : null}
+          {remove.isError ? <ErrorBox error={remove.error} /> : null}
+          {run.isError ? <ErrorBox error={run.error} /> : null}
         </Td>
       </tr>
-    ) : null}
+
+      {showing ? (
+        <tr>
+          <Td colSpan={5}>
+            {affected.isPending ? (
+              <Loading />
+            ) : affected.isError ? (
+              <ErrorBox error={affected.error} />
+            ) : affected.data.length === 0 ? (
+              <Empty>
+                This rule matches nobody at the moment. Anybody it put in {rule.group_name}{' '}
+                stays there until it runs again.
+              </Empty>
+            ) : (
+              <ul className={styles.affectedList}>
+                {affected.data.map((person) => (
+                  <li key={person.id} className={styles.affectedPerson}>
+                    <LinkCell to={`/users/${person.id}`}>{person.display_name}</LinkCell>
+                    <span className={styles.affectedMeta}>
+                      {[person.department, person.job_title].filter(Boolean).join(' · ') || '—'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Td>
+        </tr>
+      ) : null}
     </>
   )
 }
@@ -439,41 +436,36 @@ export default function AccessRulesPage() {
 
   return (
     <div className={styles.page}>
-      <PageHeader title="Access rules" description="Put people in groups automatically, based on who they are." />
-      <Panel title="Access rules">
-        <p className={styles.intro}>
-          Rules put people in groups because of who they are. Somebody who joins Engineering
-          lands in the Engineering group without anybody clicking anything, and somebody who
-          transfers out stops being in it.
-        </p>
-
-        {rules.isError ? (
-          <ErrorBox error={rules.error} />
-        ) : rules.isPending ? (
-          <Loading />
-        ) : rules.data.length === 0 ? (
-          <Empty>No rules yet. Everything is granted by hand.</Empty>
-        ) : (
-          <TableWrap>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <Th>Rule</Th>
-                  <Th>Group</Th>
-                  <Th>State</Th>
-                  <Th right>Granted</Th>
-                  <Th right>{''}</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {rules.data.map((rule) => (
-                  <RuleRow key={rule.id} rule={rule} canWrite={canWrite} />
-                ))}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
-      </Panel>
+      <PageHeader
+        title="Access rules"
+        description="Put people in groups automatically, based on who they are."
+      />
+      {rules.isError ? (
+        <ErrorBox error={rules.error} />
+      ) : rules.isPending ? (
+        <Loading />
+      ) : rules.data.length === 0 ? (
+        <Empty>No rules yet. Everything is granted by hand.</Empty>
+      ) : (
+        <TableWrap>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <Th>Rule</Th>
+                <Th>Group</Th>
+                <Th>State</Th>
+                <Th right>Granted</Th>
+                <Th right>{''}</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.data.map((rule) => (
+                <RuleRow key={rule.id} rule={rule} canWrite={canWrite} />
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
 
       {canWrite ? (
         <Panel title="Write a rule">

@@ -12,11 +12,12 @@ import {
   Pager,
   Panel,
   Row,
-  TableWrap,
-  Td,
-  Th,
 } from '../components/ui'
 import GroupMembers from '../components/GroupMembers'
+import { Button } from '../components/Button'
+import { DataTable, ToolbarButton } from '../components/DataTable'
+import { RefreshIcon } from '../components/icons'
+import { Tabs } from '../components/Tabs'
 import styles from './Groups.module.css'
 import { PageHeader } from '../components/PageHeader'
 import { fetchGroup, fetchGroups, fetchMe } from '../lib/api'
@@ -39,68 +40,78 @@ export function GroupsPage() {
         title="Groups"
         description="Groups carry access. Most arrive from the identity provider over SCIM."
       />
-      <Panel
-      title={groups.data ? `${groups.data.total.toLocaleString()} groups` : 'Groups'}
-      action={
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value)
-            setOffset(0)
+      <DataTable
+          status={groups.isError ? 'error' : groups.isPending ? 'pending' : 'success'}
+          error={groups.error}
+          onRetry={() => void groups.refetch()}
+          rows={groups.data?.items ?? []}
+          rowKey={(group) => group.id}
+          actions={
+            <ToolbarButton
+              icon={<RefreshIcon />}
+              onClick={() => void groups.refetch()}
+              disabled={groups.isFetching}
+            >
+              {groups.isFetching ? 'Refreshing…' : 'Refresh'}
+            </ToolbarButton>
+          }
+          search={{
+            value: search,
+            onChange: (value) => {
+              setSearch(value)
+              setOffset(0)
+            },
+            label: 'Search groups',
+            placeholder: 'Search group name',
           }}
-          placeholder="Search group name"
-          aria-label="Search groups"
-          className={styles.search}
+          count={
+            groups.data
+              ? `${groups.data.total.toLocaleString()} ${groups.data.total === 1 ? 'group' : 'groups'} found`
+              : null
+          }
+          empty={{
+            title: search ? 'No groups match that search' : 'No groups yet',
+            body: search
+              ? 'Try a different search term.'
+              : 'Groups arrive from an identity provider over SCIM, or can be created there and pushed.',
+            actions: search ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSearch('')
+                  setOffset(0)
+                }}
+              >
+                Clear search
+              </Button>
+            ) : null,
+          }}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              cell: (group) => <LinkCell to={`/groups/${group.id}`}>{group.name}</LinkCell>,
+            },
+            { key: 'description', header: 'Description', cell: (group) => group.description ?? '—' },
+            { key: 'role', header: 'HRMS role', cell: (group) => group.hrms_role ?? '—' },
+            {
+              key: 'members',
+              header: 'Members',
+              numeric: true,
+              cell: (group) => group.member_count.toLocaleString(),
+            },
+          ]}
+          footer={
+            groups.data ? (
+              <Pager
+                total={groups.data.total}
+                limit={groups.data.limit}
+                offset={groups.data.offset}
+                onChange={setOffset}
+              />
+            ) : null
+          }
         />
-      }
-    >
-      {groups.isError ? (
-        <ErrorBox error={groups.error} />
-      ) : groups.isPending ? (
-        <Loading />
-      ) : groups.data.items.length === 0 ? (
-        <Empty>
-          {search
-            ? 'No groups match that search.'
-            : 'No groups yet. They arrive from an identity provider over SCIM, or ' +
-              'can be created there and pushed.'}
-        </Empty>
-      ) : (
-        <>
-          <TableWrap>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <Th>Name</Th>
-                  <Th>Description</Th>
-                  <Th>HRMS role</Th>
-                  <Th right>Members</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {groups.data.items.map((group) => (
-                  <tr key={group.id}>
-                    <Td>
-                      <LinkCell to={`/groups/${group.id}`}>{group.name}</LinkCell>
-                    </Td>
-                    <Td>{group.description ?? '—'}</Td>
-                    <Td>{group.hrms_role ?? '—'}</Td>
-                    <Td right>{group.member_count.toLocaleString()}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableWrap>
-          <Pager
-            total={groups.data.total}
-            limit={groups.data.limit}
-            offset={groups.data.offset}
-            onChange={setOffset}
-          />
-        </>
-      )}
-      </Panel>
     </>
   )
 }
@@ -125,33 +136,49 @@ export function GroupDetailPage() {
         trail={[{ label: 'Groups', to: '/groups' }, { label: data.name }]}
       />
 
-      <Panel title="Overview">
-        <dl>
-          <Row label="Description">{data.description ?? '—'}</Row>
-          <Row label="HRMS role">{data.hrms_role ?? '—'}</Row>
-          <Row label="Members">{data.member_count.toLocaleString()}</Row>
-          <Row label="Created by">{data.source}</Row>
-        </dl>
-      </Panel>
-
-      <Panel title={`Grants access to (${data.applications.length})`}>
-        {data.applications.length === 0 ? (
-          <Empty>This group does not grant any application access.</Empty>
-        ) : (
-          <ul className={styles.appList}>
-            {data.applications.map((app) => (
-              <li key={app.id} className={styles.appRow}>
-                <LinkCell to={`/applications/${app.id}`}>{app.name}</LinkCell>
-                <span className={styles.appRole}>
-                  {app.role ?? 'no role'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      <GroupMembers group={data} canWrite={canWrite} />
+      <Tabs
+        tabs={[
+          {
+            id: 'overview',
+            label: 'Overview',
+            content: (
+              <Panel flush title="Properties">
+                <dl>
+                  <Row label="Description">{data.description ?? '—'}</Row>
+                  <Row label="HRMS role">{data.hrms_role ?? '—'}</Row>
+                  <Row label="Members">{data.member_count.toLocaleString()}</Row>
+                  <Row label="Created by">{data.source}</Row>
+                </dl>
+              </Panel>
+            ),
+          },
+          {
+            id: 'members',
+            label: `Members (${data.member_count.toLocaleString()})`,
+            content: <GroupMembers group={data} canWrite={canWrite} />,
+          },
+          {
+            id: 'applications',
+            label: `Applications (${data.applications.length})`,
+            content: (
+              <Panel flush title="Grants access to">
+                {data.applications.length === 0 ? (
+                  <Empty>This group does not grant any application access.</Empty>
+                ) : (
+                  <ul className={styles.appList}>
+                    {data.applications.map((app) => (
+                      <li key={app.id} className={styles.appRow}>
+                        <LinkCell to={`/applications/${app.id}`}>{app.name}</LinkCell>
+                        <span className={styles.appRole}>{app.role ?? 'no role'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Panel>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

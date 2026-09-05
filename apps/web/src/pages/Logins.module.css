@@ -33,11 +33,6 @@
   color: var(--text-primary);
 }
 
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
 .whenCell {
   white-space: nowrap;
 }

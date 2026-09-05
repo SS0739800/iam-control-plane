@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { Button } from '../components/Button'
-import { cx } from '../lib/cx'
+import { Field, FieldRow, Form, FormActions, controlClass } from '../components/Form'
 import styles from './Provisioning.module.css'
 import { PageHeader } from '../components/PageHeader'
 import {
@@ -95,41 +95,35 @@ function IssueForm({ onIssued }: { onIssued: (issued: ScimClientIssued) => void 
   })
 
   return (
-    <form
-      className={styles.form}
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (name.trim()) issue.mutate()
-      }}
-    >
-      <div className={styles.formRow}>
-        <label className={cx(styles.label, styles.labelName)}>
-          <span className={styles.labelText}>Name</span>
+    <Form onSubmit={() => { if (name.trim()) issue.mutate() }}>
+      <FieldRow>
+        <Field label="Name" required grow={1}>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="authentik (local)"
             required
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
-        <label className={cx(styles.label, styles.labelPurpose)}>
-          <span className={styles.labelText}>What it is for</span>
+        </Field>
+        <Field label="What it is for" grow={2}>
           <input
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Pushes users and groups from authentik"
-            className={styles.field}
+            className={controlClass()}
           />
-        </label>
-      </div>
+        </Field>
+      </FieldRow>
 
       {issue.isError ? <ErrorBox error={issue.error} /> : null}
 
-      <Button type="submit" variant="accent" disabled={issue.isPending || !name.trim()}>
-        {issue.isPending ? 'Issuing…' : 'Issue token'}
-      </Button>
-    </form>
+      <FormActions>
+        <Button type="submit" variant="accent" disabled={issue.isPending || !name.trim()}>
+          {issue.isPending ? 'Issuing…' : 'Issue token'}
+        </Button>
+      </FormActions>
+    </Form>
   )
 }
 
@@ -271,7 +265,7 @@ export default function ProvisioningPage() {
         </div>
       </Panel>
 
-      <Panel title="Recent activity">
+      <h2 className={styles.sectionHeading}>Recent activity</h2>
         {activity.isError ? (
           <ErrorBox error={activity.error} />
         ) : activity.isPending ? (
@@ -312,7 +306,7 @@ export default function ProvisioningPage() {
             </table>
           </TableWrap>
         )}
-      </Panel>
+
 
       <Panel title="Pointing a provider at this">
         <dl>

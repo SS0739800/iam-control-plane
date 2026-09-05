@@ -4,38 +4,6 @@
   gap: var(--space-6);
 }
 
-.field {
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  padding: 4px var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-}
-.fieldMono {
-  font-family: ui-monospace, monospace;
-}
-.fieldMonoSmall {
-  font-family: ui-monospace, monospace;
-  font-size: var(--text-xs);
-}
-
-.label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--text-sm);
-}
-.labelOne {
-  flex: 1;
-}
-.labelTwo {
-  flex: 2;
-}
-.labelText {
-  color: var(--text-secondary);
-}
-
 .form {
   display: flex;
   flex-direction: column;
