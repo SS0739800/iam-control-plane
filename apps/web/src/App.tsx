@@ -24,8 +24,9 @@ import {
   SignInIcon,
   UserIcon,
 } from './components/icons'
+import { LandingPage } from './components/LandingPage'
 import { cx } from './lib/cx'
-import { fetchMe, fetchSignInOptions } from './lib/api'
+import { fetchMe } from './lib/api'
 
 type NavItem = { to: string; label: string; end?: boolean; icon: ComponentType<{ className?: string }> }
 
@@ -67,36 +68,6 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     ],
   },
 ]
-
-/** Sign-in links, one per identity provider actually registered. */
-function SignInLinks({ column }: { column?: boolean }) {
-  const options = useQuery({
-    queryKey: ['sign-in-options'],
-    queryFn: fetchSignInOptions,
-    retry: false,
-  })
-
-  if (options.isPending) return null
-
-  // No providers, or the request failed — either way there's no link to offer.
-  if (options.isError || (options.data?.length ?? 0) === 0) {
-    return (
-      <span className={styles.signInEmpty}>
-        No identity provider is registered yet, so there is no way to sign in.
-      </span>
-    )
-  }
-
-  return (
-    <span className={column ? styles.signInLinksColumn : styles.signInLinksRow}>
-      {options.data.map((option) => (
-        <a key={option.slug} href={`/saml/login?idp=${option.slug}`} className={styles.signInLink}>
-          Sign in with {option.name}
-        </a>
-      ))}
-    </span>
-  )
-}
 
 /** A small chevron, rotated by the caller to show open vs. closed. */
 function Chevron({ open }: { open: boolean }) {
@@ -224,31 +195,6 @@ function WhoAmI() {
   )
 }
 
-/** What a signed-out visitor sees — no nav, no panels, just this. */
-function SignInPage() {
-  return (
-    <div className={styles.signInPage}>
-      <header>
-        <p className={styles.signInKicker}>Identity platform</p>
-        <h1 className={styles.signInTitle}>IAM Control Plane</h1>
-        <p className={styles.signInSubtitle}>
-          SAML 2.0 and SCIM 2.0, in both directions. Sign in with your identity provider
-          to continue.
-        </p>
-      </header>
-
-      <div className={styles.signInBox}>
-        <SignInLinks column />
-      </div>
-
-      <p className={styles.signInFooter}>
-        Signing in creates nothing but an ordinary employee. Console permissions are
-        granted separately, by an admin, and recorded as a grant with a reason.
-      </p>
-    </div>
-  )
-}
-
 export default function App() {
   const me = useQuery({ queryKey: ['me'], queryFn: fetchMe, retry: false })
 
@@ -256,7 +202,7 @@ export default function App() {
   if (me.isPending) return null
 
   // 401 means no session (outside production, the dev stand-in answers instead of this).
-  if (me.isError) return <SignInPage />
+  if (me.isError) return <LandingPage />
 
   return (
     <div className={styles.shell}>
