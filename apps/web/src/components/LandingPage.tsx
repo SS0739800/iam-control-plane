@@ -14,13 +14,13 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import { fetchSignInOptions } from '../lib/api'
 import styles from './LandingPage.module.css'
 
 const REPO_URL = 'https://github.com/SS0739800/iam-control-plane'
 const README_URL = `${REPO_URL}#readme`
-const SETUP_URL = `${REPO_URL}/blob/main/docs/identity-providers.md`
 
 /** The four things the platform does, each said in one plain sentence. */
 const CAPABILITIES: { title: string; body: string }[] = [
@@ -110,9 +110,7 @@ export function LandingPage() {
           <a href={README_URL} target="_blank" rel="noreferrer">
             Source
           </a>
-          <a href={SETUP_URL} target="_blank" rel="noreferrer">
-            Setup guide
-          </a>
+          <Link to="/setup">Setup guide</Link>
         </nav>
       </header>
 
@@ -233,9 +231,7 @@ export function LandingPage() {
         <a href={README_URL} target="_blank" rel="noreferrer">
           Source on GitHub
         </a>
-        <a href={SETUP_URL} target="_blank" rel="noreferrer">
-          Connecting an identity provider
-        </a>
+        <Link to="/setup">Connecting an identity provider</Link>
       </footer>
     </div>
   )

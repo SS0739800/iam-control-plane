@@ -5,6 +5,7 @@ import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 
 import App from './App'
 import './index.css'
+import SetupPage from './components/SetupPage'
 import AuditPage from './pages/Audit'
 import { ApplicationDetailPage, ApplicationsPage } from './pages/Applications'
 import Dashboard from './pages/Dashboard'
@@ -28,6 +29,9 @@ const queryClient = new QueryClient({
 })
 
 const router = createBrowserRouter([
+  // Public, and outside the App shell on purpose: someone standing up a new tenant
+  // reaches this before they have any way to sign in.
+  { path: '/setup', element: <SetupPage /> },
   {
     path: '/',
     element: <App />,
