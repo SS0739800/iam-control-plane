@@ -16,6 +16,7 @@ from iam import __version__
 from iam.config import Settings, get_settings
 from iam.db import build_engine, build_sessionmaker
 from iam.frontend import SinglePageApp, resolve_bundle
+from iam.http_headers import install_security_headers
 from iam.logging_setup import configure_logging
 from iam.routers import (
     access,
@@ -111,6 +112,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.settings = resolved
     app.state.saml_keypair = keypair
+
+    # Browser-side hardening: frame-ancestors, nosniff, HSTS in production, and a
+    # same-origin CSP. See iam/http_headers.py for what each one buys.
+    install_security_headers(app, is_production=resolved.is_production)
 
     # No CORS middleware. The frontend is served from this same address, so a
     # cross-origin request means something is misconfigured and should fail
