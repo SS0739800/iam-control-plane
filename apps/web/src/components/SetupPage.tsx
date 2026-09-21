@@ -2,7 +2,7 @@
  * Public setup guide for connecting an identity provider.
  *
  * Reachable without a login, because the person standing up a fresh tenant can't
- * sign in until a provider is configured — which is exactly what this page is for.
+ * sign in until a provider is configured, which is exactly what this page is for.
  * It's the doc in docs/identity-providers.md, rendered as a page, with the URLs
  * filled in for wherever this happens to be hosted.
  */
@@ -54,7 +54,7 @@ function AuthentikTab() {
   return (
     <div className={styles.tabBody}>
       <p className={styles.prose}>
-        The repo ships a blueprint that configures authentik for you — the fastest way to
+        The repo ships a blueprint that configures authentik for you, the fastest way to
         get the loop running locally. It declares the application, the ACS URL, the
         audience, the attributes it sends, and that the assertion is signed.
       </p>
@@ -126,7 +126,7 @@ function OktaTab() {
         ]}
       />
       <p className={styles.prose}>
-        Issue the token from the repo — it's printed once and only its hash is stored:
+        Issue the token from the repo. It's printed once, and only its hash is stored:
       </p>
       <Code>{`cd apps/api\npython -m scripts.issue_scim_token "Okta (acme.okta.com)"`}</Code>
       <p className={styles.note}>
@@ -155,7 +155,7 @@ function EntraTab() {
         ]}
       />
       <p className={styles.prose}>
-        Entra sends WS-Federation claim URIs by default, all of which we already accept —
+        Entra sends WS-Federation claim URIs by default, all of which we already accept:
         the UPN for the username, plus email address, given name, surname, and the object
         identifier as the external id. You shouldn't need to add or rename claims. Under{' '}
         <strong>SAML Certificates</strong>, check that the signing option covers the
@@ -188,9 +188,6 @@ export default function SetupPage() {
         </Link>
         <nav className={styles.topLinks} aria-label="Page links">
           <Link to="/">Home</Link>
-          <a href={REPO_URL} target="_blank" rel="noreferrer">
-            Source
-          </a>
         </nav>
       </header>
 
@@ -199,8 +196,8 @@ export default function SetupPage() {
           <p className={styles.kicker}>Setup guide</p>
           <h1 className={styles.title}>Connecting an identity provider</h1>
           <p className={styles.lead}>
-            How to point authentik, Okta or Entra ID at this console — for signing in over
-            SAML, and for pushing accounts to us over SCIM. The URLs below are already
+            How to point authentik, Okta or Entra ID at this console, for signing in over
+            SAML and for pushing accounts to us over SCIM. The URLs below are already
             filled in for <code>{BASE}</code>.
           </p>
         </section>
@@ -225,15 +222,15 @@ export default function SetupPage() {
             <div className={styles.callout}>
               <p className={styles.calloutTitle}>The audience must equal the entity ID exactly</p>
               <p className={styles.calloutBody}>
-                Scheme and any trailing slash included — the check compares strings. A
-                mismatch shows on the <strong>Sign-ins</strong> screen as a failed{' '}
+                Scheme and any trailing slash included, because the check compares strings.
+                A mismatch shows on the <strong>Sign-ins</strong> screen as a failed{' '}
                 <code>audience</code> check, with both values printed.
               </p>
             </div>
             <div className={styles.callout}>
               <p className={styles.calloutTitle}>The assertion itself has to be signed</p>
               <p className={styles.calloutBody}>
-                Not just the response envelope — an unsigned assertion inside a signed
+                Not just the response envelope. An unsigned assertion inside a signed
                 wrapper can still be swapped. Some providers sign only the response by
                 default, so check the setting.
               </p>
@@ -311,7 +308,7 @@ PY`}</Code>
           <p className={styles.prose}>
             Start a login at <code>{BASE}/saml/login?idp=&lt;slug&gt;</code>, then open{' '}
             <strong>Sign-ins</strong> in the console. Every attempt lists all ten checks
-            with the values compared, and a refused login keeps the document that arrived —
+            with the values compared, and a refused login keeps the document that arrived,
             usually enough to see what's wrong. The usual first failures:
           </p>
           <Table
@@ -330,7 +327,7 @@ PY`}</Code>
       <footer className={styles.footer}>
         <Link to="/">Back to home</Link>
         <a href={REPO_URL} target="_blank" rel="noreferrer">
-          Source on GitHub
+          View on GitHub
         </a>
       </footer>
     </div>

@@ -3,6 +3,7 @@
   min-height: 100vh;
   flex-direction: column;
   background: var(--surface-page);
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 /* --- top strip --- */
@@ -64,7 +65,7 @@
 }
 .kicker {
   margin: 0;
-  font-family: ui-monospace, monospace;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: var(--text-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -72,11 +73,11 @@
 }
 .title {
   margin: var(--space-3) 0 0;
-  max-width: 18ch;
-  font-size: clamp(2rem, 1.3rem + 3vw, 3rem);
-  font-weight: 700;
-  line-height: 1.08;
-  letter-spacing: -0.025em;
+  max-width: 20ch;
+  font-size: clamp(1.9rem, 1.3rem + 2.4vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
   text-wrap: balance;
 }
 .lead {
@@ -109,7 +110,7 @@
 }
 .secondaryAction {
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--accent);
   text-decoration: none;
 }
@@ -172,7 +173,7 @@
   color: var(--text-primary);
 }
 .prose code {
-  font-family: ui-monospace, monospace;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: 0.85em;
   color: var(--text-secondary);
 }
@@ -216,7 +217,7 @@
   gap: var(--space-2);
 }
 .walkLabel {
-  font-family: ui-monospace, monospace;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
   font-size: var(--text-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;

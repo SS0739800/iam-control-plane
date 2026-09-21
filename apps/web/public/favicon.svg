@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="IAM Control Plane">
+  <rect width="32" height="32" rx="7" fill="#106ebe"/>
+  <path d="M16 4.5l9 3.1v6.9c0 5.7-3.8 9.9-9 11.9-5.2-2-9-6.2-9-11.9V7.6z" fill="#ffffff"/>
+  <circle cx="16" cy="13.2" r="2.7" fill="#106ebe"/>
+  <path d="M14.4 14.6h3.2l1 6.2h-5.2z" fill="#106ebe"/>
+</svg>

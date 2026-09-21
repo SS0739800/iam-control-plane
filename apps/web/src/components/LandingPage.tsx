@@ -1,7 +1,7 @@
 /**
  * The front door. What a signed-out visitor sees at the root.
  *
- * On the deployed site that's anyone who isn't already in the tenant's directory —
+ * On the deployed site that's anyone who isn't already in the tenant's directory:
  * a recruiter, a reviewer, anyone following a link. They can't sign in, since they
  * have no account here, so this page has to stand on its own and say what the thing
  * is rather than just show them a login wall.
@@ -34,7 +34,7 @@ const CAPABILITIES: { title: string; body: string }[] = [
   },
   {
     title: 'The whole joiner-to-leaver loop',
-    body: 'Someone signs in, an admin grants them access, a sync provisions them downstream, and marking them a leaver switches that account off again — end to end.',
+    body: 'Someone signs in, an admin grants them access, a sync provisions them downstream, and marking them a leaver switches that account off again.',
   },
   {
     title: 'An audit log you can check',
@@ -56,7 +56,7 @@ const WALKTHROUGH: { src: string; alt: string; label: string; title: string; bod
     alt: 'The audit log, a table of changes with who, what, and the outcome.',
     label: 'Audit',
     title: 'A record of every change, and a way to prove it',
-    body: 'Each grant, sync and sign-in is written to a hash-chained log. The chain can be verified end to end, so a tampered entry shows up rather than passing silently — the difference between a log and a record you can trust.',
+    body: 'Each grant, sync and sign-in is written to a hash-chained log. The chain can be verified end to end, so a tampered entry shows up rather than passing silently. That is the difference between a log and a record you can trust.',
   },
 ]
 
@@ -64,7 +64,7 @@ const WALKTHROUGH: { src: string; alt: string; label: string; title: string; bod
 const PROVIDERS: { name: string; state: string; tone: 'live' | 'progress' | 'local' }[] = [
   { name: 'Okta', state: 'Live in production, inbound SCIM included', tone: 'live' },
   { name: 'Entra ID', state: 'Claim mapping written and tested; live tenant in progress', tone: 'progress' },
-  { name: 'authentik', state: 'Proven locally — the dev IdP that ships with the stack', tone: 'local' },
+  { name: 'authentik', state: 'Proven locally, on the dev IdP that ships with the stack', tone: 'local' },
 ]
 
 /** Sign-in links, one per identity provider actually registered. */
@@ -77,7 +77,7 @@ function SignInLinks() {
 
   if (options.isPending) return null
 
-  // No providers, or the request failed — either way there's no link to offer.
+  // No providers, or the request failed. Either way there's no link to offer.
   if (options.isError || (options.data?.length ?? 0) === 0) {
     return (
       <span className={styles.signInEmpty}>
@@ -107,9 +107,6 @@ export function LandingPage() {
       <header className={styles.topBar}>
         <span className={styles.brand}>IAM Control Plane</span>
         <nav className={styles.topLinks} aria-label="Project links">
-          <a href={README_URL} target="_blank" rel="noreferrer">
-            Source
-          </a>
           <Link to="/setup">Setup guide</Link>
         </nav>
       </header>
@@ -119,16 +116,16 @@ export function LandingPage() {
           <p className={styles.kicker}>Identity platform</p>
           <h1 className={styles.title}>Single sign-on and provisioning, both directions.</h1>
           <p className={styles.lead}>
-            An admin console that runs the full loop a real directory does — logins in over
-            SAML, accounts synced in and back out over SCIM, access granted and reviewed,
-            leavers switched off downstream — with every change written to an audit log you
-            can verify. Built as a working system, not a demo, and running in production
-            against a live Okta tenant.
+            An admin console that runs the full loop a real directory does. Logins come in
+            over SAML, accounts sync in and back out over SCIM, access is granted and
+            reviewed, and leavers are switched off downstream, with every change written to
+            an audit log you can verify. Built as a working system, not a demo, and running
+            in production against a live Okta tenant.
           </p>
           <div className={styles.actions}>
             <SignInLinks />
             <a className={styles.secondaryAction} href={README_URL} target="_blank" rel="noreferrer">
-              Browse the source
+              View on GitHub
             </a>
           </div>
           <p className={styles.signInNote}>
@@ -147,8 +144,8 @@ export function LandingPage() {
             height={860}
           />
           <figcaption className={styles.shotCaption}>
-            The overview — directory counts and live platform health. Demo instance with
-            seeded data.
+            The overview, with directory counts and live platform health. A demo instance
+            with seeded data.
           </figcaption>
         </figure>
 
@@ -228,9 +225,6 @@ export function LandingPage() {
       </main>
 
       <footer className={styles.footer}>
-        <a href={README_URL} target="_blank" rel="noreferrer">
-          Source on GitHub
-        </a>
         <Link to="/setup">Connecting an identity provider</Link>
       </footer>
     </div>
