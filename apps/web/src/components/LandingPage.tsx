@@ -101,14 +101,38 @@ function SignInLinks() {
   )
 }
 
+/** The sign-in button in the top bar. Only shows once a provider is registered. */
+function NavSignIn() {
+  const options = useQuery({
+    queryKey: ['sign-in-options'],
+    queryFn: fetchSignInOptions,
+    retry: false,
+  })
+
+  const list = options.data ?? []
+  if (options.isPending || options.isError || list.length === 0) return null
+
+  // One provider goes straight to it. With more than one, send them to the hero,
+  // which lists every provider by name.
+  const href = list.length === 1 ? `/saml/login?idp=${list[0]?.slug}` : '#sign-in'
+  return (
+    <a className={styles.navSignIn} href={href}>
+      Sign in
+    </a>
+  )
+}
+
 export function LandingPage() {
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
         <span className={styles.brand}>IAM Control Plane</span>
-        <nav className={styles.topLinks} aria-label="Project links">
-          <Link to="/setup">Setup guide</Link>
-        </nav>
+        <div className={styles.topRight}>
+          <nav className={styles.topLinks} aria-label="Project links">
+            <Link to="/setup">Setup guide</Link>
+          </nav>
+          <NavSignIn />
+        </div>
       </header>
 
       <main className={styles.main}>
@@ -122,7 +146,7 @@ export function LandingPage() {
             an audit log you can verify. Built as a working system, not a demo, and running
             in production against a live Okta tenant.
           </p>
-          <div className={styles.actions}>
+          <div id="sign-in" className={styles.actions}>
             <SignInLinks />
             <a className={styles.secondaryAction} href={README_URL} target="_blank" rel="noreferrer">
               View on GitHub
